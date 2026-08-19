@@ -1,0 +1,8 @@
+--- a/src/auth.ts
++++ b/src/auth.ts
+@@ -0,0 +1,4 @@
++// auth-nextjs auth integration (mcp treatment)
++export function requireSession(req, res, next) {
++  if (!req.session?.userId) return res.redirect('/login');
++  next();
++}

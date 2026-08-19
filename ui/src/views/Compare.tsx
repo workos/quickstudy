@@ -1,0 +1,214 @@
+/**
+ * Compare view: the run's declared comparison groups. A `compared` group
+ * renders a per-group table of eval rows × treatment columns with RAW counts
+ * ("3/3" vs "1/3") — no intervals, no estimates, no deltas. A `withheld`
+ * group renders its component diff (the identity-diff details recorded at run
+ * time) and never a comparison; its raw per-experiment results stay visible
+ * in the matrix. Singleton groups have nothing to compare and say so.
+ */
+
+import { useMemo, type ReactNode } from "react";
+import type { ComparisonGroup } from "../../../src/experiments/groups.ts";
+import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
+import { ErrorPanel } from "../components/ErrorPanel.tsx";
+import { StatBadge } from "../components/StatBadge.tsx";
+import { loadRun } from "../data.ts";
+import { useAsync } from "../hooks.ts";
+import { links, navigate } from "../router.ts";
+
+interface CompareProps {
+  meta: DataMeta;
+  runId?: string;
+}
+
+interface ArmCount {
+  passed: number;
+  scored: number;
+}
+
+/** eval id -> experiment id -> raw scored counts. */
+function countArms(attempts: DataAttempt[]): Map<string, Map<string, ArmCount>> {
+  const byEval = new Map<string, Map<string, ArmCount>>();
+  for (const attempt of attempts) {
+    if (attempt.status !== "completed") continue;
+    let byExperiment = byEval.get(attempt.eval_id);
+    if (!byExperiment) {
+      byExperiment = new Map();
+      byEval.set(attempt.eval_id, byExperiment);
+    }
+    const count = byExperiment.get(attempt.experiment_id) ?? { passed: 0, scored: 0 };
+    count.scored += 1;
+    if (attempt.passed === true) count.passed += 1;
+    byExperiment.set(attempt.experiment_id, count);
+  }
+  return byEval;
+}
+
+function treatmentOf(run: DataRun, experimentId: string): string | null {
+  return run.manifest.experiments[experimentId]?.components.treatment ?? null;
+}
+
+function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup; arms: Map<string, Map<string, ArmCount>> }): ReactNode {
+  if (group.comparison === "withheld") {
+    return (
+      <div className="card" data-testid={`group-${group.group}`}>
+        <div className="head">
+          <h3>{group.group}</h3>
+          <StatBadge tone="amber">comparison withheld</StatBadge>
+        </div>
+        <div className="body">
+          <p className="viewer-note" data-testid={`group-withheld-${group.group}`}>
+            Members differ beyond their declared treatment, so no automatic comparison is rendered. Raw
+            per-experiment results remain visible in the matrix. The differing components:
+          </p>
+          <ul className="identity-diff" data-testid={`group-diff-${group.group}`}>
+            {group.details.map((detail) => (
+              <li key={detail}>
+                <code>{detail}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  if (group.experimentIds.length < 2) {
+    return (
+      <div className="card" data-testid={`group-${group.group}`}>
+        <div className="head">
+          <h3>{group.group}</h3>
+          <StatBadge tone="gray">single experiment</StatBadge>
+        </div>
+        <div className="body">
+          <p className="viewer-note">
+            This group declares one experiment — nothing to compare. Its raw results render in the matrix.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const evalIds = [...arms.keys()]
+    .filter((evalId) => group.experimentIds.some((experimentId) => arms.get(evalId)?.has(experimentId)))
+    .sort((a, b) => a.localeCompare(b));
+
+  return (
+    <div className="card" data-testid={`group-${group.group}`}>
+      <div className="head">
+        <h3>{group.group}</h3>
+        <StatBadge tone="green">compared — raw counts</StatBadge>
+      </div>
+      <div className="body">
+        <table className="data" data-testid={`group-table-${group.group}`}>
+          <thead>
+            <tr>
+              <th>eval</th>
+              {group.experimentIds.map((experimentId) => (
+                <th key={experimentId}>
+                  <code>{experimentId}</code>
+                  {treatmentOf(run, experimentId) !== null && (
+                    <div className="attribution-reason">{treatmentOf(run, experimentId)}</div>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {evalIds.map((evalId) => (
+              <tr key={evalId}>
+                <td>
+                  <code>{evalId}</code>
+                </td>
+                {group.experimentIds.map((experimentId) => {
+                  const count = arms.get(evalId)?.get(experimentId);
+                  return (
+                    <td key={experimentId} data-testid={`arm-${evalId}-${experimentId}`}>
+                      {count === undefined ? "—" : `${count.passed}/${count.scored}`}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="viewer-note">
+          Raw passed/scored counts per arm. Incomplete and errored attempts are excluded from these counts and
+          reported in the matrix drill-down.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function Compare({ meta, runId }: CompareProps): ReactNode {
+  const activeRunId = runId ?? "";
+  const run = useAsync(() => loadRun(activeRunId), [activeRunId]);
+
+  const arms = useMemo(
+    () => (run.status === "ready" ? countArms(run.value.attempts) : null),
+    [run],
+  );
+
+  if (activeRunId === "") {
+    return (
+      <div data-testid="compare-view">
+        <div className="empty-state">
+          <h2>No run selected</h2>
+          <p>Pick a run to see its comparison groups.</p>
+        </div>
+      </div>
+    );
+  }
+  if (run.status === "error") return <ErrorPanel error={run.error} />;
+  if (run.status === "loading" || arms === null) return <div className="loading">Loading run…</div>;
+
+  const groups = run.value.groups;
+
+  return (
+    <div data-testid="compare-view">
+      <div className="page-head">
+        <div>
+          <h1>Comparison groups</h1>
+          <p className="sub">
+            Raw per-arm counts for experiments declared as treatments of one configuration; mismatched groups are
+            withheld with their component diff.
+          </p>
+        </div>
+        <div className="control">
+          <label htmlFor="compare-run">Run</label>
+          <select
+            id="compare-run"
+            data-testid="compare-run-select"
+            value={activeRunId}
+            onChange={(event) => navigate(links.compare(event.currentTarget.value))}
+          >
+            {meta.runs.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.id.slice(0, 10)}… · {candidate.started_at.slice(0, 10)} · {candidate.attempts} attempts
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {run.value.run.finished_at === null && (
+        <div className="notice" data-testid="incomplete-banner">
+          Incomplete run — this run never finished. Counts are partial.
+        </div>
+      )}
+
+      {groups.length === 0 ? (
+        <div className="empty-state" data-testid="no-groups">
+          <h2>No comparison groups in this run</h2>
+          <p>
+            Declare <code>comparisonGroup</code> on experiments meant to be treatments of one configuration, then
+            re-run.
+          </p>
+        </div>
+      ) : (
+        groups.map((group) => <GroupCard key={group.group} run={run.value} group={group} arms={arms} />)
+      )}
+    </div>
+  );
+}

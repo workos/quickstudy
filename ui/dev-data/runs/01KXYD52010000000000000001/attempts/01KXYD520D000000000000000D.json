@@ -1,0 +1,36 @@
+{
+  "id": "01KXYD520D000000000000000D",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-nextjs",
+  "experiment_id": "codex-docs",
+  "suite": "benchmark",
+  "trial_index": 2,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "codex",
+  "surface_usage": null,
+  "tokens_in": 212,
+  "tokens_out": 1212,
+  "cost_usd": 0.11,
+  "turns": 6,
+  "started_at": "2026-07-20T00:12:00.000Z",
+  "finished_at": "2026-07-20T00:13:31.200Z",
+  "error": null,
+  "transcript": "attempts/01KXYD520D000000000000000D.transcript.txt",
+  "diff": "attempts/01KXYD520D000000000000000D.diff.patch"
+}

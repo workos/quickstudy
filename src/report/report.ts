@@ -1,0 +1,604 @@
+/**
+ * The v3 report: honest aggregation over the eval × experiment store, and
+ * nothing else. JSON is the source shape (written as `report.json` into the
+ * run's results dir); the text renderer renders FROM that JSON; the UI reads
+ * the same JSON — one aggregation codepath for all three consumers.
+ *
+ * What the report states, by design:
+ *   - pass rates per eval × experiment pair (scored = passed + failed;
+ *     incomplete and errored attempts are counted separately and NEVER enter
+ *     the denominator);
+ *   - named check outcomes with per-check tallies;
+ *   - cost/token telemetry summed only over attempts that reported it
+ *     ("unavailable", never 0, when none did);
+ *   - raw per-arm counts ("3/3" vs "1/3") for declared comparison groups,
+ *     with withheld groups rendering their component diff instead;
+ *   - offered-versus-used surface telemetry per experiment;
+ *   - egress denials, when the proxied run recorded any.
+ *
+ * There are deliberately no intervals, no estimates, no analyst layers, and
+ * no language stronger than the counts themselves (see BANNED_LANGUAGE).
+ */
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { ComparisonGroup } from "../experiments/groups.ts";
+import type { AttemptRecord, ResultsStore, RunRecord } from "../store/db.ts";
+import type { SurfaceUsage } from "../surface-usage.ts";
+
+/** Loud, CLI-friendly failures (unknown run, missing report.json, ...). */
+export class ReportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReportError";
+  }
+}
+
+export const REPORT_SCHEMA_VERSION = 3;
+
+/**
+ * Substrings that must never appear in generated report prose: at n≤5 trials
+ * the honest statement is the raw counts, so the report never claims more.
+ * (Note "caus" also catches "because" — write around it.)
+ */
+export const BANNED_LANGUAGE = ["caus", "effect of", "significant"] as const;
+
+/** Return every banned-language fragment present in `text` (case-insensitive). */
+export function findBannedLanguage(text: string): string[] {
+  const lower = text.toLowerCase();
+  return BANNED_LANGUAGE.filter((banned) => lower.includes(banned));
+}
+
+/** Methodology is generated prose — it must itself pass the language guard. */
+export function methodologyNote(trials: number): string {
+  return (
+    `Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored ` +
+    `attempts are counted separately and never enter that denominator. Each pair has ${trials} planned ` +
+    `trial${trials === 1 ? "" : "s"} — at these counts the raw counts are the honest statement, so comparison ` +
+    `groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members ` +
+    `differ beyond their declared treatment has its comparison withheld and the differing components are ` +
+    `listed instead; its raw per-experiment results remain visible. Telemetry (cost, tokens, surface usage) ` +
+    `is summed only over attempts that reported it and shown as unavailable — never zero — when none did.`
+  );
+}
+
+export interface ReportCheck {
+  name: string;
+  passed: number;
+  total: number;
+}
+
+/** One eval × experiment aggregation. Pairs with zero attempts are ABSENT, never 0%. */
+export interface ReportPair {
+  eval_id: string;
+  experiment_id: string;
+  suite: string;
+  total: number;
+  passed: number;
+  failed: number;
+  incomplete: number;
+  errors: number;
+  /** passed + failed — the pass-rate denominator. */
+  scored: number;
+  /** passed / scored; null when nothing was scored (never 0-by-default). */
+  pass_rate: number | null;
+  /** Completed trials disagreed on the outcome. */
+  flaky: boolean;
+  checks: ReportCheck[];
+}
+
+export interface ReportGroupArmCount {
+  eval_id: string;
+  passed: number;
+  scored: number;
+  /** The honest raw statement, e.g. "3/3". */
+  display: string;
+}
+
+export interface ReportGroupArm {
+  experiment_id: string;
+  treatment: string | null;
+  evals: ReportGroupArmCount[];
+}
+
+/**
+ * One declared comparison group. `compared` renders raw per-arm counts;
+ * `withheld` renders the component diff and NO counts-as-comparison.
+ */
+export interface ReportGroup {
+  group: string;
+  experiment_ids: string[];
+  comparison: "compared" | "withheld";
+  /** Component-diff lines naming members and values (withheld groups only). */
+  details: string[];
+  /** Raw per-arm counts (compared groups only). */
+  arms: ReportGroupArm[];
+}
+
+export interface ReportUsageChannel {
+  /** Attempts with at least one observed event on this channel. */
+  attempts: number;
+  /** Total observed events across those attempts. */
+  events: number;
+  /** Redacted identifiers (deduplicated, capped). */
+  values: string[];
+}
+
+/** Offered-versus-used surface telemetry for one experiment. */
+export interface ReportExperimentUsage {
+  experiment_id: string;
+  treatment: string | null;
+  /** Attempts whose raw stream supported extraction. */
+  telemetry_available: number;
+  /** Attempts stored with NULL usage (no supported stream) — never counted as zero use. */
+  telemetry_unavailable: number;
+  channels: { docs: ReportUsageChannel; mcp: ReportUsageChannel; cli: ReportUsageChannel };
+}
+
+export interface EgressDenialSummary {
+  attempt_id: string;
+  eval_id: string;
+  experiment_id: string;
+  count: number;
+  top_hosts: Array<{ host: string; count: number }>;
+}
+
+export interface ReportRunInfo {
+  id: string;
+  /** ISO timestamps on the wire (the store keeps epoch milliseconds). */
+  started_at: string;
+  finished_at: string | null;
+  trials: number;
+  eval_ids: string[];
+  experiment_ids: string[];
+  manifest_hash: string;
+}
+
+export interface ReportTotals {
+  attempts: number;
+  passed: number;
+  failed: number;
+  incomplete: number;
+  errors: number;
+}
+
+export interface ReportTelemetry {
+  /** null = no attempt reported cost (unavailable, never 0). */
+  cost_usd: number | null;
+  cost_attempts: number;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  token_attempts: number;
+}
+
+export interface ReportJson {
+  schema_version: number;
+  generated_at: string;
+  run: ReportRunInfo;
+  /** The run row never finished — every number is partial. */
+  incomplete: boolean;
+  totals: ReportTotals;
+  telemetry: ReportTelemetry;
+  pairs: ReportPair[];
+  groups: ReportGroup[];
+  usage: ReportExperimentUsage[];
+  egress_denials: EgressDenialSummary[];
+  methodology: string;
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation
+// ---------------------------------------------------------------------------
+
+const USAGE_VALUE_CAP = 20;
+
+export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
+  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number }>; outcomes: Set<boolean> }>();
+  for (const attempt of attempts) {
+    const key = `${attempt.evalId}|${attempt.experimentId}`;
+    let entry = pairs.get(key);
+    if (!entry) {
+      entry = {
+        pair: {
+          eval_id: attempt.evalId,
+          experiment_id: attempt.experimentId,
+          suite: attempt.suite,
+          total: 0,
+          passed: 0,
+          failed: 0,
+          incomplete: 0,
+          errors: 0,
+          scored: 0,
+          pass_rate: null,
+          flaky: false,
+          checks: [],
+        },
+        checks: new Map(),
+        outcomes: new Set(),
+      };
+      pairs.set(key, entry);
+    }
+    entry.pair.total += 1;
+    if (attempt.status === "incomplete") entry.pair.incomplete += 1;
+    else if (attempt.status === "error") entry.pair.errors += 1;
+    else if (attempt.result?.passed) {
+      entry.pair.passed += 1;
+      entry.outcomes.add(true);
+    } else {
+      entry.pair.failed += 1;
+      entry.outcomes.add(false);
+    }
+    for (const check of attempt.result?.checks ?? []) {
+      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0 };
+      tally.total += 1;
+      if (check.passed) tally.passed += 1;
+      entry.checks.set(check.name, tally);
+    }
+  }
+
+  const result: ReportPair[] = [];
+  for (const { pair, checks, outcomes } of pairs.values()) {
+    pair.scored = pair.passed + pair.failed;
+    pair.pass_rate = pair.scored > 0 ? pair.passed / pair.scored : null;
+    pair.flaky = outcomes.size > 1;
+    pair.checks = [...checks.entries()]
+      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    result.push(pair);
+  }
+  return result.sort(
+    (a, b) => a.eval_id.localeCompare(b.eval_id) || a.experiment_id.localeCompare(b.experiment_id),
+  );
+}
+
+function collectTotals(attempts: AttemptRecord[]): ReportTotals {
+  const completed = attempts.filter((attempt) => attempt.status === "completed");
+  const passed = completed.filter((attempt) => attempt.result?.passed).length;
+  return {
+    attempts: attempts.length,
+    passed,
+    failed: completed.length - passed,
+    incomplete: attempts.filter((attempt) => attempt.status === "incomplete").length,
+    errors: attempts.filter((attempt) => attempt.status === "error").length,
+  };
+}
+
+function collectTelemetry(attempts: AttemptRecord[]): ReportTelemetry {
+  // Telemetry is NULL when unavailable — sums only cover attempts that
+  // reported it, and a run with none reports null rather than 0.
+  const costs = attempts.map((a) => a.costUsd).filter((v): v is number => v !== null);
+  const tokensIn = attempts.map((a) => a.tokensIn).filter((v): v is number => v !== null);
+  const tokensOut = attempts.map((a) => a.tokensOut).filter((v): v is number => v !== null);
+  const sum = (values: number[]): number => values.reduce((total, v) => total + v, 0);
+  return {
+    cost_usd: costs.length > 0 ? sum(costs) : null,
+    cost_attempts: costs.length,
+    tokens_in: tokensIn.length > 0 ? sum(tokensIn) : null,
+    tokens_out: tokensOut.length > 0 ? sum(tokensOut) : null,
+    token_attempts: Math.max(tokensIn.length, tokensOut.length),
+  };
+}
+
+function treatmentOf(run: RunRecord, experimentId: string): string | null {
+  return run.manifest.experiments[experimentId]?.components.treatment ?? null;
+}
+
+/**
+ * Comparison groups come from the run's recorded config (computed at run
+ * time by `compareGroups`). Singleton groups have nothing to compare and are
+ * omitted — their raw results already render as pairs. A withheld group
+ * renders its diff details and never counts-as-comparison.
+ */
+function collectGroups(run: RunRecord, pairs: ReportPair[]): ReportGroup[] {
+  const declared: ComparisonGroup[] = run.config.groups ?? [];
+  const groups: ReportGroup[] = [];
+  for (const group of declared) {
+    if (group.experimentIds.length < 2) continue;
+    if (group.comparison === "withheld") {
+      groups.push({
+        group: group.group,
+        experiment_ids: [...group.experimentIds],
+        comparison: "withheld",
+        details: [...group.details],
+        arms: [],
+      });
+      continue;
+    }
+    const arms: ReportGroupArm[] = group.experimentIds.map((experimentId) => ({
+      experiment_id: experimentId,
+      treatment: treatmentOf(run, experimentId),
+      evals: pairs
+        .filter((pair) => pair.experiment_id === experimentId)
+        .map((pair) => ({
+          eval_id: pair.eval_id,
+          passed: pair.passed,
+          scored: pair.scored,
+          display: `${pair.passed}/${pair.scored}`,
+        })),
+    }));
+    groups.push({
+      group: group.group,
+      experiment_ids: [...group.experimentIds],
+      comparison: "compared",
+      details: [],
+      arms,
+    });
+  }
+  return groups.sort((a, b) => a.group.localeCompare(b.group));
+}
+
+function emptyChannel(): ReportUsageChannel {
+  return { attempts: 0, events: 0, values: [] };
+}
+
+function addChannel(channel: ReportUsageChannel, count: number, values: string[]): void {
+  if (count === 0) return;
+  channel.attempts += 1;
+  channel.events += count;
+  for (const value of values) {
+    if (channel.values.length >= USAGE_VALUE_CAP) break;
+    if (!channel.values.includes(value)) channel.values.push(value);
+  }
+}
+
+function collectUsage(run: RunRecord, attempts: AttemptRecord[]): ReportExperimentUsage[] {
+  const byExperiment = new Map<string, ReportExperimentUsage>();
+  const experimentIds = [...new Set(attempts.map((attempt) => attempt.experimentId))].sort((a, b) => a.localeCompare(b));
+  for (const experimentId of experimentIds) {
+    byExperiment.set(experimentId, {
+      experiment_id: experimentId,
+      treatment: treatmentOf(run, experimentId),
+      telemetry_available: 0,
+      telemetry_unavailable: 0,
+      channels: { docs: emptyChannel(), mcp: emptyChannel(), cli: emptyChannel() },
+    });
+  }
+  for (const attempt of attempts) {
+    const usage = byExperiment.get(attempt.experimentId) as ReportExperimentUsage;
+    const observed: SurfaceUsage | null = attempt.surfaceUsage;
+    if (observed === null) {
+      usage.telemetry_unavailable += 1;
+      continue;
+    }
+    usage.telemetry_available += 1;
+    addChannel(usage.channels.docs, observed.docs.count, observed.docs.urls);
+    addChannel(usage.channels.mcp, observed.mcp.count, observed.mcp.tools);
+    addChannel(usage.channels.cli, observed.cli.count, observed.cli.commands);
+  }
+  return [...byExperiment.values()];
+}
+
+/** Denied-host counts, descending — the drill-down summary shape. */
+export function summarizeDenialHosts(
+  denials: readonly { host: string }[],
+  limit: number,
+): Array<{ host: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const { host } of denials) counts.set(host, (counts.get(host) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([host, count]) => ({ host, count }))
+    .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host))
+    .slice(0, limit);
+}
+
+/**
+ * Read each attempt's egress-denials.log (written only when the proxied
+ * attempt was denied at least once) into the per-attempt rollup. Unreadable
+ * or malformed logs are skipped — the rollup is a summary, never a gate.
+ */
+function collectEgressDenials(resultsDir: string, runId: string, attempts: AttemptRecord[]): EgressDenialSummary[] {
+  const summaries: EgressDenialSummary[] = [];
+  for (const attempt of attempts) {
+    const path = join(resultsDir, runId, attempt.id, "egress-denials.log");
+    if (!existsSync(path)) continue;
+    let hosts: Array<{ host: string }>;
+    try {
+      hosts = readFileSync(path, "utf8")
+        .split("\n")
+        .filter((line) => line !== "")
+        .map((line) => JSON.parse(line) as { host: string });
+    } catch {
+      continue;
+    }
+    if (hosts.length === 0) continue;
+    summaries.push({
+      attempt_id: attempt.id,
+      eval_id: attempt.evalId,
+      experiment_id: attempt.experimentId,
+      count: hosts.length,
+      top_hosts: summarizeDenialHosts(hosts, 3),
+    });
+  }
+  return summaries.sort((a, b) => b.count - a.count || a.attempt_id.localeCompare(b.attempt_id));
+}
+
+export interface BuildReportOptions {
+  store: ResultsStore;
+  runId: string;
+  /** Artifacts root (the harness `--results` dir) — egress denial logs live here. */
+  resultsDir: string;
+  /** Overrides the `generated_at` stamp — fixture seeding only. */
+  generatedAt?: string;
+}
+
+/** Build the report from the store + manifest. Deterministic, offline, synchronous. */
+export function buildReport(options: BuildReportOptions): ReportJson {
+  const { store, runId } = options;
+  const run = store.getRun(runId);
+  if (!run) {
+    const known = store
+      .listRuns()
+      .slice(0, 5)
+      .map((candidate) => `  ${candidate.id} (started ${new Date(candidate.startedAt).toISOString()})`);
+    throw new ReportError(
+      `no run "${runId}" in this results database${known.length > 0 ? `; most recent runs:\n${known.join("\n")}` : ""}`,
+    );
+  }
+  const attempts = store.listAttempts(runId);
+  const pairs = collectPairs(attempts);
+
+  const methodology = methodologyNote(run.config.trials);
+  const banned = findBannedLanguage(methodology);
+  if (banned.length > 0) {
+    throw new ReportError(`report methodology violates the language guard: ${banned.join(", ")}`);
+  }
+
+  return {
+    schema_version: REPORT_SCHEMA_VERSION,
+    generated_at: options.generatedAt ?? new Date().toISOString(),
+    run: {
+      id: run.id,
+      started_at: new Date(run.startedAt).toISOString(),
+      finished_at: run.finishedAt === null ? null : new Date(run.finishedAt).toISOString(),
+      trials: run.config.trials,
+      eval_ids: [...run.config.evalIds],
+      experiment_ids: [...run.config.experimentIds],
+      manifest_hash: run.manifestHash,
+    },
+    incomplete: run.finishedAt === null,
+    totals: collectTotals(attempts),
+    telemetry: collectTelemetry(attempts),
+    pairs,
+    groups: collectGroups(run, pairs),
+    usage: collectUsage(run, attempts),
+    egress_denials: collectEgressDenials(options.resultsDir, runId, attempts),
+    methodology,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Text renderer (consumes ONLY ReportJson)
+// ---------------------------------------------------------------------------
+
+function pct(rate: number | null): string {
+  return rate === null ? "n/a" : `${Math.round(rate * 100)}%`;
+}
+
+/** Render the report as plain text. Renders FROM the JSON, never the store. */
+export function renderReportText(report: ReportJson): string {
+  const lines: string[] = [];
+  lines.push(`run ${report.run.id}`);
+  lines.push(`  started:  ${report.run.started_at}`);
+  if (report.incomplete) {
+    lines.push(`  finished: INCOMPLETE — this run never finished; treat every number below as partial`);
+  } else {
+    lines.push(`  finished: ${report.run.finished_at}`);
+  }
+  lines.push(`  manifest: ${report.run.manifest_hash}`);
+  lines.push("");
+
+  const t = report.totals;
+  lines.push(`attempts: ${t.attempts} — ${t.passed} passed, ${t.failed} failed, ${t.incomplete} incomplete, ${t.errors} errored`);
+  const tel = report.telemetry;
+  lines.push(
+    `  cost:    ${tel.cost_usd === null ? "unavailable" : `$${tel.cost_usd.toFixed(4)} across ${tel.cost_attempts} attempt(s)`}`,
+  );
+  lines.push(
+    `  tokens:  ${
+      tel.tokens_in === null && tel.tokens_out === null
+        ? "unavailable"
+        : `${tel.tokens_in ?? 0} in / ${tel.tokens_out ?? 0} out (from ${tel.token_attempts} attempt(s))`
+    }`,
+  );
+  lines.push("");
+
+  for (const pair of report.pairs) {
+    lines.push(
+      `${pair.eval_id} × ${pair.experiment_id}${pair.suite !== "benchmark" ? ` [${pair.suite}]` : ""}: ` +
+        `${pct(pair.pass_rate)} pass rate (${pair.passed}/${pair.scored} scored` +
+        `${pair.incomplete > 0 ? `, ${pair.incomplete} incomplete` : ""}` +
+        `${pair.errors > 0 ? `, ${pair.errors} errored` : ""}` +
+        `${pair.flaky ? ", trials disagreed" : ""})`,
+    );
+    for (const check of pair.checks) {
+      lines.push(`    ${check.passed === check.total ? "PASS" : "FAIL"} ${check.name} (${check.passed}/${check.total})`);
+    }
+  }
+
+  if (report.groups.length > 0) {
+    lines.push("");
+    lines.push("comparison groups:");
+    for (const group of report.groups) {
+      if (group.comparison === "withheld") {
+        lines.push(`  ${group.group}: WITHHELD — members differ beyond their declared treatment; raw results above still stand`);
+        for (const detail of group.details) lines.push(`    ${detail}`);
+        continue;
+      }
+      lines.push(`  ${group.group}: compared (raw counts per arm)`);
+      for (const arm of group.arms) {
+        const cells = arm.evals.map((entry) => `${entry.eval_id} ${entry.display}`).join(", ");
+        lines.push(`    ${arm.experiment_id}${arm.treatment !== null ? ` [${arm.treatment}]` : ""}: ${cells || "no scored attempts"}`);
+      }
+    }
+  }
+
+  if (report.usage.length > 0) {
+    lines.push("");
+    lines.push("surface usage (offered vs observed):");
+    for (const usage of report.usage) {
+      const channels = (["docs", "mcp", "cli"] as const)
+        .map((channel) => `${channel} ${usage.channels[channel].events} event(s) in ${usage.channels[channel].attempts} attempt(s)`)
+        .join(", ");
+      lines.push(
+        `  ${usage.experiment_id}${usage.treatment !== null ? ` [offered: ${usage.treatment}]` : ""}: ` +
+          `${usage.telemetry_available} attempt(s) with telemetry` +
+          `${usage.telemetry_unavailable > 0 ? `, ${usage.telemetry_unavailable} unavailable` : ""} — ${channels}`,
+      );
+    }
+  }
+
+  if (report.egress_denials.length > 0) {
+    lines.push("");
+    lines.push("egress denials:");
+    for (const denial of report.egress_denials) {
+      lines.push(
+        `  ${denial.attempt_id} (${denial.eval_id} × ${denial.experiment_id}): ${denial.count} denial(s) — ` +
+          denial.top_hosts.map(({ host, count }) => `${host} (${count})`).join(", "),
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push(`methodology: ${report.methodology}`);
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// report.json plumbing
+// ---------------------------------------------------------------------------
+
+/** Canonical location of a run's report.json. */
+export function reportJsonPath(resultsDir: string, runId: string): string {
+  return join(resultsDir, runId, "report.json");
+}
+
+/** Write report.json into the run's results dir. Returns the path. */
+export function writeReportJson(report: ReportJson, resultsDir: string): string {
+  const dir = join(resultsDir, report.run.id);
+  mkdirSync(dir, { recursive: true });
+  const path = reportJsonPath(resultsDir, report.run.id);
+  writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  return path;
+}
+
+/** Load a previously written report.json, refusing other schema versions. */
+export function readReportJson(resultsDir: string, runId: string): ReportJson {
+  const path = reportJsonPath(resultsDir, runId);
+  if (!existsSync(path)) {
+    throw new ReportError(`no report.json for run "${runId}" (expected ${path}) — run \`quickstudy report ${runId}\` first`);
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as Partial<ReportJson>;
+    if (parsed.schema_version !== REPORT_SCHEMA_VERSION) {
+      throw new Error(
+        `unsupported report schema ${String(parsed.schema_version ?? "legacy")} (expected ${REPORT_SCHEMA_VERSION})`,
+      );
+    }
+    return parsed as ReportJson;
+  } catch (err) {
+    throw new ReportError(
+      `report.json for run "${runId}" is not readable (${err instanceof Error ? err.message : String(err)}) — ` +
+        `re-generate it with \`quickstudy report ${runId}\``,
+    );
+  }
+}

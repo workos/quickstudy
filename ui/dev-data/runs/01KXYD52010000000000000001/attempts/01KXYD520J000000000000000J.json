@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD520J000000000000000J",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-nextjs",
+  "experiment_id": "codex-cli",
+  "suite": "benchmark",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "cli",
+  "comparison_group": "codex",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 2,
+      "commands": [
+        "acme auth"
+      ]
+    }
+  },
+  "tokens_in": 217,
+  "tokens_out": 1217,
+  "cost_usd": 0.11,
+  "turns": 6,
+  "started_at": "2026-07-20T00:17:00.000Z",
+  "finished_at": "2026-07-20T00:18:31.700Z",
+  "error": null,
+  "transcript": "attempts/01KXYD520J000000000000000J.transcript.txt",
+  "diff": "attempts/01KXYD520J000000000000000J.diff.patch"
+}

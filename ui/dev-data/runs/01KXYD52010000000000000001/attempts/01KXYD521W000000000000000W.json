@@ -1,0 +1,36 @@
+{
+  "id": "01KXYD521W000000000000000W",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "callback-redirect-loop",
+  "experiment_id": "codex-docs",
+  "suite": "regression",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "codex",
+  "surface_usage": null,
+  "tokens_in": 259,
+  "tokens_out": 1259,
+  "cost_usd": 0.11,
+  "turns": 8,
+  "started_at": "2026-07-20T00:59:00.000Z",
+  "finished_at": "2026-07-20T01:00:35.900Z",
+  "error": null,
+  "transcript": "attempts/01KXYD521W000000000000000W.transcript.txt",
+  "diff": "attempts/01KXYD521W000000000000000W.diff.patch"
+}

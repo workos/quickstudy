@@ -1,0 +1,23 @@
+{
+  "id": "01KXYD521Q000000000000000Q",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-django",
+  "experiment_id": "codex-cli",
+  "suite": "benchmark",
+  "trial_index": 2,
+  "status": "incomplete",
+  "passed": null,
+  "checks": null,
+  "treatment": "cli",
+  "comparison_group": "codex",
+  "surface_usage": null,
+  "tokens_in": null,
+  "tokens_out": null,
+  "cost_usd": null,
+  "turns": null,
+  "started_at": "2026-07-20T00:54:00.000Z",
+  "finished_at": "2026-07-20T00:55:35.400Z",
+  "error": null,
+  "transcript": "attempts/01KXYD521Q000000000000000Q.transcript.txt",
+  "diff": null
+}

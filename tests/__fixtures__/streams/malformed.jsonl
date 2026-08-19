@@ -1,0 +1,7 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+this line is not json at all
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"partially fine line"}]}}
+{"type":"result","subtype":"success","usage":{"input_tokens":
+{broken json
+[]
+42

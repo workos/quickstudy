@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD52020000000000000002",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-nextjs",
+  "experiment_id": "claude-docs",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "claude",
+  "surface_usage": {
+    "docs": {
+      "count": 2,
+      "urls": [
+        "https://docs.acme.test/auth"
+      ]
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 0,
+      "commands": []
+    }
+  },
+  "tokens_in": 201,
+  "tokens_out": 1201,
+  "cost_usd": 0.11,
+  "turns": 5,
+  "started_at": "2026-07-20T00:01:00.000Z",
+  "finished_at": "2026-07-20T00:02:30.100Z",
+  "error": null,
+  "transcript": "attempts/01KXYD52020000000000000002.transcript.txt",
+  "diff": "attempts/01KXYD52020000000000000002.diff.patch"
+}

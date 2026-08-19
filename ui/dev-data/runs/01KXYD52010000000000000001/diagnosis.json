@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "run_id": "01KXYD52010000000000000001",
+  "generated_at": "2026-07-20T02:00:00.000Z",
+  "model": {
+    "requested": "model-a-analyst",
+    "resolved": "model-a-analyst-20260601"
+  },
+  "prompt_version": 1,
+  "disclaimer": "These findings are model-drafted hypotheses, not verdicts. Scope is this single run: no cross-run claims, no attribution beyond the cited evidence. Each evidence link names a harness-selected excerpt (artifact + 1-indexed line range) — verify the cited lines before acting.",
+  "pairs_diagnosed": 3,
+  "pairs_skipped": 15,
+  "findings": [
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-mcp",
+      "target": "mcp",
+      "claim": "The MCP server demanded an interactive OAuth flow mid-run, which a headless container cannot complete.",
+      "suggested_change": "Offer a device-code or pre-provisioned token flow so headless MCP clients can authenticate.",
+      "confidence": "high",
+      "evidence": [
+        {
+          "attempt_id": "01KXYD52050000000000000005",
+          "artifact": "transcript",
+          "lines": [
+            542,
+            545
+          ]
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-cli",
+      "target": "cli",
+      "claim": "The failing CLI trial abandoned the scaffold output and fell back to web docs for the callback route.",
+      "suggested_change": "Include the framework-specific callback route in the CLI scaffold output.",
+      "confidence": "medium",
+      "evidence": [
+        {
+          "attempt_id": "01KXYD52090000000000000009",
+          "artifact": "transcript",
+          "lines": [
+            2,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-mcp",
+      "target": "sdk",
+      "claim": "The generated change wires the session callback through a deprecated helper signature.",
+      "suggested_change": "Update the SDK helper example the integration guide embeds to the current signature.",
+      "confidence": "low",
+      "evidence": [
+        {
+          "attempt_id": "01KXYD520Q000000000000000Q",
+          "artifact": "diff",
+          "lines": [
+            1,
+            3
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "codex-mcp",
+      "error": "analyst response failed schema validation after one re-ask"
+    }
+  ]
+}

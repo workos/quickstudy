@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD521K000000000000000K",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-django",
+  "experiment_id": "codex-mcp",
+  "suite": "benchmark",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "mcp",
+  "comparison_group": "codex",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 2,
+      "tools": [
+        "acme__list_orgs"
+      ]
+    },
+    "cli": {
+      "count": 0,
+      "commands": []
+    }
+  },
+  "tokens_in": 250,
+  "tokens_out": 1250,
+  "cost_usd": 0.11,
+  "turns": 4,
+  "started_at": "2026-07-20T00:50:00.000Z",
+  "finished_at": "2026-07-20T00:51:35.000Z",
+  "error": null,
+  "transcript": "attempts/01KXYD521K000000000000000K.transcript.txt",
+  "diff": "attempts/01KXYD521K000000000000000K.diff.patch"
+}

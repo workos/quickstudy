@@ -1,0 +1,204 @@
+name: release binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to release (leave empty to build artifacts only)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.asset }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: bun-linux-x64-baseline
+            asset: quickstudy-linux-x64
+          - runner: ubuntu-24.04-arm
+            target: bun-linux-arm64
+            asset: quickstudy-linux-arm64
+          - runner: macos-15-intel
+            target: bun-darwin-x64
+            asset: quickstudy-darwin-x64
+          - runner: macos-15
+            target: bun-darwin-arm64
+            asset: quickstudy-darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # A manual release must build the requested tag, never the branch
+          # that happened to dispatch the workflow. Artifact-only dispatches
+          # build the immutable event SHA.
+          ref: ${{ github.event_name == 'workflow_dispatch' && (inputs.release_tag || github.sha) || github.ref }}
+          fetch-depth: 0
+      - name: Verify checked-out source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          if [ -n "$REQUESTED_TAG" ]; then
+            case "$REQUESTED_TAG" in
+              v*) ;;
+              *) echo "::error::release_tag must begin with v"; exit 1 ;;
+            esac
+            expected="$(git rev-list -n 1 "refs/tags/$REQUESTED_TAG")"
+            source_ref="$REQUESTED_TAG"
+          elif [ "$EVENT_NAME" = "push" ] && [[ "$EVENT_REF" == refs/tags/* ]]; then
+            source_ref="${EVENT_REF#refs/tags/}"
+            expected="$(git rev-list -n 1 "refs/tags/$source_ref")"
+          else
+            source_ref="$EVENT_SHA"
+            expected="$EVENT_SHA"
+          fi
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::checked out $actual, expected $expected from $source_ref"
+            exit 1
+          fi
+          echo "SOURCE_REF=$source_ref" >> "$GITHUB_ENV"
+          echo "SOURCE_SHA=$actual" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun install --frozen-lockfile
+      - name: Build standalone executable
+        run: bun scripts/build-binary.ts --target "${{ matrix.target }}" --outfile "dist/${{ matrix.asset }}/quickstudy"
+      - name: Smoke-test the executable outside the checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$GITHUB_WORKSPACE/dist/${{ matrix.asset }}/quickstudy"
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          cd "$smoke_dir"
+
+          "$binary" --version >/dev/null
+          "$binary" --help >/dev/null
+
+          # A checkout-less binary must still author-and-run: a toy eval and a
+          # host echo experiment, created inline (no scaffold command exists).
+          # The compiled binary dynamically imports both external modules at
+          # runtime — verified as part of this smoke.
+          mkdir -p evals/smoke/local experiments
+          cat > evals/smoke/PROMPT.md <<'EOF'
+          ---
+          id: smoke
+          suite: benchmark
+          ---
+
+          Write NOTES.md describing the task.
+          EOF
+          # Both modules import the harness BY PACKAGE NAME — the contract for
+          # all consumer code — so this smoke fails if the binary ever loses
+          # the ability to resolve "quickstudy" from dynamically imported
+          # files (the self-resolution plugin in src/cli.ts).
+          cat > evals/smoke/EVAL.ts <<'EOF'
+          import type { EvalScorer } from "quickstudy";
+
+          const scorer: EvalScorer = async (ctx) => {
+            const ok = await ctx.fileExists("NOTES.md");
+            const seed = await ctx.fileExists("seed.txt");
+            return { passed: ok && seed, checks: [
+              { name: "notes-written", passed: ok },
+              { name: "local-delivered", passed: seed },
+            ] };
+          };
+
+          export default scorer;
+          EOF
+          echo "seed" > evals/smoke/local/seed.txt
+          cat > experiments/echo-smoke.ts <<'EOF'
+          import { defineExperiment } from "quickstudy";
+
+          export default defineExperiment({
+            id: "echo-smoke",
+            agent: { adapter: "echo" },
+            runtime: { kind: "host" },
+          });
+          EOF
+
+          "$binary" validate >/dev/null
+          run_output="$("$binary" run --eval smoke --experiment echo-smoke --trials 1 --db smoke.db --results results)"
+          run_id="$(printf '%s\n' "$run_output" | sed -n 's/^run \([^:]*\):.*/\1/p')"
+          test -n "$run_id"
+          report_output="$("$binary" report "$run_id" --db smoke.db --results results)"
+          printf '%s\n' "$report_output" | grep -q "100% pass rate"
+      - name: Package and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp LICENSE "dist/${{ matrix.asset }}/LICENSE"
+          cp .github/release-README.txt "dist/${{ matrix.asset }}/README.txt"
+          printf 'ref=%s\ncommit=%s\n' "$SOURCE_REF" "$SOURCE_SHA" > "dist/${{ matrix.asset }}/SOURCE.txt"
+          cd "dist/${{ matrix.asset }}"
+          tar -czf "../${{ matrix.asset }}.tar.gz" quickstudy LICENSE README.txt SOURCE.txt
+          cd ..
+          shasum -a 256 "${{ matrix.asset }}.tar.gz" > "${{ matrix.asset }}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            dist/${{ matrix.asset }}.tar.gz
+            dist/${{ matrix.asset }}.tar.gz.sha256
+          if-no-files-found: error
+
+  # A tag must not ship a broken npm tarball: pack, install into a clean temp
+  # dir, run the bin, validate fixture roots. One runner suffices — the
+  # tarball is platform-independent TypeScript source plus ui/dist.
+  pack-check:
+    name: Tarball self-check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && (inputs.release_tag || github.sha) || github.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - run: bun install --frozen-lockfile
+      - name: Pack, install, and run the tarball outside the checkout
+        run: bash scripts/pack-check.sh
+
+  release:
+    name: Create GitHub release
+    needs: [build, pack-check]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Verify manual release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null
+      - name: Create release with binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --title "quickstudy $RELEASE_TAG"

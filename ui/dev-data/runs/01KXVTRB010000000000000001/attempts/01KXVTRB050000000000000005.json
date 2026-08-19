@@ -1,0 +1,32 @@
+{
+  "id": "01KXVTRB050000000000000005",
+  "run_id": "01KXVTRB010000000000000001",
+  "eval_id": "auth-rails",
+  "experiment_id": "claude-docs",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "claude",
+  "surface_usage": null,
+  "tokens_in": 104,
+  "tokens_out": 904,
+  "cost_usd": 0.07,
+  "turns": 3,
+  "started_at": "2026-07-19T00:04:00.000Z",
+  "finished_at": "2026-07-19T00:05:00.200Z",
+  "error": null,
+  "transcript": "attempts/01KXVTRB050000000000000005.transcript.txt",
+  "diff": "attempts/01KXVTRB050000000000000005.diff.patch"
+}

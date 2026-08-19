@@ -1,0 +1,903 @@
+{
+  "schema_version": 3,
+  "generated_at": "2026-07-20T02:00:00.000Z",
+  "run": {
+    "id": "01KXYD52010000000000000001",
+    "started_at": "2026-07-20T00:00:00.000Z",
+    "finished_at": "2026-07-20T01:00:00.000Z",
+    "trials": 3,
+    "eval_ids": [
+      "auth-nextjs",
+      "auth-rails",
+      "auth-django",
+      "callback-redirect-loop"
+    ],
+    "experiment_ids": [
+      "claude-docs",
+      "claude-mcp",
+      "claude-cli",
+      "codex-docs",
+      "codex-mcp",
+      "codex-cli"
+    ],
+    "manifest_hash": "5329c49f0943c0c7ed11c55ca46d83d557020a1b53994c1c0416f198cb1b98e3"
+  },
+  "incomplete": false,
+  "totals": {
+    "attempts": 60,
+    "passed": 31,
+    "failed": 27,
+    "incomplete": 1,
+    "errors": 1
+  },
+  "telemetry": {
+    "cost_usd": 6.380000000000005,
+    "cost_attempts": 58,
+    "tokens_in": 13325,
+    "tokens_out": 71325,
+    "token_attempts": 58
+  },
+  "pairs": [
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "claude-cli",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 1,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 0,
+      "failed": 3,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 0,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "codex-cli",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 0,
+      "incomplete": 1,
+      "errors": 0,
+      "scored": 2,
+      "pass_rate": 1,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 2
+        },
+        {
+          "name": "flow-wired",
+          "passed": 2,
+          "total": 2
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 2,
+          "total": 2
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "codex-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-django",
+      "experiment_id": "codex-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 1,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 1,
+      "scored": 2,
+      "pass_rate": 0.5,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 2
+        },
+        {
+          "name": "flow-wired",
+          "passed": 1,
+          "total": 2
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 2,
+          "total": 2
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-cli",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 1,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 0,
+      "failed": 3,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 0,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "codex-cli",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "codex-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-nextjs",
+      "experiment_id": "codex-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 1,
+      "failed": 2,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.3333333333333333,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 1,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-cli",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 1,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 0,
+      "failed": 3,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 0,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "codex-cli",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "codex-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.6666666666666666,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 2,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "auth-rails",
+      "experiment_id": "codex-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 1,
+      "failed": 2,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.3333333333333333,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 1,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "callback-redirect-loop",
+      "experiment_id": "claude-docs",
+      "suite": "regression",
+      "total": 3,
+      "passed": 0,
+      "failed": 3,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 0,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    },
+    {
+      "eval_id": "callback-redirect-loop",
+      "experiment_id": "codex-docs",
+      "suite": "regression",
+      "total": 3,
+      "passed": 1,
+      "failed": 2,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0.3333333333333333,
+      "flaky": true,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3
+        },
+        {
+          "name": "flow-wired",
+          "passed": 1,
+          "total": 3
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": 3,
+          "total": 3
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group": "claude",
+      "experiment_ids": [
+        "claude-cli",
+        "claude-docs",
+        "claude-mcp"
+      ],
+      "comparison": "compared",
+      "details": [],
+      "arms": [
+        {
+          "experiment_id": "claude-cli",
+          "treatment": "cli",
+          "evals": [
+            {
+              "eval_id": "auth-django",
+              "passed": 2,
+              "scored": 3,
+              "display": "2/3"
+            },
+            {
+              "eval_id": "auth-nextjs",
+              "passed": 2,
+              "scored": 3,
+              "display": "2/3"
+            },
+            {
+              "eval_id": "auth-rails",
+              "passed": 2,
+              "scored": 3,
+              "display": "2/3"
+            }
+          ]
+        },
+        {
+          "experiment_id": "claude-docs",
+          "treatment": "docs",
+          "evals": [
+            {
+              "eval_id": "auth-django",
+              "passed": 3,
+              "scored": 3,
+              "display": "3/3"
+            },
+            {
+              "eval_id": "auth-nextjs",
+              "passed": 3,
+              "scored": 3,
+              "display": "3/3"
+            },
+            {
+              "eval_id": "auth-rails",
+              "passed": 3,
+              "scored": 3,
+              "display": "3/3"
+            },
+            {
+              "eval_id": "callback-redirect-loop",
+              "passed": 0,
+              "scored": 3,
+              "display": "0/3"
+            }
+          ]
+        },
+        {
+          "experiment_id": "claude-mcp",
+          "treatment": "mcp",
+          "evals": [
+            {
+              "eval_id": "auth-django",
+              "passed": 0,
+              "scored": 3,
+              "display": "0/3"
+            },
+            {
+              "eval_id": "auth-nextjs",
+              "passed": 0,
+              "scored": 3,
+              "display": "0/3"
+            },
+            {
+              "eval_id": "auth-rails",
+              "passed": 0,
+              "scored": 3,
+              "display": "0/3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "group": "codex",
+      "experiment_ids": [
+        "codex-cli",
+        "codex-docs",
+        "codex-mcp"
+      ],
+      "comparison": "withheld",
+      "details": [
+        "codex: codex-cli vs codex-mcp: identity.agent.model changed (\"model-b-1\" -> \"model-b-2\")"
+      ],
+      "arms": []
+    }
+  ],
+  "usage": [
+    {
+      "experiment_id": "claude-cli",
+      "treatment": "cli",
+      "telemetry_available": 9,
+      "telemetry_unavailable": 0,
+      "channels": {
+        "docs": {
+          "attempts": 3,
+          "events": 3,
+          "values": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "cli": {
+          "attempts": 6,
+          "events": 12,
+          "values": [
+            "acme auth"
+          ]
+        }
+      }
+    },
+    {
+      "experiment_id": "claude-docs",
+      "treatment": "docs",
+      "telemetry_available": 12,
+      "telemetry_unavailable": 0,
+      "channels": {
+        "docs": {
+          "attempts": 12,
+          "events": 24,
+          "values": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "cli": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        }
+      }
+    },
+    {
+      "experiment_id": "claude-mcp",
+      "treatment": "mcp",
+      "telemetry_available": 9,
+      "telemetry_unavailable": 0,
+      "channels": {
+        "docs": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "mcp": {
+          "attempts": 9,
+          "events": 18,
+          "values": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        }
+      }
+    },
+    {
+      "experiment_id": "codex-cli",
+      "treatment": "cli",
+      "telemetry_available": 8,
+      "telemetry_unavailable": 1,
+      "channels": {
+        "docs": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "mcp": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "cli": {
+          "attempts": 8,
+          "events": 16,
+          "values": [
+            "acme auth"
+          ]
+        }
+      }
+    },
+    {
+      "experiment_id": "codex-docs",
+      "treatment": "docs",
+      "telemetry_available": 7,
+      "telemetry_unavailable": 5,
+      "channels": {
+        "docs": {
+          "attempts": 7,
+          "events": 14,
+          "values": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "cli": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        }
+      }
+    },
+    {
+      "experiment_id": "codex-mcp",
+      "treatment": "mcp",
+      "telemetry_available": 8,
+      "telemetry_unavailable": 1,
+      "channels": {
+        "docs": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        },
+        "mcp": {
+          "attempts": 8,
+          "events": 16,
+          "values": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "attempts": 0,
+          "events": 0,
+          "values": []
+        }
+      }
+    }
+  ],
+  "egress_denials": [],
+  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 3 planned trials — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did."
+}

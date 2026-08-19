@@ -1,0 +1,1 @@
+alpha starting state shared across variant fixtures

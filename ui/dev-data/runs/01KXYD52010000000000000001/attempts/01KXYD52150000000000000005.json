@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD52150000000000000005",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-rails",
+  "experiment_id": "codex-cli",
+  "suite": "benchmark",
+  "trial_index": 2,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": false
+    }
+  ],
+  "treatment": "cli",
+  "comparison_group": "codex",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 2,
+      "commands": [
+        "acme auth"
+      ]
+    }
+  },
+  "tokens_in": 236,
+  "tokens_out": 1236,
+  "cost_usd": 0.11,
+  "turns": 5,
+  "started_at": "2026-07-20T00:36:00.000Z",
+  "finished_at": "2026-07-20T00:37:33.600Z",
+  "error": null,
+  "transcript": "attempts/01KXYD52150000000000000005.transcript.txt",
+  "diff": "attempts/01KXYD52150000000000000005.diff.patch"
+}

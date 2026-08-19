@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD520T000000000000000T",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-rails",
+  "experiment_id": "claude-cli",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "cli",
+  "comparison_group": "claude",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 2,
+      "commands": [
+        "acme auth"
+      ]
+    }
+  },
+  "tokens_in": 225,
+  "tokens_out": 1225,
+  "cost_usd": 0.11,
+  "turns": 4,
+  "started_at": "2026-07-20T00:25:00.000Z",
+  "finished_at": "2026-07-20T00:26:32.500Z",
+  "error": null,
+  "transcript": "attempts/01KXYD520T000000000000000T.transcript.txt",
+  "diff": "attempts/01KXYD520T000000000000000T.diff.patch"
+}

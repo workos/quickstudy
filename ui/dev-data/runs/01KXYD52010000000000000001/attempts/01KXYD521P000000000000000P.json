@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD521P000000000000000P",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-django",
+  "experiment_id": "codex-cli",
+  "suite": "benchmark",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "cli",
+  "comparison_group": "codex",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 2,
+      "commands": [
+        "acme auth"
+      ]
+    }
+  },
+  "tokens_in": 253,
+  "tokens_out": 1253,
+  "cost_usd": 0.11,
+  "turns": 7,
+  "started_at": "2026-07-20T00:53:00.000Z",
+  "finished_at": "2026-07-20T00:54:35.300Z",
+  "error": null,
+  "transcript": "attempts/01KXYD521P000000000000000P.transcript.txt",
+  "diff": "attempts/01KXYD521P000000000000000P.diff.patch"
+}

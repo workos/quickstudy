@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","cwd":"/workspace","session_id":"7745a1c0-2f7e-4b8e-9d0a-2b7f4f1c9a11","tools":["Bash"],"model":"claude-sonnet-4-5"}
+{"type":"assistant","message":{"id":"msg_01","type":"message","role":"assistant","content":[{"type":"text","text":"Starting."}]},"session_id":"7745a1c0-2f7e-4b8e-9d0a-2b7f4f1c9a11"}
+{"type":"assistant","message":{"id":"msg_02","type":"message","role":"assistant","content":[{"type":"text","text":"Editing the file now."}]},"session_id":"7745a1c0-2f7e-4b8e-9d0a-2b7f4f1c9a11"}
+{"type":"assistant","message":{"id":"msg_03","type":"message","role":"assistant","content":[{"type":"text","text":"Still going when the stream died"}]},"session_id":"7745a1c0-2f

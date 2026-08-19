@@ -1,0 +1,32 @@
+{
+  "id": "01KXVTRB090000000000000009",
+  "run_id": "01KXVTRB010000000000000001",
+  "eval_id": "auth-django",
+  "experiment_id": "claude-docs",
+  "suite": "benchmark",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "claude",
+  "surface_usage": null,
+  "tokens_in": 108,
+  "tokens_out": 908,
+  "cost_usd": 0.07,
+  "turns": 3,
+  "started_at": "2026-07-19T00:08:00.000Z",
+  "finished_at": "2026-07-19T00:09:00.400Z",
+  "error": null,
+  "transcript": "attempts/01KXVTRB090000000000000009.transcript.txt",
+  "diff": "attempts/01KXVTRB090000000000000009.diff.patch"
+}

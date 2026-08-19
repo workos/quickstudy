@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"th_0195f1a2"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","item_type":"reasoning","text":"Plan: create hello.txt in the workspace."}}
+{"type":"item.completed","item":{"id":"item_1","item_type":"command_execution","command":"echo hello > hello.txt","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"turn.completed","usage":{"input_tokens":900,"cached_input_tokens":100,"output_tokens":40}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_2","item_type":"agent_message","text":"Created hello.txt."}}
+{"type":"turn.completed","usage":{"input_tokens":1500,"cached_input_tokens":0,"output_tokens":60}}

@@ -1,0 +1,7 @@
+{"id":"0","msg":{"type":"task_started"}}
+{"id":"0","msg":{"type":"agent_reasoning","text":"I need to create hello.txt."}}
+{"id":"0","msg":{"type":"exec_command_begin","call_id":"call_1","command":["bash","-lc","echo hello > hello.txt"],"cwd":"/workspace"}}
+{"id":"0","msg":{"type":"exec_command_end","call_id":"call_1","exit_code":0,"stdout":"","stderr":""}}
+{"id":"0","msg":{"type":"token_count","info":{"total_token_usage":{"input_tokens":3000,"cached_input_tokens":500,"output_tokens":150,"reasoning_output_tokens":0,"total_tokens":3650},"last_token_usage":{"input_tokens":1200,"cached_input_tokens":0,"output_tokens":80,"total_tokens":1280}}}}
+{"id":"0","msg":{"type":"agent_message","message":"Created hello.txt."}}
+{"id":"0","msg":{"type":"task_complete","last_agent_message":"Created hello.txt."}}

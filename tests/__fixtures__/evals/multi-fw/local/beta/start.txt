@@ -1,0 +1,1 @@
+beta starting state for the multi-fw variant fixture

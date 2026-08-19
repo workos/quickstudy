@@ -1,0 +1,36 @@
+{
+  "id": "01KXYD521H000000000000000H",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-django",
+  "experiment_id": "codex-docs",
+  "suite": "benchmark",
+  "trial_index": 2,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "codex",
+  "surface_usage": null,
+  "tokens_in": 248,
+  "tokens_out": 1248,
+  "cost_usd": 0.11,
+  "turns": 7,
+  "started_at": "2026-07-20T00:48:00.000Z",
+  "finished_at": "2026-07-20T00:49:34.800Z",
+  "error": null,
+  "transcript": "attempts/01KXYD521H000000000000000H.transcript.txt",
+  "diff": "attempts/01KXYD521H000000000000000H.diff.patch"
+}

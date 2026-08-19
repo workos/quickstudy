@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>quickstudy</title>
+    <!--
+      The export step (src/export.ts) replaces the assignment below with the
+      inlined data index so the site works from file://, where browsers block
+      fetch() of local JSON. Served/dev builds leave it undefined and the UI
+      falls back to fetching ./data/*.
+    -->
+    <script id="qs-data">window.__QS_DATA__ = undefined;</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

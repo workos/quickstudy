@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 3,
+  "generated_at": "2026-07-20T02:00:00.000Z",
+  "runs": [
+    {
+      "id": "01KXYD52010000000000000001",
+      "started_at": "2026-07-20T00:00:00.000Z",
+      "finished_at": "2026-07-20T01:00:00.000Z",
+      "trials": 3,
+      "eval_ids": [
+        "auth-nextjs",
+        "auth-rails",
+        "auth-django",
+        "callback-redirect-loop"
+      ],
+      "experiment_ids": [
+        "claude-docs",
+        "claude-mcp",
+        "claude-cli",
+        "codex-docs",
+        "codex-mcp",
+        "codex-cli"
+      ],
+      "manifest_hash": "5329c49f0943c0c7ed11c55ca46d83d557020a1b53994c1c0416f198cb1b98e3",
+      "attempts": 60
+    },
+    {
+      "id": "01KXVTRB010000000000000001",
+      "started_at": "2026-07-19T00:00:00.000Z",
+      "finished_at": "2026-07-19T01:00:00.000Z",
+      "trials": 3,
+      "eval_ids": [
+        "auth-nextjs",
+        "auth-rails",
+        "auth-django"
+      ],
+      "experiment_ids": [
+        "claude-docs",
+        "claude-mcp"
+      ],
+      "manifest_hash": "0ba000db714e52a0f1848c3a62b7c4655fbe474b9618f106941b293b932f433b",
+      "attempts": 10
+    }
+  ]
+}

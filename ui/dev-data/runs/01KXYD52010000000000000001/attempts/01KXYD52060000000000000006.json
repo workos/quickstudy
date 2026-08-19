@@ -1,0 +1,51 @@
+{
+  "id": "01KXYD52060000000000000006",
+  "run_id": "01KXYD52010000000000000001",
+  "eval_id": "auth-nextjs",
+  "experiment_id": "claude-mcp",
+  "suite": "benchmark",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "mcp",
+  "comparison_group": "claude",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 2,
+      "tools": [
+        "acme__list_orgs"
+      ]
+    },
+    "cli": {
+      "count": 0,
+      "commands": []
+    }
+  },
+  "tokens_in": 205,
+  "tokens_out": 1205,
+  "cost_usd": 0.11,
+  "turns": 4,
+  "started_at": "2026-07-20T00:05:00.000Z",
+  "finished_at": "2026-07-20T00:06:30.500Z",
+  "error": null,
+  "transcript": "attempts/01KXYD52060000000000000006.transcript.txt",
+  "diff": "attempts/01KXYD52060000000000000006.diff.patch"
+}

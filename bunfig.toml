@@ -1,0 +1,7 @@
+# Bun configuration for quickstudy.
+
+[test]
+# Discovery runs from the repo root (tests/). Playwright specs (ui/e2e) are
+# not bun:test files — keep them out of discovery.
+root = "."
+pathIgnorePatterns = ["**/*.spec.ts"]
