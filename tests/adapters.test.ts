@@ -134,10 +134,15 @@ describe("claude adapter", () => {
 describe("codex adapter", () => {
   const adapter = new CodexAdapter("codex", { model: "gpt-versioned", reasoning: "high" });
 
-  test("composes the headless invocation", () => {
+  test("composes the headless invocation behind the login shim", () => {
     const ctx = ctxFor("web");
     const command = adapter.command(ctx);
-    expect(command.slice(0, 3)).toEqual(["codex", "exec", "--json"]);
+    // codex >= 0.144 ignores the OPENAI_API_KEY env var: the shim pipes it
+    // into `codex login --with-api-key` (stdin, never argv) before exec.
+    expect(command.slice(0, 2)).toEqual(["sh", "-c"]);
+    expect(command[2]).toContain("codex login --with-api-key");
+    expect(command[2]).not.toContain("$OPENAI_API_KEY");
+    expect(command.slice(4, 7)).toEqual(["codex", "exec", "--json"]);
     expect(command).toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(command[command.length - 1]).toBe(ctx.prompt);
   });

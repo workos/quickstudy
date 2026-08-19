@@ -6,7 +6,9 @@
  * security boundary (same rationale as the Claude adapter). MCP treatment
  * config lives in `~/.codex/config.toml` in-container — Codex has no
  * per-project MCP file. Auth: the OPENAI_API_KEY env var is injected at
- * container create.
+ * container create, but codex >= 0.144 no longer reads it directly — the
+ * command wrapper pipes it into `codex login --with-api-key` (stdin, never
+ * argv) to write the auth.json the CLI requires.
  */
 
 import type { McpServerConfig } from "../isolation/mcp.ts";
@@ -76,6 +78,13 @@ export class CodexAdapter implements ContainerAgentAdapter {
 
   command(ctx: ContainerAttemptContext): string[] {
     return [
+      "sh",
+      "-c",
+      // codex 0.144+ ignores the OPENAI_API_KEY env var; mint auth.json from
+      // it in-container. Login chatter is silenced so stdout stays pure JSONL
+      // for parseStream; the key reaches login via stdin, never argv.
+      'printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 && exec "$@"',
+      "sh",
       "codex",
       "exec",
       "--json",
