@@ -625,7 +625,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
         summary.errors += 1;
       }
       log(
-        `attempt ${attemptId} (${entry.evalId} × ${entry.experimentId} trial ${entry.trialIndex}): ` +
+        `attempt ${attemptId} (${entry.evalId} × ${entry.experimentId} trial ${entry.trialIndex + 1}): ` +
           `${disposition.status}${disposition.result ? ` — ${disposition.result.passed ? "passed" : "failed"}` : ""}`,
       );
     }
