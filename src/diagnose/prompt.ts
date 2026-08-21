@@ -138,5 +138,20 @@ export const diagnoseResponseSchema = z.object({
 
 export type DiagnoseResponse = z.infer<typeof diagnoseResponseSchema>;
 
+/**
+ * Anthropic's structured-output endpoint rejects array-length keywords
+ * (`maxItems`/`minItems`) that zod's `.max()`/`.min()` emit. Strip them from
+ * the wire schema; requestValidated still enforces the bounds locally via zod.
+ */
+function stripArrayBounds<T>(node: T): T {
+  if (Array.isArray(node)) return node.map(stripArrayBounds) as T;
+  if (node === null || typeof node !== "object") return node;
+  return Object.fromEntries(
+    Object.entries(node)
+      .filter(([key]) => key !== "maxItems" && key !== "minItems")
+      .map(([key, value]) => [key, stripArrayBounds(value)]),
+  ) as T;
+}
+
 /** The same contract as JSON Schema for `output_config.format`. */
-export const DIAGNOSE_JSON_SCHEMA = z.toJSONSchema(diagnoseResponseSchema);
+export const DIAGNOSE_JSON_SCHEMA = stripArrayBounds(z.toJSONSchema(diagnoseResponseSchema));
