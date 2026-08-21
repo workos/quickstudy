@@ -19,7 +19,9 @@ import type { PairTallies } from "./select.ts";
 import { DIAGNOSIS_TARGETS, type DiagnosisTarget } from "./types.ts";
 
 /** Output-token ceiling per pair — cost stays structurally bounded. */
-export const DIAGNOSE_MAX_TOKENS = 2_000;
+// 2_000 truncated real findings JSON mid-array on most pairs (stop_reason
+// max_tokens); the cap only bounds spend on runaway output, so keep headroom.
+export const DIAGNOSE_MAX_TOKENS = 8_000;
 /** Findings cap per pair, enforced by the response schema. */
 export const MAX_FINDINGS_PER_PAIR = 5;
 

@@ -25,6 +25,7 @@ import type { CheckResult } from "../src/evals/types.ts";
 import {
   BUNDLE_DIFF_CAP,
   EXCERPT_MAX_LINES,
+  EXCERPT_MAX_LINE_CHARS,
   EXCERPT_TAIL_LINES,
   excerptDiff,
   excerptTranscript,
@@ -251,6 +252,15 @@ describe("excerptTranscript", () => {
     const excerpt = excerptTranscript(Array.from({ length: 60 }, (_, i) => `${i + 1} error: x`).join("\n"));
     expect(excerpt.lines).toEqual([1, EXCERPT_MAX_LINES]);
     expect(excerpt.text.split("\n")).toHaveLength(EXCERPT_MAX_LINES);
+  });
+
+  test("an overlong line is truncated in text while line ranges stay exact", () => {
+    const huge = `error: ${"x".repeat(EXCERPT_MAX_LINE_CHARS * 3)}`;
+    const excerpt = excerptTranscript(["1 ok", huge, "3 ok"].join("\n"));
+    expect(excerpt.lines).toEqual([1, 3]);
+    expect(excerpt.text.split("\n")).toHaveLength(3);
+    expect(excerpt.text).toContain("[... line truncated ...]");
+    expect(excerpt.text.length).toBeLessThan(EXCERPT_MAX_LINE_CHARS + 100);
   });
 
   test("empty artifact yields the empty excerpt", () => {

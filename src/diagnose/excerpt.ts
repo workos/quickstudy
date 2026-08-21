@@ -15,6 +15,13 @@ import { readFileSync } from "node:fs";
 export const EXCERPT_CONTEXT_LINES = 4;
 /** Ceiling on excerpt window size. */
 export const EXCERPT_MAX_LINES = 40;
+/**
+ * Per-line character cap. JSONL transcript lines can carry entire API
+ * payloads (megabytes each), so a line count alone does not bound the
+ * bundle — one uncapped pair blew past the model's 1M-token context.
+ * Truncating within lines keeps the 1-indexed evidence ranges exact.
+ */
+export const EXCERPT_MAX_LINE_CHARS = 2_000;
 /** Fallback tail size when a transcript has no error markers. */
 export const EXCERPT_TAIL_LINES = 12;
 /** Character cap on a bundled diff. */
@@ -64,7 +71,14 @@ export function excerptTranscript(content: string): ArtifactExcerpt {
   }
 
   return {
-    text: lines.slice(start, end + 1).join("\n"),
+    text: lines
+      .slice(start, end + 1)
+      .map((line) =>
+        line.length > EXCERPT_MAX_LINE_CHARS
+          ? `${line.slice(0, EXCERPT_MAX_LINE_CHARS)}[... line truncated ...]`
+          : line,
+      )
+      .join("\n"),
     lines: [start + 1, end + 1],
     totalLines,
   };
