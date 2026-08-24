@@ -12,7 +12,7 @@
 FROM node:22-bookworm-slim
 
 ARG CLAUDE_CODE_VERSION=2.1.215
-ARG CODEX_VERSION=0.144.6
+ARG CODEX_VERSION=0.149.1
 ARG GEMINI_CLI_VERSION=0.51.0
 # cursor-agent is not an npm package: it ships as versioned tarballs (the
 # vendor install script pins the same way). Fixture streams in
