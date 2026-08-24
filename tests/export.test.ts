@@ -116,10 +116,10 @@ describe("exportSite data directory", () => {
     );
     expect(mcpUsage?.surface_usage?.mcp.tools).toEqual(["acme__list_orgs"]);
 
-    // report.json is present and carries the v3 schema pin.
+    // report.json is present and carries the current schema pin.
     const report = readJson<ReportJson>(join(outDir, "data", "runs", runId, "report.json"));
     expect(report.run.id).toBe(runId);
-    expect(report.schema_version).toBe(3);
+    expect(report.schema_version).toBe(4);
   });
 
   test("multi-run export lists runs newest-first and exports both data dirs", async () => {

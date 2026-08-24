@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "generated_at": "2026-07-20T02:00:00.000Z",
   "run": {
     "id": "01KXVTRB010000000000000001",
@@ -32,6 +32,30 @@
     "tokens_out": 9055,
     "token_attempts": 10
   },
+  "experiments": [
+    {
+      "experiment_id": "claude-docs",
+      "treatment": "docs",
+      "agent": {
+        "adapter": "claude",
+        "provider": "anthropic",
+        "model": "model-a-1",
+        "reasoning": "high",
+        "cli_version": "1.0.0"
+      }
+    },
+    {
+      "experiment_id": "claude-mcp",
+      "treatment": "mcp",
+      "agent": {
+        "adapter": "claude",
+        "provider": "anthropic",
+        "model": "model-a-1",
+        "reasoning": "high",
+        "cli_version": "1.0.0"
+      }
+    }
+  ],
   "pairs": [
     {
       "eval_id": "auth-django",

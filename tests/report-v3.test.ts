@@ -218,7 +218,13 @@ describe.skipIf(!hasJq)("contract jq assertions", () => {
     const report = buildReport({ store, runId, resultsDir });
     const path = writeReportJson(report, resultsDir);
 
-    expect(jqCheck('(.schema_version == 3)', path)).toBeTrue();
+    expect(jqCheck('(.schema_version == 4)', path)).toBeTrue();
+    expect(
+      jqCheck(
+        '(.experiments | length == 6) and all(.experiments[]; has("experiment_id") and has("treatment") and (.agent | has("adapter") and has("provider") and has("model") and has("reasoning") and has("cli_version")))',
+        path,
+      ),
+    ).toBeTrue();
     expect(jqCheck('(.pairs | length == 18) and all(.pairs[]; has("pass_rate") and has("checks") and (.scored == .passed + .failed))', path)).toBeTrue();
     expect(
       jqCheck(
@@ -240,14 +246,14 @@ describe("CLI report command", () => {
     return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
   }
 
-  test("report --json prints valid schema-3 JSON and writes report.json", () => {
+  test("report --json prints valid schema-4 JSON and writes report.json", () => {
     const { root, dbPath, resultsDir, runId, store } = seeded();
     store.close();
 
     const reportRun = runCli(["report", runId, "--json", "--db", dbPath, "--results", resultsDir], root);
     expect(reportRun.exitCode).toBe(0);
     const parsed = JSON.parse(reportRun.stdout) as ReportJson;
-    expect(parsed.schema_version).toBe(3);
+    expect(parsed.schema_version).toBe(4);
     expect(parsed.pairs).toHaveLength(18);
     expect(reportRun.stderr).toContain("report written");
     expect(readReportJson(resultsDir, runId).run.id).toBe(runId);

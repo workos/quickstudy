@@ -34,7 +34,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 3;
+export const REPORT_SCHEMA_VERSION = 4;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -60,6 +60,24 @@ export function methodologyNote(trials: number): string {
     `listed instead; its raw per-experiment results remain visible. Telemetry (cost, tokens, surface usage) ` +
     `is summed only over attempts that reported it and shown as unavailable — never zero — when none did.`
   );
+}
+
+/** Agent identity recorded verbatim in the manifest — never inferred. */
+export interface ReportAgentIdentity {
+  adapter: string;
+  provider: string;
+  /** The pinned model id; "unspecified" when the experiment pinned none. */
+  model: string;
+  /** The pinned reasoning effort; "unspecified" when the experiment pinned none. */
+  reasoning: string;
+  cli_version: string;
+}
+
+/** One experiment's identity card: what exactly ran under this id. */
+export interface ReportExperiment {
+  experiment_id: string;
+  treatment: string | null;
+  agent: ReportAgentIdentity;
 }
 
 export interface ReportCheck {
@@ -179,6 +197,12 @@ export interface ReportJson {
   incomplete: boolean;
   totals: ReportTotals;
   telemetry: ReportTelemetry;
+  /**
+   * Per-experiment identity cards (model, reasoning, adapter, ...). Optional
+   * on the wire: absent in schema_version < 4 artifacts, which the export
+   * deliberately copies verbatim — readers must tolerate absence.
+   */
+  experiments?: ReportExperiment[];
   pairs: ReportPair[];
   groups: ReportGroup[];
   usage: ReportExperimentUsage[];
@@ -281,6 +305,30 @@ function collectTelemetry(attempts: AttemptRecord[]): ReportTelemetry {
 
 function treatmentOf(run: RunRecord, experimentId: string): string | null {
   return run.manifest.experiments[experimentId]?.components.treatment ?? null;
+}
+
+/**
+ * Identity cards from the manifest, verbatim. The manifest records every
+ * experiment; "unspecified" is its own explicit missing-value sentinel, so
+ * this never invents a value the run did not pin.
+ */
+function collectExperiments(run: RunRecord): ReportExperiment[] {
+  return [...run.config.experimentIds]
+    .sort((a, b) => a.localeCompare(b))
+    .map((experimentId) => {
+      const agent = run.manifest.experiments[experimentId]?.components.agent;
+      return {
+        experiment_id: experimentId,
+        treatment: treatmentOf(run, experimentId),
+        agent: {
+          adapter: agent?.adapter ?? "unspecified",
+          provider: agent?.provider ?? "unspecified",
+          model: agent?.model ?? "unspecified",
+          reasoning: agent?.reasoning ?? "unspecified",
+          cli_version: agent?.cliVersion ?? "unspecified",
+        },
+      };
+    });
 }
 
 /**
@@ -458,6 +506,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
     incomplete: run.finishedAt === null,
     totals: collectTotals(attempts),
     telemetry: collectTelemetry(attempts),
+    experiments: collectExperiments(run),
     pairs,
     groups: collectGroups(run, pairs),
     usage: collectUsage(run, attempts),
@@ -486,6 +535,21 @@ export function renderReportText(report: ReportJson): string {
   }
   lines.push(`  manifest: ${report.run.manifest_hash}`);
   lines.push("");
+
+  const experiments = report.experiments ?? [];
+  if (experiments.length > 0) {
+    lines.push("experiments:");
+    for (const experiment of experiments) {
+      const agent = experiment.agent;
+      const model = agent.model === "unspecified" ? "model unpinned" : `model ${agent.model}`;
+      const reasoning = agent.reasoning === "unspecified" ? "" : `, reasoning ${agent.reasoning}`;
+      lines.push(
+        `  ${experiment.experiment_id}${experiment.treatment !== null ? ` [${experiment.treatment}]` : ""}: ` +
+          `${model}${reasoning} (adapter ${agent.adapter}, provider ${agent.provider}, cli ${agent.cli_version})`,
+      );
+    }
+    lines.push("");
+  }
 
   const t = report.totals;
   lines.push(`attempts: ${t.attempts} — ${t.passed} passed, ${t.failed} failed, ${t.incomplete} incomplete, ${t.errors} errored`);
