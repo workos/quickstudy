@@ -15,6 +15,10 @@ export interface HeatColumn {
   experimentId: string;
   treatment: string | null;
   group: string | null;
+  /** "model (reasoning)" from manifest identity; null = no model pinned. */
+  agentLabel: string | null;
+  /** Full identity line for the header tooltip; null = no model pinned. */
+  agentTitle: string | null;
 }
 
 /** One rendered heatmap cell (pass rate over SCORED attempts). */
@@ -74,21 +78,38 @@ export interface HeatmapProps {
   onCellClick: (cell: HeatCell) => void;
 }
 
-/** Group header spans: consecutive columns sharing a comparison group. */
-function groupSpans(columns: HeatColumn[]): Array<{ label: string; span: number }> {
-  const spans: Array<{ label: string; span: number }> = [];
+/**
+ * Group header spans: consecutive columns sharing a comparison group. The
+ * span leads with the members' shared model identity (the axis that matters)
+ * and demotes the group name to a sublabel; when members mix models (a
+ * withheld group) or none is pinned, the group name stays the label.
+ */
+function groupSpans(
+  columns: HeatColumn[],
+): Array<{ label: string; sub: string | null; title: string | null; span: number }> {
+  // Groupless columns span by model instead, so a model header still renders.
+  const spans: Array<{ key: string; group: string | null; columns: HeatColumn[] }> = [];
   for (const column of columns) {
-    const label = column.group ?? "";
+    const key = column.group !== null ? `group:${column.group}` : `agent:${column.agentLabel ?? ""}`;
     const last = spans.at(-1);
-    if (last && last.label === label) last.span += 1;
-    else spans.push({ label, span: 1 });
+    if (last && last.key === key) last.columns.push(column);
+    else spans.push({ key, group: column.group, columns: [column] });
   }
-  return spans;
+  return spans.map(({ group, columns: members }) => {
+    const labels = new Set(members.map((member) => member.agentLabel));
+    const shared = labels.size === 1 ? [...labels][0] ?? null : null;
+    return {
+      label: shared ?? group ?? "",
+      sub: shared !== null && group !== null ? group : null,
+      title: shared !== null ? members[0]?.agentTitle ?? null : null,
+      span: members.length,
+    };
+  });
 }
 
 export function Heatmap({ cells, rows, columns, onCellClick }: HeatmapProps): ReactNode {
   const byKey = new Map(cells.map((cell) => [`${cell.evalId}|${cell.experimentId}`, cell]));
-  const hasGroups = columns.some((column) => column.group !== null);
+  const hasGroups = columns.some((column) => column.group !== null || column.agentLabel !== null);
   return (
     <div className="matrix-region">
       <div className="scroll-hint" aria-hidden="true">Scroll horizontally to see every experiment →</div>
@@ -99,8 +120,14 @@ export function Heatmap({ cells, rows, columns, onCellClick }: HeatmapProps): Re
             <tr>
               <th aria-hidden="true" />
               {groupSpans(columns).map((span, index) => (
-                <th key={`${span.label}-${index}`} colSpan={span.span} className="matrix-group-head">
+                <th
+                  key={`${span.label}-${index}`}
+                  colSpan={span.span}
+                  className="matrix-group-head"
+                  title={span.title ?? undefined}
+                >
                   {span.label}
+                  {span.sub !== null && <span className="matrix-group-sub">{span.sub}</span>}
                 </th>
               ))}
             </tr>

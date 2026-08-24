@@ -10,6 +10,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { ComparisonGroup } from "../../../src/experiments/groups.ts";
 import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
+import { sharedAgentLabel } from "../agent-label.ts";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { StatBadge } from "../components/StatBadge.tsx";
 import { loadRun } from "../data.ts";
@@ -48,12 +49,27 @@ function treatmentOf(run: DataRun, experimentId: string): string | null {
   return run.manifest.experiments[experimentId]?.components.treatment ?? null;
 }
 
+/**
+ * Card heading: the members' shared pinned model leads (the axis that
+ * matters), the operator-chosen group name demotes to a sublabel. Withheld
+ * groups may mix models, in which case the group name stays the heading.
+ */
+function GroupHeading({ run, group }: { run: DataRun; group: ComparisonGroup }): ReactNode {
+  const label = sharedAgentLabel(run, group.experimentIds);
+  if (label === null) return <h3>{group.group}</h3>;
+  return (
+    <h3>
+      {label} <span className="group-sub">{group.group}</span>
+    </h3>
+  );
+}
+
 function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup; arms: Map<string, Map<string, ArmCount>> }): ReactNode {
   if (group.comparison === "withheld") {
     return (
       <div className="card" data-testid={`group-${group.group}`}>
         <div className="head">
-          <h3>{group.group}</h3>
+          <GroupHeading run={run} group={group} />
           <StatBadge tone="amber">comparison withheld</StatBadge>
         </div>
         <div className="body">
@@ -77,7 +93,7 @@ function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup;
     return (
       <div className="card" data-testid={`group-${group.group}`}>
         <div className="head">
-          <h3>{group.group}</h3>
+          <GroupHeading run={run} group={group} />
           <StatBadge tone="gray">single experiment</StatBadge>
         </div>
         <div className="body">
@@ -96,7 +112,7 @@ function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup;
   return (
     <div className="card" data-testid={`group-${group.group}`}>
       <div className="head">
-        <h3>{group.group}</h3>
+        <GroupHeading run={run} group={group} />
         <StatBadge tone="green">compared — raw counts</StatBadge>
       </div>
       <div className="body">

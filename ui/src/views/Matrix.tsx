@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
+import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } from "../components/Heatmap.tsx";
 import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
@@ -50,6 +51,8 @@ function buildColumns(run: DataRun, attempts: DataAttempt[]): HeatColumn[] {
       experimentId,
       treatment: run.manifest.experiments[experimentId]?.components.treatment ?? null,
       group: groupOf(run, experimentId),
+      agentLabel: agentLabelOf(run, experimentId),
+      agentTitle: agentTitleOf(run, experimentId),
     }))
     .sort(
       (a, b) =>

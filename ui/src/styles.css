@@ -394,6 +394,27 @@ table.matrix th {
   letter-spacing: 0;
 }
 
+/* Group header: the pinned model leads; the group name demotes below it. */
+table.matrix th.matrix-group-head {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.matrix-group-sub,
+.group-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+h3 .group-sub {
+  display: inline;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
 table.matrix td.cell {
   min-width: 110px;
   border-radius: 8px;

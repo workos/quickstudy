@@ -10,6 +10,7 @@
 import type { ReactNode } from "react";
 import type { DataMeta } from "../../../src/export-types.ts";
 import type { ReportGroup, ReportJson, ReportPair } from "../../../src/report/report.ts";
+import { formatAgentLabel } from "../agent-label.ts";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { StatBadge } from "../components/StatBadge.tsx";
 import { ExperimentUsageSummary } from "../components/SurfaceUsage.tsx";
@@ -39,12 +40,28 @@ function ChecksCell({ pair }: { pair: ReportPair }): ReactNode {
   );
 }
 
-function GroupSection({ group }: { group: ReportGroup }): ReactNode {
+/**
+ * Card heading: the members' shared pinned model leads, the group name
+ * demotes to a sublabel. `labelOf` may return null (mixed-model withheld
+ * groups, unpinned models, or pre-v4 report artifacts without identity).
+ */
+function GroupHeading({ group, labelOf }: { group: ReportGroup; labelOf: (experimentId: string) => string | null }): ReactNode {
+  const labels = new Set(group.experiment_ids.map(labelOf));
+  const shared = labels.size === 1 ? [...labels][0] ?? null : null;
+  if (shared === null) return <h3>{group.group}</h3>;
+  return (
+    <h3>
+      {shared} <span className="group-sub">{group.group}</span>
+    </h3>
+  );
+}
+
+function GroupSection({ group, labelOf }: { group: ReportGroup; labelOf: (experimentId: string) => string | null }): ReactNode {
   if (group.comparison === "withheld") {
     return (
       <div className="card" data-testid={`report-group-${group.group}`}>
         <div className="head">
-          <h3>{group.group}</h3>
+          <GroupHeading group={group} labelOf={labelOf} />
           <StatBadge tone="amber">comparison withheld</StatBadge>
         </div>
         <div className="body">
@@ -66,7 +83,7 @@ function GroupSection({ group }: { group: ReportGroup }): ReactNode {
   return (
     <div className="card" data-testid={`report-group-${group.group}`}>
       <div className="head">
-        <h3>{group.group}</h3>
+        <GroupHeading group={group} labelOf={labelOf} />
         <StatBadge tone="green">compared — raw counts</StatBadge>
       </div>
       <div className="body">
@@ -108,6 +125,14 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
   if (report.status === "loading") return <div className="loading">Loading report…</div>;
   const value: ReportJson = report.value;
   const scored = value.totals.passed + value.totals.failed;
+  // Identity cards are optional on the wire (absent in pre-v4 artifacts).
+  const agentLabels = new Map(
+    (value.experiments ?? []).map((experiment) => [
+      experiment.experiment_id,
+      formatAgentLabel(experiment.agent.model, experiment.agent.reasoning),
+    ]),
+  );
+  const labelOf = (experimentId: string): string | null => agentLabels.get(experimentId) ?? null;
 
   return (
     <div data-testid="report-view">
@@ -202,6 +227,9 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
                   </td>
                   <td>
                     <code>{pair.experiment_id}</code>
+                    {labelOf(pair.experiment_id) !== null && (
+                      <div className="attribution-reason">{labelOf(pair.experiment_id)}</div>
+                    )}
                   </td>
                   <td>
                     <strong>{pct(pair.pass_rate)}</strong>
@@ -232,7 +260,7 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
         <section data-testid="report-groups">
           <h2>Comparison groups</h2>
           {value.groups.map((group) => (
-            <GroupSection key={group.group} group={group} />
+            <GroupSection key={group.group} group={group} labelOf={labelOf} />
           ))}
         </section>
       )}
