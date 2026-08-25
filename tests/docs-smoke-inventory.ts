@@ -58,6 +58,12 @@ export const INVENTORY: InventoryEntry[] = [
   },
   {
     doc: "README.md",
+    match: "quickstudy validate",
+    classification: "needs-keys",
+    note: "full repository cross-product: paid agent calls; final UI command is a long-running server",
+  },
+  {
+    doc: "README.md",
     match: "quickstudy ui                             # serve every run at http://127.0.0.1:4173",
     classification: "output-only",
     note: "long-running server — never executed",

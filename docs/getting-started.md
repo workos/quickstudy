@@ -156,7 +156,12 @@ quickstudy export <run-id> --out ./site
 ## Scaling up and iterating
 
 - **More pairs**: `--eval` and `--experiment` repeat; `--suite` and
-  `--framework` filter the eval list by its frontmatter metadata.
+  `--framework` filter the eval list by its frontmatter metadata. Both direct
+  selectors are optional: `quickstudy run --trials 1` runs every discovered
+  eval against every discovered experiment, while
+  `quickstudy run --suite benchmark --trials 1` limits that full cross-product
+  to headline evals. Check the counts from `quickstudy validate` first—every
+  pair × trial may be a paid agent session.
 - **Trials**: the default 3 detects gross failures and nondeterminism; it
   does not make a small gap definitive. Plan trial counts around the smallest
   difference worth acting on — the report renders raw counts either way.

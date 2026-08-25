@@ -141,7 +141,7 @@ Identity drift between runs is diffed, never silently averaged.
 
 ```
 quickstudy validate                   # discover + validate evals/ and experiments/
-quickstudy run --eval <id> --experiment <id>   # execute the selected pairs
+quickstudy run [--eval <id>] [--experiment <id>] # execute selected pairs; omit selectors for all
 quickstudy report <run-id>            # per-pair stats (--latest for the newest run)
 quickstudy diagnose <run-id>          # LLM-diagnose failing pairs into diagnosis.json
 quickstudy ui                         # serve the matrix/compare/report/trend UI
@@ -152,6 +152,27 @@ quickstudy clean                      # remove all quickstudy-labeled containers
 
 Run `quickstudy --help` for every flag (`--trials`, `--db`, `--egress-proxy`,
 `--evals-root`, `--experiments-root`, …).
+
+### Running a whole benchmark repository
+
+Both run selectors are optional. Omitting `--eval` selects every discovered
+eval; omitting `--experiment` selects every discovered experiment. Together,
+this runs the complete eval × experiment cross-product:
+
+```bash
+quickstudy validate
+quickstudy run --trials 1
+quickstudy report --latest --strict
+quickstudy export --runs all --out ./site
+quickstudy ui --watch
+```
+
+`ui` is a blocking local server, so it is normally the final command. `export`
+creates the non-blocking, self-contained site artifact. A complete run can be
+expensive: inspect the counts printed by `validate`, then multiply selected
+evals × experiments × trials before starting. Benchmark repositories are
+encouraged to wrap this sequence in a checked-in script so it can preserve the
+new run id across reporting, diagnosis, export, and UI serving.
 
 `diagnose` is the one command that calls a model after the fact: it sends each
 failing pair's harness-selected evidence (per-check tallies, transcript

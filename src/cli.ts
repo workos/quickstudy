@@ -70,8 +70,8 @@ Usage:
   quickstudy validate                     Validate the evals and experiments roots
     [--evals-root <dir>]                  Evals root (default: evals)
     [--experiments-root <dir>]            Experiments root (default: experiments)
-  quickstudy run --eval <id>...           Execute evals against experiments
-    --experiment <id>...                  Experiments to run (defined under the experiments root)
+  quickstudy run [--eval <id>...]         Execute evals against experiments
+    [--experiment <id>...]                Omit either selector to include every discovered item
     [--evals-root <dir>]                  Evals root (default: evals)
     [--experiments-root <dir>]            Experiments root (default: experiments)
     [--suite <s>]... [--framework <f>]... Metadata filters applied before planning
@@ -102,7 +102,7 @@ Usage:
 
 const COMMAND_HELP: Record<string, string> = {
   validate: `Usage: quickstudy validate [--evals-root <dir>] [--experiments-root <dir>]\n\nDiscover and validate the evals root (frontmatter, scorer default exports)\nand the experiments root (defineExperiment shapes, comparison groups).\nDefaults: evals, experiments.`,
-  run: `Usage: quickstudy run --eval <id>... --experiment <id>... [options]\n\nExecute the selected eval × experiment pairs.\n\nOptions:\n  --eval <id>... --experiment <id>...\n  --evals-root <dir> --experiments-root <dir>   (defaults: evals, experiments)\n  --suite <s>... --framework <f>...\n  --trials <n> --egress-proxy\n  --db <path> --results <dir>`,
+  run: `Usage: quickstudy run [--eval <id>...] [--experiment <id>...] [options]\n\nExecute the selected eval × experiment pairs. Omit --eval to select every\ndiscovered eval; omit --experiment to select every discovered experiment.\n\nOptions:\n  --eval <id>... --experiment <id>...\n  --evals-root <dir> --experiments-root <dir>   (defaults: evals, experiments)\n  --suite <s>... --framework <f>...\n  --trials <n> --egress-proxy\n  --db <path> --results <dir>`,
   report: `Usage: quickstudy report <run-id> [options]\n\nBuild report.json into the results dir and print the text report\n(pass \`--latest\` to pick the most recent run; \`--json\` prints the JSON).\n\nOptions:\n  --latest --json --strict\n  --strict exits non-zero for incomplete runs or any attempt error\n  --db <path> --results <dir>`,
   diagnose: `Usage: quickstudy diagnose <run-id> [options]\n\nSend each failing (eval × experiment) pair's harness-selected evidence to a\nstructured model call and write diagnosis.json beside report.json\n(pass \`--latest\` to pick the most recent run). Findings are hypotheses with\nevidence links — never verdicts. Requires ANTHROPIC_API_KEY; override the\nanalyst model with QUICKSTUDY_ANALYST_MODEL.\n\nOptions:\n  --latest\n  --db <path> --results <dir>`,
   clean: `Usage: quickstudy clean\n\nRemove quickstudy-labeled containers, networks, and sidecars.`,

@@ -127,6 +127,14 @@ describe("CLI help", () => {
     }
     expect(result.stdout).toContain("--eval <id>");
     expect(result.stdout).toContain("--experiment <id>");
+    expect(result.stdout).toContain("every discovered item");
+  });
+
+  test("run help documents the full-cross-product shorthand", () => {
+    const result = runCli(["run", "--help"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Omit --eval to select every");
+    expect(result.stdout).toContain("omit --experiment to select every");
   });
 
   test("--version prints a version and exits 0", () => {
