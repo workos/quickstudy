@@ -20,6 +20,7 @@ import {
   writeReportJson,
   type ReportJson,
 } from "../src/report/report.ts";
+import { collectPassAtK, passAtK, passToTheK } from "../src/report/pass-at-k.ts";
 import { ResultsStore } from "../src/store/db.ts";
 import type { RunManifest } from "../src/manifest.ts";
 
@@ -168,6 +169,63 @@ describe("v3 report aggregation", () => {
   });
 });
 
+describe("pass@k / pass^k", () => {
+  test("passAtK is the exact subset fraction; passToTheK is (passed/scored)^k", () => {
+    // 4 of 10 passed: pass@1 = 0.4; pass@3 = 1 - C(6,3)/C(10,3) = 1 - 20/120.
+    expect(passAtK(4, 10, 1)).toBeCloseTo(0.4, 12);
+    expect(passAtK(4, 10, 3)).toBeCloseTo(1 - 20 / 120, 12);
+    // Fewer failures than k: every size-k subset contains a pass.
+    expect(passAtK(2, 3, 2)).toBe(1);
+    // Zero passes: no subset contains one.
+    expect(passAtK(0, 3, 2)).toBe(0);
+    expect(passToTheK(4, 10, 3)).toBeCloseTo(0.4 ** 3, 12);
+    expect(passToTheK(3, 3, 3)).toBe(1);
+    // Misuse fails loudly rather than returning a quiet number.
+    expect(() => passAtK(4, 3, 1)).toThrow(RangeError);
+    expect(() => passAtK(1, 3, 4)).toThrow(RangeError);
+    expect(() => passToTheK(1.5, 3, 1)).toThrow(RangeError);
+  });
+
+  test("collectPassAtK covers k = 1..scored and is empty when nothing was scored", () => {
+    expect(collectPassAtK(2, 0)).toEqual([]);
+    const series = collectPassAtK(2, 3);
+    expect(series.map((entry) => entry.k)).toEqual([1, 2, 3]);
+    expect(series[0]!.pass_at_k).toBeCloseTo(2 / 3, 12);
+    expect(series[0]!.pass_to_the_k).toBeCloseTo(2 / 3, 12);
+    expect(series[1]!.pass_at_k).toBe(1);
+    expect(series[1]!.pass_to_the_k).toBeCloseTo(4 / 9, 12);
+  });
+
+  test("pairs carry the per-k series; incompletes and errors stay out of it", () => {
+    const { store, resultsDir, runId } = seeded();
+    const report = buildReport({ store, runId, resultsDir });
+
+    // claude-cli on nextjs: [pass, fail, pass] → scored 3, passed 2.
+    const flakyPair = pairOf(report, "auth-nextjs", "claude-cli");
+    expect(flakyPair.pass_at_k).toEqual(collectPassAtK(2, 3));
+
+    // codex-mcp on django: [fail, pass, error] → the error never enters (k stops at scored=2).
+    const withError = pairOf(report, "auth-django", "codex-mcp");
+    expect(withError.pass_at_k?.map((entry) => entry.k)).toEqual([1, 2]);
+    expect(withError.pass_at_k?.[1]).toEqual({ k: 2, pass_at_k: 1, pass_to_the_k: 0.25 });
+
+    // claude-mcp fails every trial: the series is all zeros, not absent.
+    const allFail = pairOf(report, "auth-nextjs", "claude-mcp");
+    expect(allFail.pass_at_k?.every((entry) => entry.pass_at_k === 0 && entry.pass_to_the_k === 0)).toBeTrue();
+    store.close();
+  });
+
+  test("the text renderer shows anchor ks and the methodology names both metrics", () => {
+    const { store, resultsDir, runId } = seeded();
+    const report = buildReport({ store, runId, resultsDir });
+    const text = renderReportText(report);
+    expect(text).toContain("pass@k / pass^k — k=2: 100% / 44%, k=3: 100% / 30%");
+    expect(report.methodology).toContain("pass@k");
+    expect(report.methodology).toContain("pass^k");
+    store.close();
+  });
+});
+
 describe("language guard", () => {
   test("findBannedLanguage catches the banned fragments (incl. 'because' via 'caus')", () => {
     expect(findBannedLanguage("this difference is significant")).toEqual(["significant"]);
@@ -218,14 +276,19 @@ describe.skipIf(!hasJq)("contract jq assertions", () => {
     const report = buildReport({ store, runId, resultsDir });
     const path = writeReportJson(report, resultsDir);
 
-    expect(jqCheck('(.schema_version == 4)', path)).toBeTrue();
+    expect(jqCheck(`(.schema_version == ${REPORT_SCHEMA_VERSION})`, path)).toBeTrue();
     expect(
       jqCheck(
         '(.experiments | length == 6) and all(.experiments[]; has("experiment_id") and has("treatment") and (.agent | has("adapter") and has("provider") and has("model") and has("reasoning") and has("cli_version")))',
         path,
       ),
     ).toBeTrue();
-    expect(jqCheck('(.pairs | length == 18) and all(.pairs[]; has("pass_rate") and has("checks") and (.scored == .passed + .failed))', path)).toBeTrue();
+    expect(
+      jqCheck(
+        '(.pairs | length == 18) and all(.pairs[]; has("pass_rate") and has("checks") and (.scored == .passed + .failed) and ((.pass_at_k | length) == .scored))',
+        path,
+      ),
+    ).toBeTrue();
     expect(
       jqCheck(
         '(.groups | length == 2) and (.groups[0].comparison == "compared") and (.groups[1].comparison == "withheld") and (.groups[1].arms | length == 0) and (.groups[1].details | length > 0)',
@@ -246,14 +309,14 @@ describe("CLI report command", () => {
     return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
   }
 
-  test("report --json prints valid schema-4 JSON and writes report.json", () => {
+  test("report --json prints valid current-schema JSON and writes report.json", () => {
     const { root, dbPath, resultsDir, runId, store } = seeded();
     store.close();
 
     const reportRun = runCli(["report", runId, "--json", "--db", dbPath, "--results", resultsDir], root);
     expect(reportRun.exitCode).toBe(0);
     const parsed = JSON.parse(reportRun.stdout) as ReportJson;
-    expect(parsed.schema_version).toBe(4);
+    expect(parsed.schema_version).toBe(REPORT_SCHEMA_VERSION);
     expect(parsed.pairs).toHaveLength(18);
     expect(reportRun.stderr).toContain("report written");
     expect(readReportJson(resultsDir, runId).run.id).toBe(runId);

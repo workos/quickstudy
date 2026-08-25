@@ -8,6 +8,8 @@
  *   - pass rates per eval × experiment pair (scored = passed + failed;
  *     incomplete and errored attempts are counted separately and NEVER enter
  *     the denominator);
+ *   - per-pair pass@k / pass^k, restatements of the same scored counts
+ *     (see pass-at-k.ts) — within-run only, no wider claim;
  *   - named check outcomes with per-check tallies;
  *   - cost/token telemetry summed only over attempts that reported it
  *     ("unavailable", never 0, when none did);
@@ -25,6 +27,7 @@ import { join } from "node:path";
 import type { ComparisonGroup } from "../experiments/groups.ts";
 import type { AttemptRecord, ResultsStore, RunRecord } from "../store/db.ts";
 import type { SurfaceUsage } from "../surface-usage.ts";
+import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing report.json, ...). */
 export class ReportError extends Error {
@@ -34,7 +37,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 4;
+export const REPORT_SCHEMA_VERSION = 5;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -57,8 +60,11 @@ export function methodologyNote(trials: number): string {
     `trial${trials === 1 ? "" : "s"} — at these counts the raw counts are the honest statement, so comparison ` +
     `groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members ` +
     `differ beyond their declared treatment has its comparison withheld and the differing components are ` +
-    `listed instead; its raw per-experiment results remain visible. Telemetry (cost, tokens, surface usage) ` +
-    `is summed only over attempts that reported it and shown as unavailable — never zero — when none did.`
+    `listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the ` +
+    `same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at ` +
+    `least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from ` +
+    `those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface ` +
+    `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did.`
   );
 }
 
@@ -100,6 +106,13 @@ export interface ReportPair {
   scored: number;
   /** passed / scored; null when nothing was scored (never 0-by-default). */
   pass_rate: number | null;
+  /**
+   * pass@k / pass^k for every k from 1 to scored — per-k restatements of the
+   * same counts (see pass-at-k.ts), empty when nothing was scored. Optional
+   * on the wire: absent in schema_version < 5 artifacts, which the export
+   * deliberately copies verbatim — readers must tolerate absence.
+   */
+  pass_at_k?: PassAtKEntry[];
   /** Completed trials disagreed on the outcome. */
   flaky: boolean;
   checks: ReportCheck[];
@@ -264,6 +277,7 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
   for (const { pair, checks, outcomes } of pairs.values()) {
     pair.scored = pair.passed + pair.failed;
     pair.pass_rate = pair.scored > 0 ? pair.passed / pair.scored : null;
+    pair.pass_at_k = collectPassAtK(pair.passed, pair.scored);
     pair.flaky = outcomes.size > 1;
     pair.checks = [...checks.entries()]
       .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total }))
@@ -574,6 +588,12 @@ export function renderReportText(report: ReportJson): string {
         `${pair.errors > 0 ? `, ${pair.errors} errored` : ""}` +
         `${pair.flaky ? ", trials disagreed" : ""})`,
     );
+    const kEntries = displayPassAtK(pair.pass_at_k);
+    if (kEntries.length > 0) {
+      lines.push(
+        `    pass@k / pass^k — ${kEntries.map((entry) => `k=${entry.k}: ${pct(entry.pass_at_k)} / ${pct(entry.pass_to_the_k)}`).join(", ")}`,
+      );
+    }
     for (const check of pair.checks) {
       lines.push(`    ${check.passed === check.total ? "PASS" : "FAIL"} ${check.name} (${check.passed}/${check.total})`);
     }

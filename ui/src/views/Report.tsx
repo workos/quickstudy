@@ -9,6 +9,7 @@
 
 import type { ReactNode } from "react";
 import type { DataMeta } from "../../../src/export-types.ts";
+import { displayPassAtK } from "../../../src/report/pass-at-k.ts";
 import type { ReportGroup, ReportJson, ReportPair } from "../../../src/report/report.ts";
 import { formatAgentLabel } from "../agent-label.ts";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
@@ -25,6 +26,21 @@ interface ReportProps {
 
 function pct(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
+}
+
+/** pass@k / pass^k anchors; "—" until a pair has ≥2 scored trials. */
+function PassAtKCell({ pair }: { pair: ReportPair }): ReactNode {
+  const entries = displayPassAtK(pair.pass_at_k);
+  if (entries.length === 0) return <>—</>;
+  return (
+    <div>
+      {entries.map((entry) => (
+        <div key={entry.k}>
+          k={entry.k}: {pct(entry.pass_at_k)} / {pct(entry.pass_to_the_k)}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ChecksCell({ pair }: { pair: ReportPair }): ReactNode {
@@ -214,6 +230,9 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
                 <th>experiment</th>
                 <th>pass rate</th>
                 <th>raw</th>
+                <th title="pass@k: fraction of size-k subsets of the scored trials with ≥1 pass; pass^k: (passed/scored)^k">
+                  pass@k / pass^k
+                </th>
                 <th>notes</th>
                 <th>checks</th>
               </tr>
@@ -236,6 +255,9 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
                   </td>
                   <td>
                     {pair.passed}/{pair.scored}
+                  </td>
+                  <td>
+                    <PassAtKCell pair={pair} />
                   </td>
                   <td>
                     {[

@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { seedRun, SEED_EVALS, SEED_EXPERIMENTS } from "../scripts/seed-run.ts";
 import { DATA_SCHEMA_VERSION, type DataMeta, type DataRun } from "../src/export-types.ts";
 import { ExportError, exportSite, inlineDataIntoHtml } from "../src/export.ts";
-import type { ReportJson } from "../src/report/report.ts";
+import { REPORT_SCHEMA_VERSION, type ReportJson } from "../src/report/report.ts";
 import { ResultsStore } from "../src/store/db.ts";
 
 const silent = () => {};
@@ -119,7 +119,7 @@ describe("exportSite data directory", () => {
     // report.json is present and carries the current schema pin.
     const report = readJson<ReportJson>(join(outDir, "data", "runs", runId, "report.json"));
     expect(report.run.id).toBe(runId);
-    expect(report.schema_version).toBe(4);
+    expect(report.schema_version).toBe(REPORT_SCHEMA_VERSION);
   });
 
   test("multi-run export lists runs newest-first and exports both data dirs", async () => {
