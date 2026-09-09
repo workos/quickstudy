@@ -39,6 +39,7 @@ export const DATA_SCHEMA_VERSION = 3;
 
 /** One run in the `meta.json` index (and the header of its `run.json`). */
 export interface DataRunSummary {
+  incomplete?: boolean;
   id: string;
   /** ISO timestamps on the wire (the store keeps epoch milliseconds). */
   started_at: string;
@@ -53,6 +54,8 @@ export interface DataRunSummary {
 
 /** `data/meta.json` — the index the UI boots from. */
 export interface DataMeta {
+  /** Immutable per-run snapshot paths, relative to data/. Absent in historical exports. */
+  run_paths?: Record<string, string>;
   schemaVersion: number;
   generated_at: string;
   runs: DataRunSummary[];
@@ -60,6 +63,7 @@ export interface DataMeta {
 
 /** One attempt row as exported (artifact paths are data-dir-relative). */
 export interface DataAttempt {
+  judgments?: import("./evals/types.ts").JudgeRecord[];
   id: string;
   run_id: string;
   eval_id: string;
@@ -98,6 +102,8 @@ export interface DataRun {
   /** The comparison groups recorded at run time (withhold-and-diff state included). */
   groups: ComparisonGroup[];
   attempts: DataAttempt[];
+  excluded_attempts?: DataAttempt[];
+  publication?: import("./completeness.ts").PublicationCoverage;
 }
 
 /**

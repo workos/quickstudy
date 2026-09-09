@@ -9,7 +9,7 @@
  * Treatments are runtime-owned: the experiment's `Runtime` supplies
  * provisioning, the container image, egress hosts, MCP servers, and the
  * PATH treatment (runtime/types.ts). The runner wires them — egress network
- * + proxy sidecar and MCP auth sidecar are run-scoped, provisioning is
+ * + proxy sidecar are per attempt; the MCP auth sidecar is run-scoped. Provisioning is
  * per-attempt, and every treatment reaches the container through the same
  * 0600 env-file channel secrets use (never argv).
  *
@@ -33,14 +33,18 @@ import type {
 import { ClaudeCodeAdapter } from "../adapters/claude.ts";
 import { CodexAdapter } from "../adapters/codex.ts";
 import { EchoAdapter } from "../adapters/echo.ts";
+import { validEvalResult } from "../evals/result.ts";
 import { importEvalScorer } from "../evals/discovery.ts";
+import { deadline, StageTimeoutError } from "./deadline.ts";
+import { scoreInWorker } from "./score-worker.ts";
 import type { EvalResult, LoadedEval } from "../evals/types.ts";
 import type { AgentSpec, Experiment, LoadedExperiment, Runtime } from "../experiments/types.ts";
 import { canonicalJson } from "../identity-diff.ts";
 import {
   createAttemptContainer,
+  connectContainerNetwork,
+  disconnectContainerNetwork,
   createRunNetwork,
-  inspectContainerIp,
   inspectImageCommand,
   inspectImageIdentity,
   removeRunNetwork,
@@ -57,18 +61,22 @@ import {
   rewriteMcpServerConfigs,
   type McpServerConfig,
 } from "../isolation/mcp.ts";
-import { composeAllowlistFromHosts } from "../isolation/proxy/allowlist.ts";
+import { hashString } from "../hash.ts";
+import { DEFAULT_BUDGETS, pairKey, resolvePairEnvironments, type LifecycleBudgets, type PairEnvironment } from "../execution-policy.ts";
 import { ulid } from "../ids.ts";
 import { attemptIdentityHash, buildRunManifest, type RunManifest, type RuntimeImageIdentity } from "../manifest.ts";
 import { isMovingModelAlias } from "../model-identity.ts";
 import type { AttemptPlan } from "../plan.ts";
 import type { ProvisionedEnvironment, RuntimeProvisionContext } from "../runtime/types.ts";
-import { collectProviderKeys, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
+import { collectProviderKeys, hostSecretEnv, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
 import { ArtifactsStore } from "../store/artifacts.ts";
-import type { NewAttempt, ResultsStore, RunConfig } from "../store/db.ts";
+import { activeAttempts, type NewAttempt, type ResultsStore, type RunConfig } from "../store/db.ts";
+import { acquireRunLock } from "./run-lock.ts";
+import { orderedPlan, schedule } from "./scheduler.ts";
 import { compareGroups } from "../experiments/groups.ts";
 import {
   extractSurfaceUsage,
+  observationConfig,
   surfaceUsageConfigFromRuntime,
   surfaceUsageVendor,
   type SurfaceUsageConfig,
@@ -100,13 +108,17 @@ export interface ExecuteRunV3Options {
    */
   containerAdapters?: Record<string, (agent: AgentSpec) => ContainerAgentAdapter>;
   /**
-   * Route container egress through the run's allowlisting proxy sidecar.
-   * Applies to container experiments whose runtime declares `egressHosts` —
-   * their containers join an internal network whose only way out is the
-   * proxy. Off by default (existing behavior: policy only when enabled).
+   * Route every container through its own allowlisting proxy and internal
+   * network. Unconfigured runtimes allow adapter endpoints only. Off by default.
    */
   egressProxy?: boolean;
+  concurrency?: number;
+  seed?: string;
+  resumeRunId?: string;
+  retryUnfinished?: boolean;
+  signal?: AbortSignal;
   attemptTimeoutMs?: number;
+  budgets?: Partial<LifecycleBudgets>;
   log?: (line: string) => void;
 }
 
@@ -120,6 +132,7 @@ export interface RunSummaryV3 {
 }
 
 interface AttemptDisposition {
+  judgeRecords?: import("../evals/types.ts").JudgeRecord[];
   status: "completed" | "incomplete" | "error";
   result?: EvalResult;
   error?: string;
@@ -174,157 +187,36 @@ function resolveContainerAdapter(
   return adapter;
 }
 
-/**
- * Run-scoped treatment infrastructure, assembled from what the planned
- * container experiments' runtimes declare: one internal network + egress
- * proxy sidecar per run (when enabled), one MCP auth-proxy sidecar per run
- * (when any runtime declares authed servers). Mirrors the legacy
- * orchestrator's topology — per-attempt sidecars would double the container
- * count for no boundary gain.
- */
+/** Shared MCP authentication. Egress networks and allowlists belong to each attempt. */
 interface TreatmentRuntimes {
-  egress?: { networkName: string; sidecar: EgressSidecar; allowlist: string[] };
   mcp?: {
-    /** Absent when every declared server is unauthenticated. */
     sidecar?: McpSidecar;
-    /** The original configs (rotated-token persistence needs `auth`). */
     servers: Record<string, McpServerConfig>;
-    /** Credential-free (rewritten) server maps, per experiment id. */
+    originalByExperiment: Map<string, Record<string, McpServerConfig>>;
     serversByExperiment: Map<string, Record<string, McpServerConfig>>;
   };
 }
 
-interface SetupTreatmentArgs {
-  plan: AttemptPlan[];
-  evalsById: Map<string, LoadedEval>;
-  experimentsById: Map<string, Experiment>;
-  /** Resolved container agent adapters by experiment id (agent-driven experiments only). */
-  containerAgents: Map<string, ContainerAgentAdapter>;
+async function setupTreatmentRuntimes(args: {
+  declaredByExperiment: Map<string, Record<string, McpServerConfig>>;
   runId: string;
-  egressProxy: boolean;
-  log: (line: string) => void;
-}
-
-/**
- * Start the run's treatment infrastructure. Fail-fast by design: a missing
- * MCP credentials file or an invalid egress host aborts here, BEFORE the run
- * row exists or any attempt container is created. A partial failure tears
- * down whatever already started — setup never leaks a sidecar or network.
- */
-async function setupTreatmentRuntimes(args: SetupTreatmentArgs): Promise<TreatmentRuntimes> {
-  const { plan, evalsById, experimentsById, runId, log } = args;
-  const state: TreatmentRuntimes = {};
-
-  const containerExperimentIds = [
-    ...new Set(
-      plan
-        .map((entry) => entry.experimentId)
-        .filter((id) => (experimentsById.get(id) as Experiment).runtime.kind === "container"),
-    ),
-  ].sort((a, b) => a.localeCompare(b));
-
-  // --- egress: union allowlist across every planned (experiment, eval) pair.
-  // Two layers compose: the runtime's own hosts (product API, registries) and
-  // the agent adapter's harness-default hosts (its LLM/vendor endpoints) ---
-  if (args.egressProxy) {
-    const hosts: string[] = [];
-    let anyEgress = false;
-    for (const entry of plan) {
-      const runtime = (experimentsById.get(entry.experimentId) as Experiment).runtime;
-      if (runtime.kind !== "container" || runtime.egressHosts === undefined) continue;
-      anyEgress = true;
-      hosts.push(...runtime.egressHosts((evalsById.get(entry.evalId) as LoadedEval).metadata));
-      hosts.push(...(args.containerAgents.get(entry.experimentId)?.egressHosts ?? []));
-    }
-    if (anyEgress) {
-      const allowlist = composeAllowlistFromHosts(hosts);
-      const networkName = await createRunNetwork(runId);
-      let sidecar: EgressSidecar;
-      try {
-        sidecar = await startEgressSidecar({ runId, networkName, allowlist, image: EGRESS_PROXY_IMAGE });
-      } catch (err) {
-        await removeRunNetwork(networkName); // a failed start never leaks the network
-        throw err;
-      }
-      state.egress = { networkName, sidecar, allowlist };
-      log(
-        `egress proxy: ${allowlist.length} allowlisted host(s), sidecar ${sidecar.id.slice(0, 12)} ` +
-          `on ${networkName} — treatment containers have no other route out`,
-      );
-    }
-  }
-
-  // --- mcp: merge every runtime-declared server map; one sidecar per run ---
+}): Promise<TreatmentRuntimes> {
   const merged: Record<string, McpServerConfig> = {};
-  const declaredByExperiment = new Map<string, Record<string, McpServerConfig>>();
-  try {
-    for (const experimentId of containerExperimentIds) {
-      const runtime = (experimentsById.get(experimentId) as Experiment).runtime;
-      if (runtime.mcpServers === undefined) continue;
-      const servers = runtime.mcpServers();
-      declaredByExperiment.set(experimentId, servers);
-      for (const [name, spec] of Object.entries(servers)) {
-        const existing = merged[name];
-        if (existing !== undefined && canonicalJson(existing) !== canonicalJson(spec)) {
-          throw new Error(
-            `mcp server "${name}" is declared with conflicting configs by multiple experiment runtimes — rename one`,
-          );
-        }
-        merged[name] = spec;
-      }
-    }
-
-    if (declaredByExperiment.size > 0) {
-      let sidecar: McpSidecar | undefined;
-      // The sidecar's address differs by vantage point: experiments under
-      // the egress treatment reach it on the run's internal network, while
-      // experiments outside it (default bridge) need its bridge address —
-      // the sidecar always sits on both when the internal network exists.
-      let internalBase: string | undefined;
-      let bridgeBase: string | undefined;
-      if (Object.keys(authedMcpServers(merged)).length > 0) {
-        // Fail-fast: a missing/incomplete credentials file means every MCP
-        // attempt is a guaranteed auth error — refuse before any container work.
-        const material = readMcpAuthMaterialFromConfig(merged);
-        sidecar = await startMcpSidecar({
-          runId,
-          ...(state.egress ? { networkName: state.egress.networkName } : {}),
-          image: MCP_PROXY_IMAGE,
-          upstreams: material.upstreams,
-          refreshTokens: material.refreshTokens,
-        });
-        internalBase = `http://${sidecar.ip}:${sidecar.port}`;
-        bridgeBase = state.egress
-          ? `http://${await inspectContainerIp(sidecar.id, "bridge")}:${sidecar.port}`
-          : internalBase;
-        log(
-          `mcp auth proxy: sidecar ${sidecar.id.slice(0, 12)} at ${sidecar.ip}:${sidecar.port} — ` +
-            `attempt containers see credential-free proxy URLs`,
-        );
-      }
-      state.mcp = {
-        ...(sidecar !== undefined ? { sidecar } : {}),
-        servers: merged,
-        serversByExperiment: new Map(
-          [...declaredByExperiment].map(([id, servers]) => {
-            const onInternalNetwork =
-              state.egress !== undefined && (experimentsById.get(id) as Experiment).runtime.egressHosts !== undefined;
-            // Without a sidecar every server is unauthed and the rewrite is
-            // an auth-stripping identity map — the base is never used.
-            const proxyBase = (onInternalNetwork ? internalBase : bridgeBase) ?? "http://unused";
-            return [id, rewriteMcpServerConfigs(servers, proxyBase)];
-          }),
-        ),
-      };
-    }
-  } catch (err) {
-    // MCP setup failed after egress came up: tear egress down before
-    // rethrowing (state.mcp is only assigned once the whole block succeeds).
-    await teardownTreatmentRuntimes(state, log);
-    throw err;
+  for (const servers of args.declaredByExperiment.values()) for (const [name, spec] of Object.entries(servers)) {
+    if (merged[name] && canonicalJson(merged[name]) !== canonicalJson(spec)) throw new Error(`mcp server "${name}" has conflicting configs`);
+    merged[name] = spec;
   }
-
-  return state;
+  if (args.declaredByExperiment.size === 0) return {};
+  let sidecar: McpSidecar | undefined;
+  if (Object.keys(authedMcpServers(merged)).length > 0) {
+    const material = readMcpAuthMaterialFromConfig(merged);
+    sidecar = await startMcpSidecar({ runId: args.runId, image: MCP_PROXY_IMAGE, upstreams: material.upstreams, refreshTokens: material.refreshTokens });
+  }
+  const base = sidecar ? `http://${sidecar.ip}:${sidecar.port}` : "http://unused";
+  return { mcp: { ...(sidecar ? { sidecar } : {}), servers: merged,
+    originalByExperiment: args.declaredByExperiment,
+    serversByExperiment: new Map([...args.declaredByExperiment].map(([id, servers]) => [id, rewriteMcpServerConfigs(servers, base)])),
+  } };
 }
 
 /**
@@ -353,21 +245,11 @@ async function teardownTreatmentRuntimes(state: TreatmentRuntimes, log: (line: s
     } catch (err) {
       log(
         `warning: mcp auth proxy teardown failed (${err instanceof Error ? err.message : String(err)}) — ` +
-          `run \`quickstudy clean\` to remove leaked resources`,
+          `inspect resources labeled for this run before removing them`,
       );
     }
   }
-  if (state.egress) {
-    try {
-      await state.egress.sidecar.teardown();
-      await removeRunNetwork(state.egress.networkName);
-    } catch (err) {
-      log(
-        `warning: egress proxy teardown failed (${err instanceof Error ? err.message : String(err)}) — ` +
-          `run \`quickstudy clean\` to remove leaked resources`,
-      );
-    }
-  }
+
 }
 
 /**
@@ -395,31 +277,15 @@ export function collectOfferedSurfaces(options: {
     );
     const declared =
       (offered.docsHosts?.length ?? 0) + (offered.cliCommands?.length ?? 0) + (offered.mcpServers?.length ?? 0);
-    if (declared > 0) surfaces[experimentId] = offered;
+    if (declared > 0 || experiment.runtime.observationTargets !== undefined) surfaces[experimentId] = offered;
   }
   return Object.keys(surfaces).length > 0 ? surfaces : undefined;
-}
-
-/** Race a host adapter against the wall clock; a loss is `incomplete`, not an error. */
-async function withTimeout(
-  work: Promise<AttemptOutcome>,
-  timeoutMs: number,
-): Promise<{ outcome: AttemptOutcome } | { timedOut: true }> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<{ timedOut: true }>((resolveTimeout) => {
-    timer = setTimeout(() => resolveTimeout({ timedOut: true }), timeoutMs);
-  });
-  try {
-    return await Promise.race([work.then((outcome) => ({ outcome })), timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }
 
 export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSummaryV3> {
   const { store, artifacts, plan } = options;
   const log = options.log ?? ((line: string) => console.log(line));
-  const attemptTimeoutMs = options.attemptTimeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS;
+  const attemptTimeoutMs = options.attemptTimeoutMs ?? options.budgets?.agentMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS;
   const hostAdapters = options.hostAdapters ?? defaultHostAdapters();
 
   const evalsById = new Map(options.evals.map((entry) => [entry.metadata.id, entry]));
@@ -430,6 +296,8 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
   // experiment must be executable (a scripted command or a known container
   // agent adapter), and every provider key must be present on the host.
   const containerAgents = new Map<string, ContainerAgentAdapter>();
+  const imageTagsByPair: Record<string, string> = {};
+  const declaredByExperiment = new Map<string, Record<string, McpServerConfig>>();
   const imageTagsByExperiment = new Map<string, Set<string>>();
   for (const entry of plan) {
     if (!evalsById.has(entry.evalId)) throw new Error(`plan names unknown eval "${entry.evalId}"`);
@@ -449,8 +317,10 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
         collectProviderKeys([adapter]);
         containerAgents.set(experiment.id, adapter);
       }
+      if (experiment.runtime.mcpServers && !declaredByExperiment.has(experiment.id)) declaredByExperiment.set(experiment.id, experiment.runtime.mcpServers());
       const loadedEval = evalsById.get(entry.evalId) as LoadedEval;
-      const image = experiment.runtime.image ?? experiment.runtime.containerImage?.(loadedEval.metadata);
+      const key = pairKey(entry.evalId, entry.experimentId);
+      const image = imageTagsByPair[key] ?? experiment.runtime.image ?? experiment.runtime.containerImage?.(loadedEval.metadata);
       if (image === undefined || image === "") {
         throw new Error(
           `experiment "${experiment.id}" resolves no container image for eval "${entry.evalId}" — ` +
@@ -460,6 +330,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       let tags = imageTagsByExperiment.get(experiment.id);
       if (tags === undefined) imageTagsByExperiment.set(experiment.id, (tags = new Set()));
       tags.add(image);
+      imageTagsByPair[key] = image;
     }
   }
 
@@ -525,22 +396,35 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       }
       cliVersions[experimentId] = version;
     }
-    manifest = buildRunManifest({ evals: options.evals, experiments: options.experiments, images, cliVersions });
+    const scorerIdentities: Record<string, Record<string, unknown>> = {};
+    for (const loaded of options.evals) {
+      const scorer = await importEvalScorer(loaded.scorerPath);
+      if (scorer.identity) scorerIdentities[loaded.metadata.id] = scorer.identity;
+    }
+    const pairs = resolvePairEnvironments({ ...options, images, imageTags: imageTagsByPair,
+      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, adapter.egressHosts ?? []])),
+      budgets: { ...options.budgets, agentMs: options.attemptTimeoutMs ?? options.budgets?.agentMs ?? attemptTimeoutMs },
+      mcpHashes: Object.fromEntries([...declaredByExperiment].map(([id, servers]) => [id, hashString(canonicalJson(servers))])),
+    });
+    manifest = buildRunManifest({ evals: options.evals, experiments: options.experiments, images, cliVersions, pairs, scorerIdentities });
   }
-  const runId = ulid();
+  const recorded = options.resumeRunId ? store.getRun(options.resumeRunId) : null;
+  if (options.resumeRunId && !recorded) throw new Error(`cannot resume unknown run ${options.resumeRunId}`);
+  if (recorded && (recorded.manifest.manifestVersion !== "v4" || recorded.manifestHash !== manifest.hash)) throw new Error("resume refused: code or environment identity changed (historical v3 identity cannot be resumed)");
+  const runId = recorded?.id ?? ulid();
+  const concurrency = options.concurrency ?? recorded?.config.scheduler?.concurrency ?? 1;
+  const seed = options.seed ?? recorded?.config.scheduler?.seed ?? "0";
+  const order = orderedPlan(plan, seed);
+  if (recorded && canonicalJson(recorded.config.scheduler?.order) !== canonicalJson(order)) throw new Error("resume refused: planned coordinates or ordering changed");
+  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error("concurrency must be a positive integer");
+  const releaseLock = acquireRunLock(artifacts.rootDir, runId);
+  let treatments: TreatmentRuntimes = {};
+  try {
 
   // Treatment infrastructure comes up BEFORE the run row: setup is fail-fast
   // (missing MCP credentials, invalid egress hosts), and what a run could
   // reach is part of its recorded configuration.
-  const treatments = await setupTreatmentRuntimes({
-    plan,
-    evalsById,
-    experimentsById,
-    containerAgents,
-    runId,
-    egressProxy: options.egressProxy ?? false,
-    log,
-  });
+  treatments = await setupTreatmentRuntimes({ declaredByExperiment, runId });
 
   try {
     // Offered surfaces are recorded ON THE RUN — the per-attempt derivation
@@ -553,32 +437,48 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       ...(treatments.mcp !== undefined ? { mcpServersByExperiment: treatments.mcp.serversByExperiment } : {}),
     });
     const config: RunConfig = {
+      scheduler: { concurrency, seed, policy: "seeded-hash-v1", order },
       trials: options.config?.trials ?? plan.reduce((max, entry) => Math.max(max, entry.trialIndex + 1), 1),
       evalIds: options.config?.evalIds ?? [...new Set(plan.map((entry) => entry.evalId))],
       experimentIds: options.config?.experimentIds ?? [...new Set(plan.map((entry) => entry.experimentId))],
       ...(options.config?.evalsRoot !== undefined ? { evalsRoot: options.config.evalsRoot } : {}),
       ...(options.config?.experimentsRoot !== undefined ? { experimentsRoot: options.config.experimentsRoot } : {}),
-      egress: treatments.egress
-        ? { proxy: true, allowlist: treatments.egress.allowlist }
-        : { proxy: false, allowlist: [] },
+      // Summary only. Each attempt enforces its manifest.pairs policy.
+      egress: { proxy: options.egressProxy ?? false, allowlist: [...new Set(Object.values(manifest.pairs ?? {}).flatMap((p) => p.egress.proxy ? p.egress.allowlist : []))].sort() },
       // Comparison groups (with their withhold-and-diff state) are recorded
       // ON THE RUN: the manifest holds runtime config only as an opaque hash,
       // so the report could never recompute this after the fact.
       groups: compareGroups(options.experiments.map((entry) => entry.experiment), manifest),
       ...(offeredSurfaces !== undefined ? { surfaces: offeredSurfaces } : {}),
     };
-    store.insertRun({ id: runId, startedAt: Date.now(), config, manifest });
 
     const summary: RunSummaryV3 = { runId, total: plan.length, passed: 0, failed: 0, incomplete: 0, errors: 0 };
 
-    for (const entry of plan) {
+    const previous = activeAttempts(store.listAttempts(runId));
+    const coordinate = (entry: AttemptPlan) => JSON.stringify([entry.evalId, entry.experimentId, entry.trialIndex]);
+    const byCoordinate = new Map<string, typeof previous>();
+    for (const row of previous) {
+      const key = coordinate(row); const rows = byCoordinate.get(key) ?? []; rows.push(row); byCoordinate.set(key, rows);
+      if (row.status === "completed" && !validEvalResult(row.result)) throw new Error(`resume refused: invalid completed outcome ${row.id}`);
+      if (rows.length > 1) throw new Error(`resume refused: duplicate trial coordinate ${key}`);
+      if (row.attemptIdentityHash !== attemptIdentityHash(row, manifest)) throw new Error(`resume refused: attempt identity mismatch ${row.id}`);
+    }
+    if (recorded) store.reopenRun(runId);
+    else store.insertRun({ id: runId, startedAt: Date.now(), config, manifest });
+    const pending = order.filter((entry) => {
+      const existing = byCoordinate.get(coordinate(entry))?.[0];
+      return !existing || (existing.status !== "completed" && options.retryUnfinished);
+    });
+    const ids = new Map(plan.map((entry) => [coordinate(entry), ulid()]));
+    await schedule(pending, concurrency, async (entry) => {
       const loadedEval = evalsById.get(entry.evalId) as LoadedEval;
       const experiment = experimentsById.get(entry.experimentId) as Experiment;
-      const attemptId = ulid();
+      const attemptId = ids.get(coordinate(entry))!;
       const startedAt = Date.now();
 
       const persisted: NewAttempt = {
         id: attemptId,
+        retryOf: byCoordinate.get(coordinate(entry))?.[0]?.id ?? null,
         runId,
         evalId: entry.evalId,
         experimentId: entry.experimentId,
@@ -599,7 +499,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
                 loadedEval,
                 experiment,
                 entry,
-                { runId, attemptId, attemptTimeoutMs, persisted },
+                { runId, attemptId, attemptTimeoutMs, persisted, environment: manifest.pairs?.[pairKey(entry.evalId, entry.experimentId)] },
                 treatments,
                 containerAgents.get(experiment.id),
               );
@@ -611,6 +511,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       }
 
       persisted.status = disposition.status;
+      if (disposition.judgeRecords) persisted.judgeRecords = disposition.judgeRecords;
       if (disposition.result !== undefined) persisted.result = disposition.result;
       if (disposition.error !== undefined) persisted.error = disposition.error;
       persisted.finishedAt = Date.now();
@@ -628,13 +529,19 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
         `attempt ${attemptId} (${entry.evalId} × ${entry.experimentId} trial ${entry.trialIndex + 1}): ` +
           `${disposition.status}${disposition.result ? ` — ${disposition.result.passed ? "passed" : "failed"}` : ""}`,
       );
-    }
+    }, { ...(options.signal ? { signal: options.signal } : {}), capacity: (entry) => experimentsById.get(entry.experimentId)?.runtime.capacity });
 
-    store.finishRun(runId, Date.now());
+    const current = activeAttempts(store.listAttempts(runId));
+    summary.passed = current.filter((a) => a.status === "completed" && a.result?.passed).length;
+    summary.failed = current.filter((a) => a.status === "completed" && !a.result?.passed).length;
+    summary.errors = current.filter((a) => a.status === "error").length;
+    summary.incomplete = current.filter((a) => a.status === "incomplete").length + plan.length - current.length;
+    if (!options.signal?.aborted) store.finishRun(runId, Date.now());
     return summary;
   } finally {
     await teardownTreatmentRuntimes(treatments, log);
   }
+  } finally { releaseLock(); }
 }
 
 /** Exec inside the container and throw (with stderr) on non-zero exit. */
@@ -663,6 +570,7 @@ interface AttemptArgs {
   attemptId: string;
   attemptTimeoutMs: number;
   persisted: NewAttempt;
+  environment?: PairEnvironment;
 }
 
 async function runHostAttemptV3(
@@ -680,23 +588,23 @@ async function runHostAttemptV3(
   const sourceDir = await prepWorkspaceSource(loadedEval);
   const scratchDir = await mkdtemp(join(tmpdir(), "quickstudy-v3-attempt-"));
   try {
-    const raced = await withTimeout(
-      adapter.runAttempt({
+    let outcome: AttemptOutcome;
+    try {
+      outcome = await deadline("agent", args.attemptTimeoutMs, (signal) => adapter.runAttempt({
+        signal,
         runId,
         attemptId,
         fixtureDir: sourceDir,
         workspaceDir: scratchDir,
         prompt: loadedEval.promptBody,
         trialIndex: entry.trialIndex,
-      }),
-      args.attemptTimeoutMs,
-    );
-    if ("timedOut" in raced) {
+      }));
+    } catch (err) {
+      if (!(err instanceof StageTimeoutError)) throw err;
       await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms`);
       return { status: "incomplete", error: `attempt timed out after ${args.attemptTimeoutMs}ms` };
     }
 
-    const { outcome } = raced;
     persisted.transcriptRef = await artifacts.writeTranscript(runId, attemptId, outcome.transcript);
     persisted.diffRef = await artifacts.writeDiff(runId, attemptId, outcome.diff);
     persisted.tokensIn = outcome.metrics.tokensIn;
@@ -707,10 +615,10 @@ async function runHostAttemptV3(
     // Export FIRST, then score against the export (no live sandbox exists on
     // the host path — exec runs in the exported workspace directory).
     const workspaceDir = await artifacts.exportWorkspace(runId, attemptId, scratchDir);
-    return await scoreAttempt(options, loadedEval, experiment, entry, { runId, attemptId, workspaceDir });
+    return await scoreAttempt(options, loadedEval, experiment, entry, { runId, attemptId, workspaceDir, agentOutput: { finalReport: outcome.transcript.filter((e) => e.role === "assistant").at(-1)?.content ?? null, transcript: JSON.stringify(outcome.transcript).slice(0, 131072), truncated: JSON.stringify(outcome.transcript).length > 131072 } });
   } finally {
     await rm(scratchDir, { recursive: true, force: true });
-    await rm(sourceDir, { recursive: true, force: true });
+    if (sourceDir) await rm(sourceDir, { recursive: true, force: true });
   }
 }
 
@@ -723,10 +631,13 @@ async function attemptRuntimeTeardown(
   runtime: Runtime,
   provisioned: ProvisionedEnvironment | undefined,
   ctx: RuntimeProvisionContext,
+  timeoutMs = DEFAULT_BUDGETS.cleanupMs,
 ): Promise<string | undefined> {
   try {
-    if (provisioned?.teardown) await provisioned.teardown();
-    else if (runtime.teardown) await runtime.teardown(ctx);
+    await deadline("cleanup", timeoutMs, async (signal) => {
+      if (provisioned?.teardown) await provisioned.teardown(signal);
+      else if (runtime.teardown) await runtime.teardown({ ...ctx, signal });
+    });
     return undefined;
   } catch (err) {
     return `runtime teardown failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -745,6 +656,10 @@ async function runContainerAttemptV3(
   const { artifacts } = options;
   const { runId, attemptId, persisted } = args;
   const runtime = experiment.runtime;
+  const environment = args.environment;
+  let egress: { networkName: string; sidecar: EgressSidecar } | undefined;
+  let mcpIp: string | undefined;
+  let mcpNetwork: string | undefined;
 
   const provisionCtx: RuntimeProvisionContext = {
     attemptId,
@@ -757,24 +672,39 @@ async function runContainerAttemptV3(
   let provisioned: ProvisionedEnvironment | undefined;
   if (runtime.provision) {
     try {
-      provisioned = await runtime.provision(provisionCtx);
+      provisioned = await deadline("provision", environment?.budgets.provisionMs ?? options.budgets?.provisionMs ?? DEFAULT_BUDGETS.provisionMs,
+        (signal) => runtime.provision!({ ...provisionCtx, signal }),
+        async (late) => { const note = await attemptRuntimeTeardown(runtime, late, provisionCtx, options.budgets?.cleanupMs); if (note) await artifacts.writeError(runId, attemptId, note); });
     } catch (err) {
       const message = `provision failed: ${err instanceof Error ? err.message : String(err)}`;
       // Teardown is still attempted — a provisioner may fail after creating
       // some of what its runtime-level teardown knows how to scrub.
-      const teardownFailure = await attemptRuntimeTeardown(runtime, undefined, provisionCtx);
+      const teardownFailure = await attemptRuntimeTeardown(runtime, undefined, provisionCtx, environment?.budgets.cleanupMs ?? options.budgets?.cleanupMs);
       const error = teardownFailure !== undefined ? `${message}; ${teardownFailure}` : message;
       await artifacts.writeError(runId, attemptId, error);
       return { status: "error", error };
     }
   }
 
-  const sourceDir = await prepWorkspaceSource(loadedEval);
+  let sourceDir: Awaited<ReturnType<typeof prepWorkspaceSource>> | undefined;
   let containerTeardownFailure: string | undefined;
   let disposition: AttemptDisposition;
   try {
     disposition = await (async (): Promise<AttemptDisposition> => {
-      const image = runtime.image ?? (runtime.containerImage?.(loadedEval.metadata) as string);
+      sourceDir = await prepWorkspaceSource(loadedEval);
+      const resolvedImage = environment?.image;
+      const image = resolvedImage && resolvedImage.id !== "unresolved" ? resolvedImage.id : resolvedImage?.tag ?? runtime.image ?? (runtime.containerImage?.(loadedEval.metadata) as string);
+      if (environment?.egress.proxy) {
+        const networkName = await createRunNetwork(`${runId}-${attemptId}`);
+        try {
+          const sidecar = await startEgressSidecar({ runId, networkName, allowlist: environment.egress.allowlist, image: EGRESS_PROXY_IMAGE });
+          egress = { networkName, sidecar };
+        } catch (err) { await removeRunNetwork(networkName); throw err; }
+        if (treatments.mcp?.sidecar) {
+          mcpNetwork = networkName;
+          mcpIp = await connectContainerNetwork(treatments.mcp.sidecar.id, networkName);
+        }
+      }
 
       // --- treatment env: everything rides the 0600 env-file, never argv ---
       const env: Record<string, string> = { ...provisioned?.env };
@@ -783,13 +713,16 @@ async function runContainerAttemptV3(
       // the credential-free MCP server map) is diagnostic, not secret —
       // redacting it would blind the transcript reader for no hygiene gain.
       const secretEnv: Record<string, string> = { ...provisioned?.env };
-      const pathDir = runtime.pathTreatment?.();
+      const pathDir = environment?.pathTreatment ?? undefined;
       if (pathDir !== undefined && pathDir !== "") {
         // Only this treatment exposes the directory; other treatments keep
         // the image-default PATH and cannot accidentally discover its tools.
         env["PATH"] = `${pathDir}:${NORMAL_CONTAINER_PATH}`;
       }
-      const rewrittenServers = treatments.mcp?.serversByExperiment.get(experiment.id);
+      const originalServers = treatments.mcp?.originalByExperiment.get(experiment.id);
+      const rewrittenServers = mcpIp && originalServers && treatments.mcp?.sidecar
+        ? rewriteMcpServerConfigs(originalServers, `http://${mcpIp}:${treatments.mcp.sidecar.port}`)
+        : treatments.mcp?.serversByExperiment.get(experiment.id);
       if (rewrittenServers !== undefined) {
         // Credential-free by construction: rewriteMcpServerConfigs stripped
         // every auth block and pointed authed servers at the proxy sidecar.
@@ -802,14 +735,13 @@ async function runContainerAttemptV3(
         Object.assign(env, providerKeys);
         Object.assign(secretEnv, providerKeys);
       }
-      const egress = runtime.egressHosts !== undefined ? treatments.egress : undefined;
       if (egress) {
         const proxyEnv = egress.sidecar.proxyEnv();
         const mcpSidecar = treatments.mcp?.sidecar;
         if (mcpSidecar) {
           // The mcp sidecar shares the internal network — its address must
           // bypass the egress proxy, which refuses raw-IP targets by design.
-          const noProxy = `${proxyEnv["NO_PROXY"]},${mcpSidecar.ip}`;
+          const noProxy = `${proxyEnv["NO_PROXY"]},${mcpIp ?? mcpSidecar.ip}`;
           proxyEnv["NO_PROXY"] = noProxy;
           proxyEnv["no_proxy"] = noProxy;
         }
@@ -858,7 +790,7 @@ async function runContainerAttemptV3(
             prompt: loadedEval.promptBody,
             trialIndex: entry.trialIndex,
             ...(rewrittenServers !== undefined ? { mcpServers: rewrittenServers } : {}),
-            webPolicy: runtime.webPolicy?.() ?? "native-web-blocked",
+            webPolicy: environment?.webPolicy ?? "native-web-blocked",
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
           // The prompt itself is byte-identical across experiments.
@@ -890,7 +822,7 @@ async function runContainerAttemptV3(
             persisted.surfaceUsage = extractSurfaceUsage(
               vendor,
               redactedStream,
-              surfaceUsageConfigFromRuntime(runtime.config, Object.keys(rewrittenServers ?? {})),
+              observationConfig(surfaceUsageConfigFromRuntime(runtime.config, Object.keys(rewrittenServers ?? {})), runtime.observationTargets),
             );
           }
         }
@@ -915,17 +847,37 @@ async function runContainerAttemptV3(
 
         // Export the workspace BEFORE scoring, with the container still alive:
         // file checks read the export, ctx.exec reaches into the live sandbox.
-        await container.exportWorkspace(paths.workspace);
+        await deadline("export", environment?.budgets.exportMs ?? DEFAULT_BUDGETS.exportMs, async (signal) => {
+          const kill = () => { void container.teardown(); };
+          signal.addEventListener("abort", kill, { once: true });
+          try { await container.exportWorkspace(paths.workspace); } finally { signal.removeEventListener("abort", kill); }
+        });
         return await scoreAttempt(options, loadedEval, experiment, entry, {
           runId,
           attemptId,
           workspaceDir: paths.workspace,
+          agentOutput: extractAgentOutput(redactedStream),
           exec: (cmd, opts) => container.execInWorkspace(cmd, opts),
+          cancel: () => container.teardown(),
           ...(provisioned?.env ? { provisionedEnv: provisioned.env } : {}),
         });
       } finally {
         // Teardown LAST — after export and scoring both resolved. A teardown
         // failure is captured, never thrown: it must not mask the result.
+        if (egress) {
+          try {
+            const lines = (await egress.sidecar.logs()).split("\n").flatMap((line) => {
+              try {
+                const event = JSON.parse(line);
+                if (event.type !== "egress" || event.decision !== "denied") return [];
+                // Only hostname-level identifiers survive: never raw requests or query strings.
+                const host = typeof event.host === "string" && /^[a-zA-Z0-9.*:[\]_-]+$/.test(event.host) ? event.host.slice(0, 253) : "invalid-host";
+                return [JSON.stringify({ type: "egress", attempt_id: attemptId, host, decision: "denied", reason: event.reason })];
+              } catch { return []; }
+            });
+            await artifacts.writeEgressDenials(runId, attemptId, lines);
+          } catch (err) { containerTeardownFailure = `egress evidence unavailable: ${err instanceof Error ? err.message : String(err)}`; }
+        }
         try {
           await container.teardown();
         } catch (err) {
@@ -938,14 +890,21 @@ async function runContainerAttemptV3(
     await artifacts.writeError(runId, attemptId, message);
     disposition = { status: "error", error: message };
   } finally {
-    await rm(sourceDir, { recursive: true, force: true });
+    if (mcpNetwork && treatments.mcp?.sidecar) {
+      try { await disconnectContainerNetwork(treatments.mcp.sidecar.id, mcpNetwork); } catch { containerTeardownFailure = "MCP network disconnect failed"; }
+    }
+    if (egress) {
+      try { await egress.sidecar.teardown(); } catch { containerTeardownFailure = "egress sidecar teardown failed"; }
+      try { await removeRunNetwork(egress.networkName); } catch { containerTeardownFailure = "egress network teardown failed"; }
+    }
+    if (sourceDir) await rm(sourceDir, { recursive: true, force: true });
   }
 
   // Explicit teardown accounting: the attempt keeps its status and result;
   // any teardown failure is appended to its recorded error, never thrown.
   const failures: string[] = [];
   if (containerTeardownFailure !== undefined) failures.push(containerTeardownFailure);
-  const provisionTeardownFailure = await attemptRuntimeTeardown(runtime, provisioned, provisionCtx);
+  const provisionTeardownFailure = await attemptRuntimeTeardown(runtime, provisioned, provisionCtx, environment?.budgets.cleanupMs ?? options.budgets?.cleanupMs);
   if (provisionTeardownFailure !== undefined) failures.push(provisionTeardownFailure);
   if (failures.length > 0) {
     const note = failures.join("; ");
@@ -968,23 +927,32 @@ async function scoreAttempt(
     exec?: (cmd: string[], opts?: { timeoutMs?: number }) => Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean }>;
     /** The provisioned env, when the runtime provisioned this attempt. */
     provisionedEnv?: Record<string, string>;
+    cancel?: () => Promise<void>;
+    agentOutput?: import("../evals/types.ts").AgentOutput;
   },
 ): Promise<AttemptDisposition> {
   try {
-    const scorer = await importEvalScorer(loadedEval.scorerPath);
+    return await deadline("scoring", options.budgets?.scoreMs ?? DEFAULT_BUDGETS.scoreMs, async (signal) => {
+    const cancel = () => { void args.cancel?.(); };
+    signal.addEventListener("abort", cancel, { once: true });
+    try {
     // Runtime-provided capabilities join the scorer's context here; a helper
     // the runtime does not provide throws at call time, naming the
     // capability and the experiment (context.ts).
     const capabilities =
       experiment.runtime.scorerCapabilities?.({
+        signal,
         attemptId: args.attemptId,
         evalId: entry.evalId,
         experimentId: entry.experimentId,
         metadata: loadedEval.metadata,
         env: args.provisionedEnv ?? {},
       }) ?? {};
-    const result = await scorer(
+    const result = await scoreInWorker(loadedEval.scorerPath,
       buildEvalContext({
+        signal,
+        ...(args.agentOutput ? { agentOutput: args.agentOutput } : {}),
+        redact: async (text) => redactSecrets(redactSecrets(text, hostSecretEnv()), args.provisionedEnv ?? {}),
         evalId: entry.evalId,
         experimentId: entry.experimentId,
         trialIndex: entry.trialIndex,
@@ -993,12 +961,32 @@ async function scoreAttempt(
         ...(args.exec ? { exec: args.exec } : {}),
         ...(capabilities.query ? { query: capabilities.query } : {}),
         ...(capabilities.getClient ? { getClient: capabilities.getClient } : {}),
-      }),
+      }), signal,
     );
+    if (!validEvalResult(result)) throw new Error("scorer returned an invalid EvalResult");
     return { status: "completed", result };
+    } finally { signal.removeEventListener("abort", cancel); }
+    });
   } catch (err) {
-    const message = `scorer threw: ${err instanceof Error ? err.message : String(err)}`;
+    const message = redactSecrets(redactSecrets(`scorer threw: ${err instanceof Error ? err.message : String(err)}`, hostSecretEnv()), args.provisionedEnv ?? {});
     await options.artifacts.writeError(args.runId, args.attemptId, message);
-    return { status: "error", error: message };
+    const judgments = (err as { judgments?: import("../evals/types.ts").JudgeRecord[] })?.judgments;
+    const judgeRecords = judgments && validEvalResult({passed:false,checks:[],judgments}) ? judgments : undefined;
+    return { status: "error", error: message, ...(judgeRecords ? {judgeRecords} : {}) };
   }
+}
+
+/** Supported stream shapes only; unavailable final reports stay null. */
+function extractAgentOutput(raw: string): import("../evals/types.ts").AgentOutput {
+  let finalReport: string | null = null;
+  for (const line of raw.split("\n")) {
+    try {
+      const event = JSON.parse(line);
+      if (event.type === "result" && typeof event.result === "string") finalReport = event.result;
+      if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof event.item.text === "string") finalReport = event.item.text;
+      const text = event.type === "assistant" ? event.message?.content?.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") : undefined;
+      if (text) finalReport = text;
+    } catch { /* unsupported event */ }
+  }
+  return { finalReport: finalReport?.slice(0, 131072) ?? null, transcript: raw.slice(0, 131072), truncated: raw.length > 131072 || (finalReport?.length ?? 0) > 131072 };
 }

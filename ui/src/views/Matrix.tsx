@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
 import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
+import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } from "../components/Heatmap.tsx";
 import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
@@ -288,8 +289,17 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
   // Regression evals never blend into the benchmark grid — the toggle only
   // renders when the run has more than one suite.
-  const [suite, setSuite] = useState<string>("benchmark");
+  const [selectedSuite, setSuite] = useState<string>("benchmark");
+  const availableSuites = run.status === "ready"
+    ? SUITES.filter((candidate) => run.value.attempts.some((attempt) => attempt.suite === candidate))
+    : [];
+  const suite = availableSuites.includes(selectedSuite as typeof SUITES[number])
+    ? selectedSuite : (availableSuites[0] ?? "benchmark");
   const [filters, setFilters] = useState<Filters>({ product: ALL, framework: ALL, topic: ALL });
+
+  useEffect(() => {
+    setFilters({ product: ALL, framework: ALL, topic: ALL });
+  }, [runId]);
 
   const grid = useMemo(() => {
     if (run.status !== "ready") return null;
@@ -345,6 +355,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
   return (
     <div data-testid="matrix-view">
+      <PublicationNotice coverage={value.publication} />
       <div className="page-head">
         <div>
           <h1>Eval × experiment matrix</h1>
@@ -394,9 +405,9 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
         </div>
       </div>
 
-      {summary.finished_at === null && (
+      {(summary.finished_at === null || summary.incomplete) && (
         <div className="notice" data-testid="incomplete-banner">
-          Incomplete run — this run never finished. Numbers are partial.
+          Incomplete run — unfinished run or missing trial coverage. Numbers are partial.
         </div>
       )}
 

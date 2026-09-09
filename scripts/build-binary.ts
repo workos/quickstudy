@@ -91,7 +91,7 @@ try {
   console.log(`• embedded UI shell (${(base64.length / 1024).toFixed(0)} KB base64)`);
 
   mkdirSync(dirname(outfile), { recursive: true });
-  const cmd = ["bun", "build", "--compile", "./src/cli.ts", "--outfile", outfile];
+  const cmd = ["bun", "build", "--compile", "./src/cli.ts", "./src/runner/scorer-worker.ts", "--outfile", outfile];
   if (target) cmd.push(`--target=${target}`);
   console.log(`• ${cmd.join(" ")}`);
   failed = Bun.spawnSync(cmd, { cwd: ROOT, stdout: "inherit", stderr: "inherit" }).exitCode !== 0;

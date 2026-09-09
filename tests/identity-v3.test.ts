@@ -66,7 +66,7 @@ describe("v3 run manifest", () => {
 
   test("component key sets are exhaustive snapshots — changing one is a deliberate act", () => {
     const manifest = build(makeFixture());
-    expect(Object.keys(manifest).sort()).toEqual(["evals", "experiments", "harness", "hash", "images", "manifestVersion"]);
+    expect(Object.keys(manifest).sort()).toEqual(["evals", "experiments", "harness", "hash", "images", "manifestVersion", "pairs"]);
     expect(manifest.manifestVersion).toBe(MANIFEST_VERSION);
 
     const evalIdentity = manifest.evals["hello"]!;
@@ -77,6 +77,7 @@ describe("v3 run manifest", () => {
       "metadata",
       "promptSource",
       "scorer",
+      "scorerConfiguration",
     ]);
 
     const experimentIdentity = manifest.experiments["echo-x"]!;
@@ -211,4 +212,56 @@ describe("v3 run manifest", () => {
       /experiment "ghost" is not in the manifest/,
     );
   });
+});
+
+test("v4 includes imported helpers, declared probe trees and lockfile resolutions", () => {
+  const fixture = makeFixture();
+  const scorer = join(fixture.evalsRoot, "hello/EVAL.ts");
+  writeFileSync(join(fixture.root, "package.json"), '{"name":"identity-consumer"}');
+  writeFileSync(join(fixture.root, "shared.ts"), 'export const passed = true;');
+  writeFileSync(scorer, 'import { passed } from "../../shared.ts"; export default async () => ({ passed, checks: [] });');
+  const before = build(fixture);
+  writeFileSync(join(fixture.root, "shared.ts"), 'export const passed = false;');
+  expect(build(fixture).evals.hello!.hash).not.toBe(before.evals.hello!.hash);
+  mkdirSync(join(fixture.root, "probes"));
+  writeFileSync(join(fixture.root, "quickstudy.identity.json"), '{"version":1,"sources":["probes"]}');
+  writeFileSync(join(fixture.root, "probes/check.py"), 'print(True)');
+  const declared = build(fixture);
+  writeFileSync(join(fixture.root, "probes/check.py"), 'print(False)');
+  expect(build(fixture).hash).not.toBe(declared.hash);
+  const probeChanged = build(fixture);
+  writeFileSync(join(fixture.root, "bun.lock"), 'dependency version 2');
+  expect(build(fixture).hash).not.toBe(probeChanged.hash);
+  const locked = build(fixture);
+  writeFileSync(join(fixture.root, "probes/.env"), 'API_KEY=never-record-this');
+  expect(build(fixture).hash).toBe(locked.hash);
+  expect(JSON.stringify(build(fixture))).not.toContain("never-record-this");
+});
+
+test("resolver images, enforced network policy and budgets change affected attempt identity", async () => {
+  const { resolvePairEnvironments } = await import("../src/execution-policy.ts");
+  const { compareGroups } = await import("../src/experiments/groups.ts");
+  const fixture = makeFixture();
+  const evals = discoverEvals(fixture.evalsRoot);
+  const experiments = loadExperiments(fixture.experimentsRoot);
+  experiments[0]!.experiment = { ...experiments[0]!.experiment, comparisonGroup: "test", runtime: { kind: "container", containerImage: () => "test:image", egressHosts: () => ["one.test"] } };
+  const images = { "test:image": { tag: "test:image", id: "sha256:a", repoDigests: [] } };
+  const make = (pairs: ReturnType<typeof resolvePairEnvironments>) => buildRunManifest({ evals, experiments, images, pairs, harness: HARNESS });
+  const pairs = resolvePairEnvironments({ evals, experiments, images, egressProxy: true });
+  const original = make(pairs);
+  const plan = { evalId: "hello", experimentId: "echo-x", trialIndex: 0 };
+  for (const mutate of [
+    (p: typeof pairs[string]) => { p.image!.id = "sha256:b"; },
+    (p: typeof pairs[string]) => { p.egress.allowlist = ["two.test"]; },
+    (p: typeof pairs[string]) => { p.budgets.agentMs = 123; },
+  ]) {
+    const altered = structuredClone(pairs); mutate(Object.values(altered)[0]!);
+    expect(attemptIdentityHash(plan, make(altered))).not.toBe(attemptIdentityHash(plan, original));
+  }
+  const other = { ...experiments[0]!, experiment: { ...experiments[0]!.experiment, id: "other", runtime: { ...experiments[0]!.experiment.runtime, containerImage: () => "other:image" } } };
+  const members = [...experiments, other];
+  const manifest = buildRunManifest({ evals, experiments: members, harness: HARNESS });
+  expect(compareGroups(members.map((e) => e.experiment), manifest)[0]!.comparison).toBe("withheld");
+  const historical = { ...original, manifestVersion: "v3" as const };
+  expect(attemptIdentityHash(plan, historical)).not.toBe(attemptIdentityHash(plan, original));
 });

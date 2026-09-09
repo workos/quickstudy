@@ -32,7 +32,7 @@ import { INVENTORY } from "../tests/docs-smoke-inventory.ts";
  * ids captured from an executed `run` command satisfy later `<run-id>`
  * substitutions, so a doc's report blocks must follow its run blocks.
  */
-export const SMOKE_DOCS = ["README.md", "docs/getting-started.md", "docs/writing-an-eval.md"] as const;
+export const SMOKE_DOCS = ["README.md", "docs/getting-started.md", "docs/writing-an-eval.md", "examples/harbor-notes/README.md"] as const;
 
 export type BlockClass = "runs-keyless" | "needs-docker" | "needs-keys" | "placeholder" | "output-only";
 
@@ -268,9 +268,8 @@ function main(): void {
         });
         continue;
       }
-      // Keyless means keyless: the judge and analyst silently switch on when
-      // a provider key is present (including via Bun's .env auto-load), and a
-      // doc smoke must never place paid API calls.
+      // These inventoried commands use deterministic scorers and Echo.
+      // Keep analyst credentials absent from the documentation smoke environment.
       const result = Bun.spawnSync(["bash", "-c", prepared], {
         cwd: root,
         env: { ...process.env, ANTHROPIC_API_KEY: "" },
@@ -288,6 +287,10 @@ function main(): void {
     }
   }
 
+  if (process.env.QUICKSTUDY_REQUIRE_DOCKER === "1") {
+    const portable = Bun.spawnSync([process.execPath, join(root, "scripts/portable-smoke.ts")], { cwd: root, stdout: "inherit", stderr: "inherit" });
+    if (portable.exitCode !== 0) failures.push({ doc: "examples/harbor-notes/README.md", firstLine: "portable consumer smoke", command: "bun scripts/portable-smoke.ts", exitCode: portable.exitCode, output: "portable example failed; see output above" });
+  }
   const skipped = pairs.length - pairs.filter((p) => p.entry.classification === "runs-keyless").length;
   console.log(`docs-smoke: ${executed} command(s) executed across ${pairs.length} block(s) (${skipped} listed, not executed)`);
   if (failures.length > 0) {

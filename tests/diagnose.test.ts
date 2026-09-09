@@ -661,6 +661,13 @@ describe("collectOfferedSurfaces", () => {
     expect(surfaces).toBeUndefined();
   });
 
+  test("baseline observation targets record an explicitly empty offered set", () => {
+    const baseline = containerExperiment("baseline");
+    baseline.runtime.observationTargets = { docsHosts: ["example.com"], cliCommands: ["product"] };
+    expect(collectOfferedSurfaces({ experimentIds: ["baseline"], experimentsById: new Map([["baseline", baseline]]) }))
+      .toEqual({ baseline: { docsHosts: [], cliCommands: [], mcpServers: [] } });
+  });
+
   test("host experiments contribute nothing", () => {
     const host: Experiment = { id: "exp-host", agent: { adapter: "echo" }, runtime: { kind: "host" } };
     const surfaces = collectOfferedSurfaces({

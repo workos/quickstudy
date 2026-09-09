@@ -34,6 +34,17 @@ try {
     outDir: join(FIXTURES, "site"),
     bundleDir: BUNDLE_DIR,
   });
+  await exportSite({ store, resultsDir: seeded.resultsDir, runIds: seeded.runIds, outDir: join(FIXTURES, "site-hosted"), bundleDir: BUNDLE_DIR, mode: "hosted" });
+  const original = store.getRun(seeded.runIds[0]!)!;
+  const originalAttempts = store.listAttempts(original.id);
+  for (const suite of ["regression", "other"] as const) {
+    const manifest = structuredClone(original.manifest);
+    for (const entry of Object.values(manifest.evals)) entry.metadata = { ...entry.metadata, suite, product: suite, framework: suite, topics: [suite] };
+    store.insertRun({ id: suite, startedAt: original.startedAt, config: original.config, manifest });
+    for (const row of originalAttempts) store.insertAttempt({ ...row, id: `${suite}-${row.id}`, runId: suite, suite });
+    store.finishRun(suite, Date.now());
+  }
+  await exportSite({ store, resultsDir: seeded.resultsDir, runIds: [original.id, "regression", "other"], outDir: join(FIXTURES, "site-single"), bundleDir: BUNDLE_DIR });
   await exportSite({
     store,
     resultsDir: seeded.resultsDir,

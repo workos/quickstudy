@@ -84,7 +84,7 @@ describeDocker("treatment wiring (container path)", () => {
     checks.push({ name: "mcp-proxy-url-offered", passed: /QUICKSTUDY_MCP_SERVERS=\{"probe":\{"url":"http:\/\/[0-9.]+:8914\/probe"\}\}/.test(captured) });
     checks.push({ name: "no-upstream-url-leaked", passed: !captured.includes("mcp.treatment-probe.test") });
     checks.push({ name: "no-credentials-leaked", passed: !captured.includes("rt-secret-probe") && !captured.includes("client-probe") });
-    checks.push({ name: "no-egress-proxy-for-this-arm", passed: !captured.includes("HTTPS_PROXY=") });
+    checks.push({ name: "default-deny-proxy-for-unconfigured-arm", passed: captured.includes("HTTPS_PROXY=") });
   }
   if (ctx.experimentId === "cli-arm") {
     checks.push({ name: "path-starts-with-treatment-dir", passed: /(^|\n)PATH=\/opt\/treatment-cli:/.test(captured) });

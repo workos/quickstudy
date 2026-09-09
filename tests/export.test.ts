@@ -398,3 +398,37 @@ describe("bundle copy + inline data", () => {
     ).toThrow(ExportError);
   });
 });
+
+test("hosted history stays small, reuses snapshots, and records local export costs", async () => {
+  const { store, resultsDir, runId, root } = seeded();
+  try {
+    const original = store.getRun(runId)!;
+    const rows = store.listAttempts(runId);
+    const ids = [runId];
+    for (let i = 1; i < 12; i++) {
+      const id = `history-${i}`; ids.push(id);
+      store.insertRun({ ...original, id });
+      for (const row of rows) store.insertAttempt({ ...row, id: `${id}-${row.id}`, runId: id });
+      store.finishRun(id, original.finishedAt!);
+    }
+    const bundleDir = fakeBundle(root);
+    const offline = join(root, "offline"), hosted = join(root, "hosted");
+    const start = performance.now();
+    await exportSite({store,resultsDir,runIds:ids,outDir:offline,bundleDir,mode:"offline",log:silent});
+    const offlineMs = performance.now()-start;
+    const hostedStart = performance.now();
+    await exportSite({store,resultsDir,runIds:ids,outDir:hosted,bundleDir,mode:"hosted",log:silent});
+    const hostedMs = performance.now()-hostedStart;
+    const size = (dir:string):number => readdirSync(dir).reduce((sum,name)=>{const path=join(dir,name);return sum+(statSync(path).isDirectory()?size(path):statSync(path).size);},0);
+    const offlineHtml = statSync(join(offline,"index.html")).size, hostedHtml = statSync(join(hosted,"index.html")).size;
+    expect(hostedHtml).toBeLessThan(offlineHtml / 10);
+    expect(readFileSync(join(hosted,"index.html"),"utf8")).toContain('"runs":{}');
+    const meta = readJson<DataMeta>(join(hosted,"data/meta.json"));
+    const snapshot = join(hosted,"data",meta.run_paths![runId]!,"run.json");
+    const modifiedAt = statSync(snapshot).mtimeMs;
+    const refreshStart = performance.now();
+    await exportSite({store,resultsDir,runIds:ids,outDir:hosted,bundleDir,mode:"hosted",log:silent});
+    expect(statSync(snapshot).mtimeMs).toBe(modifiedAt);
+    console.log(JSON.stringify({syntheticRuns:12,attempts:12*rows.length,offlineHtml,hostedHtml,offlineTotal:size(offline),hostedTotal:size(hosted),offlineExportMs:Math.round(offlineMs),hostedExportMs:Math.round(hostedMs),unchangedRefreshMs:Math.round(performance.now()-refreshStart)}));
+  } finally {store.close();}
+});

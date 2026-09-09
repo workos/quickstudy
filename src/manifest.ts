@@ -14,12 +14,14 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EMBEDDED_BUILD_INFO } from "./build-info.generated.ts";
 import { hashString, hashTree, type ContentIdentity } from "./hash.ts";
+import { sourceIdentity } from "./source-identity.ts";
+import { pairKey, resolvePairEnvironments, type PairEnvironment } from "./execution-policy.ts";
 import { canonicalJson } from "./identity-diff.ts";
 import type { EvalMetadata, LoadedEval } from "./evals/types.ts";
 import type { LoadedExperiment } from "./experiments/types.ts";
 import type { AttemptPlan } from "./plan.ts";
 
-export const MANIFEST_VERSION = "v3";
+export const MANIFEST_VERSION = "v4";
 
 export interface HarnessIdentity {
   version: string;
@@ -45,6 +47,7 @@ export interface EvalIdentityComponents {
   local: string | null;
   /** Hash of EVAL.ts. Statically-included shared scorer sources join in phase 3. */
   scorer: string;
+  scorerConfiguration?: string | null;
   /** Hash of the canonicalized frontmatter metadata. */
   metadata: string;
 }
@@ -85,7 +88,9 @@ export interface ExperimentIdentity {
 }
 
 export interface RunManifest {
-  manifestVersion: typeof MANIFEST_VERSION;
+  manifestVersion: "v3" | typeof MANIFEST_VERSION;
+  /** v4: exact per-pair environment consumed by the runner. */
+  pairs?: Record<string, PairEnvironment>;
   harness: HarnessIdentity;
   evals: Record<string, EvalIdentity>;
   experiments: Record<string, ExperimentIdentity>;
@@ -139,6 +144,8 @@ export interface BuildRunManifestOptions {
   cliVersions?: Record<string, string>;
   /** Injectable for deterministic tests; production callers omit it. */
   harness?: HarnessIdentity;
+  pairs?: Record<string, PairEnvironment>;
+  scorerIdentities?: Record<string, Record<string, unknown>>;
 }
 
 /** Build before the first paid attempt; all reads are deterministic and local. */
@@ -151,7 +158,8 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
       promptSource: contentHash(readFileSync(loaded.promptPath, "utf8")),
       effectivePrompt: contentHash(loaded.promptBody),
       local: loaded.localDir === null ? null : hashTree(loaded.localDir).sha256,
-      scorer: contentHash(readFileSync(loaded.scorerPath, "utf8")),
+      scorer: sourceIdentity(loaded.scorerPath),
+      scorerConfiguration: options.scorerIdentities?.[loaded.metadata.id] ? contentHash(options.scorerIdentities[loaded.metadata.id]) : null,
       metadata: contentHash(loaded.metadata),
     };
     evals[loaded.metadata.id] = {
@@ -166,7 +174,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
   for (const { experiment, path } of options.experiments) {
     const imageTag = experiment.runtime.image;
     const components: ExperimentIdentityComponents = {
-      source: contentHash(readFileSync(path, "utf8")),
+      source: sourceIdentity(path),
       agent: {
         adapter: experiment.agent.adapter,
         provider: experiment.agent.provider ?? "unspecified",
@@ -176,6 +184,9 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
       },
       runtime: contentHash({
         kind: experiment.runtime.kind,
+        capacity: experiment.runtime.capacity ?? null,
+        observationTargets: experiment.runtime.observationTargets ?? null,
+        treatmentPolicyFields: [...(experiment.runtime.treatmentPolicyFields ?? [])].sort(),
         image: experiment.runtime.image ?? null,
         command: experiment.runtime.command ?? null,
         config: experiment.runtime.config ?? {},
@@ -193,6 +204,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
 
   const withoutHash: Omit<RunManifest, "hash"> = {
     manifestVersion: MANIFEST_VERSION,
+    pairs: options.pairs ?? resolvePairEnvironments(options),
     harness,
     evals,
     experiments,
@@ -208,7 +220,8 @@ export function attemptIdentityHash(plan: AttemptPlan, manifest: RunManifest): s
   const experimentIdentity = manifest.experiments[plan.experimentId];
   if (!experimentIdentity) throw new Error(`attemptIdentityHash: experiment "${plan.experimentId}" is not in the manifest`);
   return contentHash({
-    manifestVersion: MANIFEST_VERSION,
+    manifestVersion: manifest.manifestVersion,
+    ...(manifest.manifestVersion === "v4" ? { environment: manifest.pairs?.[pairKey(plan.evalId, plan.experimentId)] } : {}),
     eval: evalIdentity.hash,
     experiment: experimentIdentity.hash,
   });

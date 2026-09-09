@@ -6,7 +6,7 @@ product**, and **does changing the developer surface change that outcome**?
 quickstudy is an open-source, company-agnostic eval harness that measures both.
 It runs coding agents against real integration tasks under different
 **experiment treatments**, grades each attempt in isolation, and reports pass
-rates plus conservative, deterministic treatment-effect analysis.
+rates, per-check outcomes, and raw counts for declared comparison groups.
 
 If you want DX investment to go where it measurably moves the needle, this is
 for you. ([Concepts](./docs/concepts.md) unpacks both questions.)
@@ -24,13 +24,11 @@ acme-nextjs × claude-mcp   10/10 passed (100% pass rate)
 ```
 
 One row per **eval × experiment** pair: trials passed, per-check pass counts,
-and whether the pair ran all its trials. Comparison groups (experiments that
-differ only by their declared treatment) are diffed at validate time, so a
-gap between `claude-docs` and `claude-mcp` is attributable to the treatment —
-not to a drifted model pin or a changed prompt.
-
-This is an effect of offering a treatment under the recorded harness, not
-proof that a treatment caused an individual failure.
+and whether the pair ran all its trials. Comparison groups check recorded
+configuration agreement before presenting raw per-arm counts. Matching a group
+does not establish causation or eliminate timing, environment, service or sampling
+confounds. Incomplete attempts and instrument errors are disclosed separately and
+excluded from scored pass-rate denominators.
 
 The same data also renders as an interactive, self-contained static
 [site](#ui--sharing-results) you can publish or hand to a teammate.
@@ -144,7 +142,7 @@ quickstudy validate                   # discover + validate evals/ and experimen
 quickstudy run [--eval <id>] [--experiment <id>] # execute selected pairs; omit selectors for all
 quickstudy report <run-id>            # per-pair stats (--latest for the newest run)
 quickstudy diagnose <run-id>          # LLM-diagnose failing pairs into diagnosis.json
-quickstudy ui                         # serve the matrix/compare/report/trend UI
+quickstudy ui                         # serve the matrix/compare/report/diagnosis UI
 quickstudy export <run-id> --out dir  # the same UI as a self-contained static site
 quickstudy images build               # build the agent-runtime + proxy images
 quickstudy clean                      # remove all quickstudy-labeled containers/networks
@@ -221,7 +219,7 @@ quickstudy ui                             # serve every run at http://127.0.0.1:
 quickstudy ui --watch                     # re-export when the results DB changes
 
 quickstudy export <run-id> --out ./site        # self-contained site
-quickstudy export --runs a,b --out ./site       # two runs → Compare view
+quickstudy export --runs a,b --out ./site       # two runs → browse each run; Compare stays within a run
 ```
 
 The exported directory works from `file://` (the data index is inlined into
@@ -268,3 +266,5 @@ bun run ui:e2e           # Playwright smoke: served routes + offline file:// loa
 ## License
 
 MIT
+
+See [extension contracts, identity, resume and complete-sample publication](docs/extensions.md) and the [runnable Harbor Notes example](examples/harbor-notes/README.md).

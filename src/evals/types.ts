@@ -49,7 +49,21 @@ export interface CheckResult {
 }
 
 /** What a scorer returns for one attempt. */
+export interface JudgeRecord {
+  provenance: "semantic-judge";
+  provider: string;
+  model: string;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  costUsd: number | null;
+}
+export interface AgentOutput {
+  finalReport: string | null;
+  transcript: string | null;
+  truncated: boolean;
+}
 export interface EvalResult {
+  judgments?: JudgeRecord[];
   passed: boolean;
   checks: CheckResult[];
 }
@@ -73,6 +87,11 @@ export interface EvalExecResult {
  * "this experiment runtime does not provide X".
  */
 export interface EvalContext {
+  agentOutput?: AgentOutput;
+  /** Redact known runtime/provider secrets before sending evidence to a judge. */
+  redact?(text: string): Promise<string>;
+  /** Aborted when the current stage expires. Implementations must stop work. */
+  signal?: AbortSignal;
   evalId: string;
   experimentId: string;
   trialIndex: number;
@@ -93,4 +112,4 @@ export interface EvalContext {
 }
 
 /** EVAL.ts's default export. */
-export type EvalScorer = (ctx: EvalContext) => Promise<EvalResult>;
+export type EvalScorer = ((ctx: EvalContext) => Promise<EvalResult>) & { identity?: Record<string, unknown> };

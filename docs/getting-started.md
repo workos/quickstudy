@@ -167,7 +167,7 @@ quickstudy export <run-id> --out ./site
   difference worth acting on — the report renders raw counts either way.
   Watch the cost: every pair × trial with a paid agent is a paid session.
 - **Egress observation**: `--egress-proxy` routes attempt traffic through a
-  per-run allowlist proxy and records what the agent reached for.
+  per-attempt allowlist proxy and records what the agent reached for.
 - **Single attempts** (source checkout):
   `bun scripts/dev-attempt.ts --eval <id> --experiment <id>` iterates on one
   attempt against throwaway dev stores.
@@ -191,3 +191,5 @@ full-scale benchmark repository grows around it.
 
 Publishing numbers? [Publishing a benchmark](./publishing-a-benchmark.md) is
 the gate checklist.
+
+For a complete consumer runtime with no provider key, run the [Harbor Notes example](../examples/harbor-notes/README.md). Resume and complete-sample publication are documented in [extension contracts](extensions.md#scheduling-resume-and-publication).

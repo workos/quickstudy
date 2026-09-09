@@ -20,6 +20,7 @@ export type AttemptStatus = "completed" | "incomplete" | "error";
 
 /** The run-level configuration recorded in `runs.config_json`. */
 export interface RunConfig {
+  scheduler?: { concurrency: number; seed: string; policy: "seeded-hash-v1"; order: import("../plan.ts").AttemptPlan[] };
   trials: number;
   evalIds: string[];
   experimentIds: string[];
@@ -56,6 +57,9 @@ export interface RunRecord {
 
 /** Everything the runner persists for one attempt. */
 export interface NewAttempt {
+  /** Explicit retry of a non-completed trial; original evidence is retained. */
+  retryOf?: string | null;
+  judgeRecords?: import("../evals/types.ts").JudgeRecord[];
   id: string;
   runId: string;
   evalId: string;
@@ -81,6 +85,8 @@ export interface NewAttempt {
 }
 
 export interface AttemptRecord {
+  retryOf?: string | null;
+  judgeRecords?: import("../evals/types.ts").JudgeRecord[];
   id: string;
   runId: string;
   evalId: string;
@@ -112,6 +118,8 @@ interface RunRow {
 }
 
 interface AttemptRow {
+  retry_of: string | null;
+  judge_usage_json: string | null;
   id: string;
   run_id: string;
   eval_id: string;
@@ -147,6 +155,8 @@ function toRunRecord(row: RunRow): RunRecord {
 function toAttemptRecord(row: AttemptRow): AttemptRecord {
   return {
     id: row.id,
+    ...(row.judge_usage_json ? { judgeRecords: JSON.parse(row.judge_usage_json) } : {}),
+    ...(row.retry_of ? { retryOf: row.retry_of } : {}),
     runId: row.run_id,
     evalId: row.eval_id,
     experimentId: row.experiment_id,
@@ -214,6 +224,8 @@ export class ResultsStore {
     if (!attemptColumns.includes("turns")) {
       this.db.exec("ALTER TABLE attempts ADD COLUMN turns INTEGER;");
     }
+    if (!attemptColumns.includes("judge_usage_json")) this.db.exec("ALTER TABLE attempts ADD COLUMN judge_usage_json TEXT;");
+    if (!attemptColumns.includes("retry_of")) this.db.exec("ALTER TABLE attempts ADD COLUMN retry_of TEXT;");
     this.db.exec("PRAGMA user_version = 3;");
   }
 
@@ -222,6 +234,8 @@ export class ResultsStore {
       .query("INSERT INTO runs (id, started_at, finished_at, config_json, manifest_json, manifest_hash) VALUES (?, ?, NULL, ?, ?, ?)")
       .run(run.id, run.startedAt, JSON.stringify(run.config), JSON.stringify(run.manifest), run.manifest.hash);
   }
+
+  reopenRun(id: string): void { this.db.query("UPDATE runs SET finished_at = NULL WHERE id = ?").run(id); }
 
   finishRun(id: string, finishedAt: number): void {
     const changed = this.db.query("UPDATE runs SET finished_at = ? WHERE id = ?").run(finishedAt, id);
@@ -250,8 +264,8 @@ export class ResultsStore {
         `INSERT INTO attempts (
            id, run_id, eval_id, experiment_id, suite, trial_index, attempt_identity_hash, status,
            result_json, surface_usage_json, transcript_ref, diff_ref, cost_usd, tokens_in, tokens_out,
-           turns, started_at, finished_at, error
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           turns, started_at, finished_at, error, retry_of, judge_usage_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         attempt.id,
@@ -273,6 +287,8 @@ export class ResultsStore {
         attempt.startedAt ?? null,
         attempt.finishedAt ?? null,
         attempt.error ?? null,
+        attempt.retryOf ?? null,
+        attempt.judgeRecords ? JSON.stringify(attempt.judgeRecords) : null,
       );
   }
 
@@ -286,4 +302,17 @@ export class ResultsStore {
   close(): void {
     this.db.close();
   }
+}
+
+/** Only explicit, valid retry links supersede a row. Accidental duplicates remain visible. */
+export function activeAttempts(attempts: AttemptRecord[]): AttemptRecord[] {
+  const superseded = new Set<string>();
+  for (const row of attempts) if (row.retryOf) {
+    const previous = attempts.find((a) => a.id === row.retryOf);
+    if (!previous || previous.status === "completed" || previous.runId !== row.runId || previous.evalId !== row.evalId || previous.experimentId !== row.experimentId || previous.trialIndex !== row.trialIndex || previous.attemptIdentityHash !== row.attemptIdentityHash || superseded.has(previous.id)) {
+      throw new Error(`invalid retry lineage for attempt ${row.id}`);
+    }
+    superseded.add(previous.id);
+  }
+  return attempts.filter((a) => !superseded.has(a.id));
 }

@@ -81,18 +81,23 @@ export async function loadMeta(): Promise<DataMeta> {
   return meta;
 }
 
+async function runDataPath(runId: string): Promise<string> {
+  const meta = await loadMeta();
+  return `data/${meta.run_paths?.[runId] ?? `runs/${encodeURIComponent(runId)}`}`;
+}
+
 export async function loadRun(runId: string): Promise<DataRun> {
   const inline = inlineData();
   const fromInline = inline?.runs[runId];
   if (fromInline) return fromInline;
-  return fetchJson<DataRun>(`data/runs/${encodeURIComponent(runId)}/run.json`);
+  return fetchJson<DataRun>(`${await runDataPath(runId)}/run.json`);
 }
 
 export async function loadReport(runId: string): Promise<ReportJson> {
   const inline = inlineData();
   const fromInline = inline?.reports[runId];
   if (fromInline) return fromInline;
-  return fetchJson<ReportJson>(`data/runs/${encodeURIComponent(runId)}/report.json`);
+  return fetchJson<ReportJson>(`${await runDataPath(runId)}/report.json`);
 }
 
 /**
@@ -106,7 +111,7 @@ export async function loadDiagnosis(runId: string): Promise<DiagnosisJson | null
   const fromInline = inline?.diagnoses?.[runId];
   if (fromInline) return fromInline;
   try {
-    return await fetchJson<DiagnosisJson>(`data/runs/${encodeURIComponent(runId)}/diagnosis.json`);
+    return await fetchJson<DiagnosisJson>(`${await runDataPath(runId)}/diagnosis.json`);
   } catch (error) {
     if (error instanceof DataError && (error.kind === "missing" || error.kind === "offline-asset")) return null;
     throw error;

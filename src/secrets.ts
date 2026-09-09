@@ -144,3 +144,8 @@ export function redactSecrets(text: string, env: Record<string, string>): string
   }
   return redacted;
 }
+
+/** Provider/judge secret env only; ordinary PATH and workspace values are evidence. */
+export function hostSecretEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).filter(([name, value]) => /key|token|password|secret|credential/i.test(name) && typeof value === "string")) as Record<string, string>;
+}

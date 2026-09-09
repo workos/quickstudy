@@ -48,3 +48,11 @@ export {
   waitForAppReady,
 } from "./probe.ts";
 export type { JsonAssertion, ProbeExecFn } from "./probe.ts";
+
+export type { SurfaceUsageConfig, SurfaceUsage } from "./surface-usage.ts";
+
+export { defineSemanticScorer, SemanticScoringError } from "./semantic.ts";
+export type { SemanticRubric, SemanticJudge, SemanticJudgeRequest, SemanticJudgeResponse } from "./semantic.ts";
+export type { AgentOutput, JudgeRecord } from "./evals/types.ts";
+
+export { extractSurfaceUsage, surfaceUsageConfigFromRuntime, observationConfig } from "./surface-usage.ts";

@@ -339,24 +339,22 @@ bun test evals/ scorers/
 An eval says WHAT; an **experiment** says HOW — which agent, with what model
 pins, in what runtime, under what treatment. One TypeScript module under the
 experiments root (default `experiments/`), default-exporting
-`defineExperiment({...})`. This is a real benchmark repository's
-`claude-docs.ts` experiment module in its entirety:
+`defineExperiment({...})`. This example uses the complete runtime shipped in
+[Harbor Notes](../examples/harbor-notes/README.md):
 
 ```ts
 import { defineExperiment } from "quickstudy";
-import { acmeRuntime } from "../runtime/acme.ts";
+import { harborRuntime } from "../runtime.ts";
 
 export default defineExperiment({
-  id: "claude-docs",
-  comparisonGroup: "claude",
-  treatment: "docs",
+  id: "claude-notes",
   agent: {
     adapter: "claude",
     provider: "anthropic",
     model: "claude-sonnet-5",
     reasoning: "high",
   },
-  runtime: acmeRuntime({ docs: true }),
+  runtime: harborRuntime(false),
 });
 ```
 
@@ -366,8 +364,8 @@ export default defineExperiment({
 - **`runtime`** — `{ kind: "host" }` for host smoke runs, or a container
   runtime owning the image, per-attempt provisioning, egress allowlist, MCP
   servers, web policy, and PATH treatment. A runtime factory like the
-  `runtime/acme.ts` above owns all of that in one place; its treatment flags
-  (`docs`, `mcp`, `cli`) shape what the environment offers.
+  `runtime.ts` above owns those settings in one place. The example selects
+  its real-agent container with `harborRuntime(false)`.
 - **`treatment` + `comparisonGroup`** — experiments sharing a group claim to
   differ only by their declared treatment. `validate` diffs that claim up
   front and the report compares the group with raw per-arm counts — or
@@ -392,3 +390,5 @@ quickstudy run --eval acme-nextjs --experiment claude-docs --trials 1
       expect.
 - [ ] Publishing numbers publicly? Work through
       [Publishing a benchmark](./publishing-a-benchmark.md) first.
+
+See [the public extension contract](extensions.md) for identity declarations, cancellation, observation targets, final-agent output and optional semantic scoring.

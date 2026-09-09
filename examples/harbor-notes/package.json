@@ -1,0 +1,6 @@
+{
+  "name": "harbor-notes-evals",
+  "private": true,
+  "type": "module",
+  "dependencies": { "quickstudy": "file:../.." }
+}

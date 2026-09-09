@@ -55,4 +55,14 @@ cp -R "$root/tests/__fixtures__/evals" demo-evals
 cp -R "$root/tests/__fixtures__/experiments" demo-experiments
 bunx quickstudy validate --evals-root demo-evals --experiments-root demo-experiments
 
+if [ "${QUICKSTUDY_REQUIRE_DOCKER:-0}" = "1" ]; then
+  cp -R node_modules/quickstudy/examples/harbor-notes portable-consumer
+  cd portable-consumer
+  bunx quickstudy validate
+  bunx quickstudy run --trials 2 --concurrency 2 --egress-proxy
+  bunx quickstudy report --latest --strict
+  bunx quickstudy export --runs all --expected-trials 2 --mode hosted --out site
+  cd "$pack_dir"
+fi
+
 echo "pack-check: ok (quickstudy $actual_version)"

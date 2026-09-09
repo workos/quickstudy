@@ -16,6 +16,8 @@ import type { McpServerConfig } from "../isolation/mcp.ts";
 
 /** What a runtime's `provision` receives, per attempt. */
 export interface RuntimeProvisionContext {
+  /** Aborted when the current stage expires. Implementations must stop work. */
+  signal?: AbortSignal;
   attemptId: string;
   evalId: string;
   /** The eval's frontmatter metadata (`product`/`framework` drive provisioning). */
@@ -32,11 +34,13 @@ export interface ProvisionedEnvironment {
    * Scrub what provision created. Failures are recorded explicitly on the
    * attempt, never silently swallowed, and never crash the run.
    */
-  teardown?(): Promise<void>;
+  teardown?(signal?: AbortSignal): Promise<void>;
 }
 
 /** What `scorerCapabilities` receives when the runner builds the scorer's context. */
 export interface ScorerCapabilityContext {
+  /** Aborted when the current stage expires. Implementations must stop work. */
+  signal?: AbortSignal;
   attemptId: string;
   evalId: string;
   experimentId: string;

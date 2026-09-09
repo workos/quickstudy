@@ -17,9 +17,9 @@
  *   - teardown is `docker rm -f` — kill and remove in one step.
  */
 
-import { mkdtemp, rm, writeFile, cp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, cp, readdir, lstat, readlink, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { sanitizeServerName, type McpUpstream } from "./mcp-proxy/server.ts";
 import { EXCLUDED_WORKSPACE_DIRS } from "../store/artifacts.ts";
 
@@ -71,11 +71,11 @@ async function runDocker(
   });
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  if (opts.timeoutMs !== undefined) {
+  {
     timer = setTimeout(() => {
       timedOut = true;
-      proc.kill();
-    }, opts.timeoutMs);
+      proc.kill("SIGKILL");
+    }, opts.timeoutMs ?? 30_000);
   }
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -228,11 +228,13 @@ export async function createAttemptContainer(opts: CreateAttemptContainerOptions
 
   const container: AttemptContainer = {
     id,
-    execInWorkspace: (cmd, execOpts = {}) =>
-      runDocker(
-        ["exec", "-w", CONTAINER_WORKSPACE, id, ...cmd],
-        execOpts.timeoutMs === undefined ? {} : { timeoutMs: execOpts.timeoutMs },
-      ),
+    execInWorkspace: async (cmd, execOpts = {}) => {
+      const result = await runDocker(["exec", "-w", CONTAINER_WORKSPACE, id, ...cmd], execOpts);
+      // Killing only the Docker client leaves the exec process alive in the
+      // daemon. Stop the whole attempt on timeout, including descendants.
+      if (result.timedOut) await runDocker(["kill", id], { timeoutMs: 10_000 });
+      return result;
+    },
     writeFile: async (path, content) => {
       // `$1` positional keeps the target path out of shell interpolation.
       await mustDocker(["exec", "-i", id, "sh", "-c", 'mkdir -p "$(dirname "$1")" && cat > "$1"', "sh", path], {
@@ -240,17 +242,38 @@ export async function createAttemptContainer(opts: CreateAttemptContainerOptions
       });
     },
     exportWorkspace: async (toDir) => {
-      // `docker cp` cannot exclude paths, so stage to a scratch dir and do a
-      // filtered copy — dependency directories would multiply disk usage by
-      // orders of magnitude across a sweep.
+      // Filter in the container, then stream tar directly to an empty host
+      // scratch directory. Dependency contents never cross the Docker boundary.
       const scratch = await mkdtemp(join(tmpdir(), "quickstudy-export-"));
+      let producer: ReturnType<typeof Bun.spawn> | undefined;
+      let consumer: ReturnType<typeof Bun.spawn> | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await mustDocker(["cp", `${id}:${CONTAINER_WORKSPACE}/.`, scratch]);
-        await cp(scratch, toDir, {
-          recursive: true,
-          filter: (source) => !EXCLUDED_WORKSPACE_DIRS.includes(basename(source)),
-        });
+        producer = Bun.spawn(["docker", "exec", id, "tar", ...EXCLUDED_WORKSPACE_DIRS.map((name) => `--exclude=${name}`),
+          "--exclude=.env", "--exclude=.env.*", "-C", CONTAINER_WORKSPACE, "-cf", "-", "."], { stdout: "pipe", stderr: "pipe" });
+        consumer = Bun.spawn(["tar", "-xf", "-", "-C", scratch], { stdin: producer.stdout, stdout: "ignore", stderr: "pipe" });
+        timer = setTimeout(() => { producer?.kill("SIGKILL"); consumer?.kill("SIGKILL"); }, 60_000);
+        const [produced, consumed, producerError, consumerError] = await Promise.all([
+          producer.exited, consumer.exited, new Response(producer.stderr as ReadableStream).text(), new Response(consumer.stderr as ReadableStream).text(),
+        ]);
+        if (produced !== 0 || consumed !== 0) throw new Error(`workspace transfer failed: ${producerError} ${consumerError}`);
+        const canonicalScratch = await realpath(scratch);
+        const cleanLinks = async (dir: string): Promise<void> => {
+          for (const name of await readdir(dir)) {
+            const path = join(dir, name); const stat = await lstat(path);
+            if (stat.isSymbolicLink()) {
+              const target = await readlink(path);
+              const destination = await realpath(path).catch(() => resolve(dir, target).replace(scratch, canonicalScratch));
+              if (target.startsWith("/") || !destination.startsWith(`${canonicalScratch}/`)) await rm(path);
+            } else if (stat.isDirectory()) await cleanLinks(path);
+          }
+        };
+        await cleanLinks(scratch);
+        await mkdir(toDir, { recursive: true });
+        await cp(scratch, toDir, { recursive: true, verbatimSymlinks: true });
       } finally {
+        if (timer) clearTimeout(timer);
+        producer?.kill(); consumer?.kill();
         await rm(scratch, { recursive: true, force: true });
       }
     },
@@ -604,4 +627,13 @@ export async function startMcpSidecar(opts: StartMcpSidecarOptions): Promise<Mcp
       }
     },
   };
+}
+
+/** Attach shared infrastructure to an attempt network, returning its local address. */
+export async function connectContainerNetwork(id: string, network: string): Promise<string> {
+  await mustDocker(["network", "connect", network, id]);
+  return inspectContainerIp(id, network);
+}
+export async function disconnectContainerNetwork(id: string, network: string): Promise<void> {
+  await mustDocker(["network", "disconnect", network, id]);
 }

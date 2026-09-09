@@ -363,3 +363,38 @@ test.describe("edge states", () => {
     await expect(page.getByTestId("matrix-view")).toBeVisible();
   });
 });
+
+for (const mode of ["served", "offline"]) {
+  test(`${mode}: single suites render and switching runs clears stale filters`, async ({ page }) => {
+    const base = mode === "served" ? "/site-single/index.html" : `file://${join(E2E_DIR, ".fixtures/site-single/index.html")}`;
+    await page.goto(`${base}#/run/regression`);
+    await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toBeVisible();
+    await page.getByTestId("filter-product").selectOption("regression");
+    await page.getByTestId("filter-framework").selectOption("regression");
+    await page.getByTestId("filter-topic").selectOption("regression");
+    await page.getByTestId("run-select").selectOption("other");
+    await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toBeVisible();
+    await expect(page.getByTestId("filter-product")).toHaveValue("all");
+    await expect(page.getByTestId("filter-framework")).toHaveValue("all");
+    await expect(page.getByTestId("filter-topic")).toHaveValue("all");
+    await page.reload();
+    await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toBeVisible();
+  });
+}
+
+
+test("hosted mode loads only the selected run and keeps transcript assets lazy", async ({ page }) => {
+  const { sweep, cellStates } = runIds();
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  const started = Date.now();
+  await page.goto(`/site-hosted/index.html#/run/${sweep}`);
+  await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toBeVisible();
+  expect(requests.some((url) => url.includes(`/runs/${sweep}/snapshots/`))).toBe(true);
+  expect(requests.some((url) => url.includes(`/runs/${cellStates}/`))).toBe(false);
+  expect(requests.some((url) => url.includes(".transcript.txt"))).toBe(false);
+  console.log(JSON.stringify({ hostedLocalMatrixMs: Date.now() - started, requests: requests.length }));
+  await page.getByTestId("run-select").selectOption(cellStates);
+  await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toHaveAttribute("data-rate", "0");
+  expect(requests.some((url) => url.includes(`/runs/${cellStates}/snapshots/`))).toBe(true);
+});

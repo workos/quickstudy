@@ -8,20 +8,19 @@
  * Key decisions (from the spec):
  *   - Transcripts/diffs are sliced into per-attempt text assets, lazy-loaded
  *     by the viewer — never one giant JSON.
- *   - report.json is embedded VERBATIM (the stored report artifact when it
- *     exists; a freshly built one otherwise) — no reshaping, so report and
- *     UI can never disagree.
+ *   - Historical reports are preserved verbatim. Modern reports are reused
+ *     only when their source fingerprint matches the current attempt records.
  *   - diagnosis.json rides along VERBATIM only when the artifact exists on
  *     disk. Unlike report.json it is NEVER rebuilt: diagnosis is key-gated
  *     and token-spending, and export must not spend tokens or require a key.
  *   - Workspace trees are NOT exported (size); diff + transcript are the
  *     reviewable artifacts.
- *   - The meta/run/report index is inlined into index.html
- *     (`window.__QS_DATA__`) because browsers block fetch() from file://
- *     pages; lazy text assets degrade gracefully there.
+ *   - Offline mode embeds the meta/run/report index for file:// use.
+ *     Hosted mode embeds only meta and fetches immutable run snapshots.
+ *     Transcripts/diffs remain lazy assets in both modes.
  */
 
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { DiagnosisJson } from "./diagnose/types.ts";
 import {
@@ -32,8 +31,10 @@ import {
   type DataRunSummary,
   type InlineData,
 } from "./export-types.ts";
-import { buildReport, type ReportJson } from "./report/report.ts";
-import type { AttemptRecord, ResultsStore, RunRecord } from "./store/db.ts";
+import { trialCoverage } from "./completeness.ts";
+import { hashString } from "./hash.ts";
+import { buildReport, renderReportText, type ReportJson } from "./report/report.ts";
+import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord } from "./store/db.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing bundle, ...). */
 export class ExportError extends Error {
@@ -44,6 +45,10 @@ export class ExportError extends Error {
 }
 
 export interface ExportOptions {
+  /** Offline embeds JSON; hosted fetches immutable per-run snapshots lazily. */
+  mode?: "offline" | "hosted";
+  /** Explicit publication gate; omits incompletely sampled pairs with reasons. */
+  expectedTrials?: number;
   store: ResultsStore;
   /** Artifacts root (the harness `--results` dir). */
   resultsDir: string;
@@ -109,7 +114,11 @@ interface AssetCopyResult {
 function copyAsset(sourcePath: string | null, targetDir: string, fileName: string): AssetCopyResult {
   if (sourcePath === null) return { relativePath: null, missing: false };
   if (!existsSync(sourcePath)) return { relativePath: null, missing: true };
-  copyFileSync(sourcePath, join(targetDir, fileName));
+  const target = join(targetDir, fileName);
+  const sourceStat = statSync(sourcePath);
+  if (!existsSync(target) || statSync(target).size !== sourceStat.size || statSync(target).mtimeMs < sourceStat.mtimeMs) {
+    const temporary = `${target}.tmp`; copyFileSync(sourcePath, temporary); renameSync(temporary, target);
+  }
   return { relativePath: `attempts/${fileName}`, missing: false };
 }
 
@@ -130,6 +139,7 @@ function toDataAttempt(
   diff: string | null,
 ): DataAttempt {
   return {
+    ...((attempt.result?.judgments ?? attempt.judgeRecords) ? { judgments: attempt.result?.judgments ?? attempt.judgeRecords } : {}),
     id: attempt.id,
     run_id: attempt.runId,
     eval_id: attempt.evalId,
@@ -172,7 +182,13 @@ function resolveReport(
       // Export is an artifact copier, not report validation. Preserve the
       // stored JSON byte-for-byte in meaning, including forward-compatible
       // fields a newer report producer may add.
-      return JSON.parse(readFileSync(path, "utf8")) as ReportJson;
+      const stored = JSON.parse(readFileSync(path, "utf8")) as ReportJson;
+      const run = store.getRun(runId)!;
+      // Historical reports retain their methodology. New reports are reused
+      // only when the entire source record still matches (including retries).
+      if (run.manifest.manifestVersion === "v3") return stored;
+      const current = buildReport({ store, runId, resultsDir, generatedAt: generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)! });
+      return stored.source_fingerprint === current.source_fingerprint ? stored : current;
     } catch (err) {
       log(`stored report.json for ${runId} is unreadable (${err instanceof Error ? err.message : String(err)}) — rebuilding`);
     }
@@ -183,7 +199,7 @@ function resolveReport(
     store,
     runId,
     resultsDir,
-    ...(generatedAt !== undefined ? { generatedAt } : {}),
+    generatedAt: generatedAt ?? iso(store.getRun(runId)!.finishedAt) ?? iso(store.getRun(runId)!.startedAt)!,
   });
 }
 
@@ -253,6 +269,7 @@ export async function exportSite(options: ExportOptions): Promise<ExportSummary>
     );
   }
 
+  const publications = new Map(runs.map((run) => [run.id, options.expectedTrials === undefined ? undefined : buildReport({ store, runId: run.id, resultsDir, expectedTrials: options.expectedTrials, generatedAt: options.generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)! })]));
   const dataDir = join(outDir, "data");
   mkdirSync(dataDir, { recursive: true });
 
@@ -260,18 +277,23 @@ export async function exportSite(options: ExportOptions): Promise<ExportSummary>
   const inlineReports: Record<string, ReportJson> = {};
   const inlineDiagnoses: Record<string, DiagnosisJson> = {};
   const summaries: DataRunSummary[] = [];
+  const runPaths: Record<string, string> = {};
   let attemptTotal = 0;
   let missingAssets = 0;
 
   for (const run of runs) {
-    const attempts = store.listAttempts(run.id);
+    const history = store.listAttempts(run.id);
+    const current = activeAttempts(history);
+    const publication = publications.get(run.id)?.publication;
+    const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
     const groupOf = groupsByExperiment(run);
     const runDir = join(dataDir, "runs", run.id);
     const attemptsDir = join(runDir, "attempts");
     mkdirSync(attemptsDir, { recursive: true });
 
     const dataAttempts: DataAttempt[] = [];
-    for (const attempt of attempts) {
+    const historyAttempts: DataAttempt[] = [];
+    for (const attempt of history) {
       const transcript = copyAsset(attempt.transcriptRef, attemptsDir, `${attempt.id}.transcript.txt`);
       const diff = copyAsset(attempt.diffRef, attemptsDir, `${attempt.id}.diff.patch`);
       for (const asset of [transcript, diff]) {
@@ -281,25 +303,42 @@ export async function exportSite(options: ExportOptions): Promise<ExportSummary>
         }
       }
       const dataAttempt = toDataAttempt(run, groupOf, attempt, transcript.relativePath, diff.relativePath);
-      dataAttempts.push(dataAttempt);
-      writeFileSync(join(attemptsDir, `${attempt.id}.json`), `${JSON.stringify(dataAttempt, null, 2)}\n`, "utf8");
+      if (attempts.includes(attempt)) dataAttempts.push(dataAttempt);
+      else historyAttempts.push(dataAttempt);
+      atomicWrite(join(attemptsDir, `${attempt.id}.json`), `${JSON.stringify(dataAttempt, null, 2)}\n`, "utf8");
     }
 
     const summary = toRunSummary(run, attempts.length);
+    summary.incomplete = publication ? false : run.finishedAt === null || trialCoverage(run, current).some((p) => !p.complete);
     const dataRun: DataRun = {
       schemaVersion: DATA_SCHEMA_VERSION,
       run: summary,
       manifest: run.manifest,
       groups: run.config.groups ?? [],
       attempts: dataAttempts,
+      ...(historyAttempts.length ? { excluded_attempts: historyAttempts } : {}),
+      ...(publication ? { publication } : {}),
     };
-    writeFileSync(join(runDir, "run.json"), `${JSON.stringify(dataRun, null, 2)}\n`, "utf8");
+    atomicWrite(join(runDir, "run.json"), `${JSON.stringify(dataRun, null, 2)}\n`, "utf8");
 
-    const report = resolveReport(store, resultsDir, run.id, log, options.generatedAt);
-    writeFileSync(join(runDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    const report = publications.get(run.id) ?? resolveReport(store, resultsDir, run.id, log, options.generatedAt);
+    if (publication) {
+      atomicWrite(join(runDir, "omissions.json"), JSON.stringify(publication, null, 2));
+      atomicWrite(join(runDir, "omissions.txt"), renderReportText(report));
+      atomicWrite(join(runDir, "source-report.json"), JSON.stringify(buildReport({ store, runId: run.id, resultsDir }), null, 2));
+      log(`${run.id}: complete-sample publication includes ${publication.eligible.length} pair(s), omits ${publication.omitted.length}; see data/runs/${run.id}/omissions.json and omissions.txt`);
+    }
+    atomicWrite(join(runDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
 
     const diagnosis = resolveDiagnosis(resultsDir, run.id, runDir, log);
     if (diagnosis !== null) inlineDiagnoses[run.id] = diagnosis;
+    const snapshot = hashString(JSON.stringify({ dataRun, report, diagnosis })).slice(0, 24);
+    const snapshotPath = `runs/${run.id}/snapshots/${snapshot}`;
+    const snapshotDir = join(dataDir, snapshotPath); mkdirSync(snapshotDir, { recursive: true });
+    atomicWrite(join(snapshotDir, "run.json"), JSON.stringify(dataRun));
+    atomicWrite(join(snapshotDir, "report.json"), JSON.stringify(report));
+    atomicWrite(join(snapshotDir, "diagnosis.json"), JSON.stringify(diagnosis));
+    runPaths[run.id] = snapshotPath;
 
     summaries.push(summary);
     inlineRuns[run.id] = dataRun;
@@ -313,22 +352,30 @@ export async function exportSite(options: ExportOptions): Promise<ExportSummary>
     schemaVersion: DATA_SCHEMA_VERSION,
     generated_at: options.generatedAt ?? new Date().toISOString(),
     runs: summaries,
+    run_paths: runPaths,
   };
-  writeFileSync(join(dataDir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+  atomicWrite(join(dataDir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
 
   if (options.bundleDir !== undefined) {
-    cpSync(options.bundleDir, outDir, { recursive: true });
+    cpSync(options.bundleDir, outDir, { recursive: true, filter: (path) => path === options.bundleDir || !path.endsWith("/index.html") });
     const indexPath = join(outDir, "index.html");
-    const html = readFileSync(indexPath, "utf8");
+    const html = readFileSync(join(options.bundleDir, "index.html"), "utf8");
     // The `diagnoses` key is omitted entirely when no exported run has one.
     const inline: InlineData = {
       meta,
-      runs: inlineRuns,
-      reports: inlineReports,
-      ...(Object.keys(inlineDiagnoses).length > 0 ? { diagnoses: inlineDiagnoses } : {}),
+      runs: options.mode === "hosted" ? {} : inlineRuns,
+      reports: options.mode === "hosted" ? {} : inlineReports,
+      ...(options.mode !== "hosted" && Object.keys(inlineDiagnoses).length > 0 ? { diagnoses: inlineDiagnoses } : {}),
     };
-    writeFileSync(indexPath, inlineDataIntoHtml(html, inline), "utf8");
+    atomicWrite(indexPath, inlineDataIntoHtml(html, inline), "utf8");
   }
 
   return { outDir, dataDir, runs: runs.length, attempts: attemptTotal, missingAssets };
+}
+
+/** Write complete bytes before exposing a new snapshot/pointer; reuse identical files. */
+function atomicWrite(path: string, value: string, _encoding?: string): void {
+  if (existsSync(path) && readFileSync(path, "utf8") === value) return;
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, value, "utf8"); renameSync(temporary, path);
 }

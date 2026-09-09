@@ -15,6 +15,7 @@
     "src",
     "ui/dist",
     "images",
+    "examples",
     "README.md",
     "LICENSE"
   ],

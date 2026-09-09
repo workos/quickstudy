@@ -12,6 +12,7 @@ import type { DataMeta } from "../../../src/export-types.ts";
 import { displayPassAtK } from "../../../src/report/pass-at-k.ts";
 import type { ReportGroup, ReportJson, ReportPair } from "../../../src/report/report.ts";
 import { formatAgentLabel } from "../agent-label.ts";
+import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { StatBadge } from "../components/StatBadge.tsx";
 import { ExperimentUsageSummary } from "../components/SurfaceUsage.tsx";
@@ -152,6 +153,7 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
 
   return (
     <div data-testid="report-view">
+      <PublicationNotice coverage={report.value.publication} />
       <div className="page-head">
         <div>
           <h1>Run report</h1>
@@ -179,7 +181,7 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
 
       {value.incomplete && (
         <div className="notice" data-testid="incomplete-banner">
-          ⚠️ INCOMPLETE RUN — this run never finished. Numbers below are partial and NOT comparable to a full sweep.
+          ⚠️ INCOMPLETE RUN — unfinished run or invalid trial coverage. Numbers below are partial and NOT comparable to a full sweep.
         </div>
       )}
 

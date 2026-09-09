@@ -9,9 +9,8 @@
  *   - allowed path: an allowlisted host is reachable THROUGH the proxy
  *     (and still is after a sidecar restart), a non-allowlisted one is not.
  *
- * (The legacy per-attempt egress-denials.log artifact and the
- * `egress_no_route` fail reason died with the v2 orchestrator; the proxy's
- * own denial-event shape is still covered by tests/proxy.test.ts.)
+ * Per-attempt egress-denials.log evidence is persisted before teardown; the proxy's
+ * own denial-event shape is still covered by tests/proxy.test.ts.
  *
  * The suite SKIPS (loudly) without a daemon, the alpine test image, or a
  * built quickstudy/egress-proxy image: `quickstudy images build` first.
@@ -36,6 +35,7 @@ import {
   startEgressSidecar,
 } from "../src/isolation/docker.ts";
 import { EGRESS_PROXY_IMAGE } from "../src/isolation/images.ts";
+import { buildReport } from "../src/report/report.ts";
 import { planRun } from "../src/plan.ts";
 import { executeRunV3 } from "../src/runner/execute.ts";
 import { ArtifactsStore } from "../src/store/artifacts.ts";
@@ -62,6 +62,7 @@ if (!enabled) {
     `\n⚠️  SKIPPING egress e2e tests — ${reason}.\n   Fix that and re-run \`bun test egress\` to cover the egress-proxy contract.\n`,
   );
 }
+if (!enabled && process.env.QUICKSTUDY_REQUIRE_DOCKER === "1") throw new Error("Docker egress gate requires daemon and images");
 const describeEgress = enabled ? describe : describe.skip;
 
 const silent = () => {};
@@ -193,6 +194,13 @@ describeEgress("egress proxy e2e (docker)", () => {
           allowlist: ["harness-default.example", "pack-contributed.example"],
         });
 
+        const evidence = readFileSync(artifacts.paths(summary.runId, attempt.id).egressDenials, "utf8");
+        expect(evidence).toContain('"host":"denied.example"');
+        expect(evidence).toContain(attempt.id);
+        const report = buildReport({ store, runId: summary.runId, resultsDir: artifacts.rootDir });
+        expect(report.egress_denials[0]?.top_hosts).toEqual([{ host: "denied.example", count: 1 }]);
+        expect(report.egress_observation?.available).toEqual([attempt.id]);
+
         // Verifiable teardown: no run-labeled networks or sidecars remain.
         expect(await listRunNetworks()).toEqual([]);
         expect(await listRunContainers()).toEqual([]);
@@ -287,4 +295,27 @@ describeEgress("egress proxy e2e (docker)", () => {
     },
     E2E_TIMEOUT,
   );
+});
+
+describeEgress("per-pair policy separation", () => {
+  test("two policies together keep the same decisions as alone, with correctly attributed artifacts", async () => {
+    const { store, artifacts } = makeStores();
+    try {
+      const evals = discoverEgressEval();
+      const first = egressExperiment();
+      first.experiment = { ...first.experiment, id: "allow-a", runtime: { kind: "container", image: TEST_IMAGE, egressHosts: () => ["a.example"], command: ["sh", "-c", "wget -T 1 -q -O- http://a.example/ || true; wget -T 1 -q -O- http://b.example/ || true; echo done > proof.txt"] } };
+      const second = { ...first, experiment: { ...first.experiment, id: "allow-b", runtime: { ...first.experiment.runtime, egressHosts: () => ["b.example"] } } };
+      const together = await executeRunV3({ evals, experiments: [first, second], plan: planRun(evals, [first.experiment, second.experiment], 1), store, artifacts, egressProxy: true, concurrency: 2, log: silent });
+      for (const attempt of store.listAttempts(together.runId)) {
+        const expected = attempt.experimentId === "allow-a" ? "b.example" : "a.example";
+        const lines = readFileSync(artifacts.paths(together.runId, attempt.id).egressDenials, "utf8");
+        const events = lines.trim().split("\n").map((line) => JSON.parse(line));
+        expect(events.map((e) => e.host)).toEqual([expected]);
+        expect(events.every((e) => e.attempt_id === attempt.id)).toBe(true);
+      }
+      const alone = await executeRunV3({ evals, experiments: [first], plan: planRun(evals, [first.experiment], 1), store, artifacts, egressProxy: true, concurrency: 2, log: silent });
+      const bothIdentity = store.listAttempts(together.runId).find((a) => a.experimentId === first.experiment.id)!.attemptIdentityHash;
+      expect(store.listAttempts(alone.runId)[0]!.attemptIdentityHash).toBe(bothIdentity);
+    } finally { store.close(); }
+  }, E2E_TIMEOUT);
 });

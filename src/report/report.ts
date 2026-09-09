@@ -24,8 +24,10 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { hashString } from "../hash.ts";
+import { publicationCoverage, trialCoverage, type PairCoverage, type PublicationCoverage } from "../completeness.ts";
 import type { ComparisonGroup } from "../experiments/groups.ts";
-import type { AttemptRecord, ResultsStore, RunRecord } from "../store/db.ts";
+import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord } from "../store/db.ts";
 import type { SurfaceUsage } from "../surface-usage.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 
@@ -37,7 +39,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 5;
+export const REPORT_SCHEMA_VERSION = 6;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -206,10 +208,16 @@ export interface ReportJson {
   schema_version: number;
   generated_at: string;
   run: ReportRunInfo;
-  /** The run row never finished — every number is partial. */
+  /** Unfinished run or missing/invalid trial coverage. */
   incomplete: boolean;
+  /** Added in schema 6; historical reports retain their recorded semantics. */
+  coverage?: PairCoverage[];
+  source_fingerprint?: string;
+  publication?: PublicationCoverage & { source_totals: ReportTotals; source_incomplete: boolean };
+  retry_history?: Array<{ attempt_id: string; status: string; error: string | null }>;
   totals: ReportTotals;
   telemetry: ReportTelemetry;
+  judge_telemetry?: { provenance: "semantic-judge"; calls: number; tokens_in: number | null; tokens_out: number | null; cost_usd: number | null };
   /**
    * Per-experiment identity cards (model, reasoning, adapter, ...). Optional
    * on the wire: absent in schema_version < 4 artifacts, which the export
@@ -220,6 +228,8 @@ export interface ReportJson {
   groups: ReportGroup[];
   usage: ReportExperimentUsage[];
   egress_denials: EgressDenialSummary[];
+  /** v6: empty denial logs are observed zero; absent logs are unavailable. */
+  egress_observation?: { available: string[]; unavailable: string[] };
   methodology: string;
 }
 
@@ -475,6 +485,7 @@ function collectEgressDenials(resultsDir: string, runId: string, attempts: Attem
 }
 
 export interface BuildReportOptions {
+  expectedTrials?: number;
   store: ResultsStore;
   runId: string;
   /** Artifacts root (the harness `--results` dir) — egress denial logs live here. */
@@ -496,7 +507,12 @@ export function buildReport(options: BuildReportOptions): ReportJson {
       `no run "${runId}" in this results database${known.length > 0 ? `; most recent runs:\n${known.join("\n")}` : ""}`,
     );
   }
-  const attempts = store.listAttempts(runId);
+  const history = store.listAttempts(runId);
+  const current = activeAttempts(history);
+  const coverage = trialCoverage(run, current);
+  const publication = options.expectedTrials === undefined ? undefined : publicationCoverage(run, current, options.expectedTrials);
+  if (publication && publication.eligible.length === 0) throw new ReportError(`no eligible complete samples for run ${runId}: ${publication.omitted.map((p) => `${p.eval_id} × ${p.experiment_id}: ${p.reasons.join("; ")}`).join(" | ")}`);
+  const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
   const pairs = collectPairs(attempts);
 
   const methodology = methodologyNote(run.config.trials);
@@ -517,14 +533,23 @@ export function buildReport(options: BuildReportOptions): ReportJson {
       experiment_ids: [...run.config.experimentIds],
       manifest_hash: run.manifestHash,
     },
-    incomplete: run.finishedAt === null,
+    incomplete: publication ? false : run.finishedAt === null || coverage.length === 0 || coverage.some((pair) => !pair.complete),
+    source_fingerprint: hashString(JSON.stringify({ manifest: run.manifestHash, finishedAt: run.finishedAt, trials: run.config.trials, evals: run.config.evalIds, experiments: run.config.experimentIds, history: history.map(({ transcriptRef, diffRef, ...row }) => ({ ...row, transcript: Boolean(transcriptRef), diff: Boolean(diffRef) })) })),
+    ...(publication ? { publication: { ...publication, source_totals: collectTotals(current), source_incomplete: run.finishedAt === null || coverage.some((p) => !p.complete) } } : {}),
+    coverage,
+    retry_history: history.filter((a) => !current.includes(a)).map((a) => ({ attempt_id: a.id, status: a.status, error: a.error })),
     totals: collectTotals(attempts),
     telemetry: collectTelemetry(attempts),
+    judge_telemetry: collectJudgeTelemetry(attempts),
     experiments: collectExperiments(run),
     pairs,
     groups: collectGroups(run, pairs),
     usage: collectUsage(run, attempts),
     egress_denials: collectEgressDenials(options.resultsDir, runId, attempts),
+    egress_observation: {
+      available: attempts.filter((a) => existsSync(join(options.resultsDir, runId, a.id, "egress-denials.log"))).map((a) => a.id),
+      unavailable: attempts.filter((a) => !existsSync(join(options.resultsDir, runId, a.id, "egress-denials.log"))).map((a) => a.id),
+    },
     methodology,
   };
 }
@@ -543,7 +568,10 @@ export function renderReportText(report: ReportJson): string {
   lines.push(`run ${report.run.id}`);
   lines.push(`  started:  ${report.run.started_at}`);
   if (report.incomplete) {
-    lines.push(`  finished: INCOMPLETE — this run never finished; treat every number below as partial`);
+    lines.push(`  finished: INCOMPLETE — unfinished run or invalid trial coverage; treat every number below as partial`);
+    for (const pair of report.coverage ?? []) {
+      if (!pair.complete) lines.push(`    ${pair.eval_id} × ${pair.experiment_id}: ${pair.reasons.join("; ")}`);
+    }
   } else {
     lines.push(`  finished: ${report.run.finished_at}`);
   }
@@ -565,6 +593,12 @@ export function renderReportText(report: ReportJson): string {
     lines.push("");
   }
 
+  if (report.retry_history?.length) lines.push(`prior retry history: ${report.retry_history.length} unsuccessful executions retained in the source artifacts`);
+  if (report.publication) {
+    lines.push(`complete-sample publication: ${report.publication.eligible.length} eligible pair(s), ${report.publication.omitted.length} omitted; expected ${report.publication.expected_trials} trials`);
+    lines.push(`source attempts: ${report.publication.source_totals.attempts}, including ${report.publication.source_totals.incomplete} incomplete and ${report.publication.source_totals.errors} errors`);
+    for (const pair of report.publication.omitted) lines.push(`  omitted ${pair.eval_id} × ${pair.experiment_id}: ${pair.reasons.join("; ")}`);
+  }
   const t = report.totals;
   lines.push(`attempts: ${t.attempts} — ${t.passed} passed, ${t.failed} failed, ${t.incomplete} incomplete, ${t.errors} errored`);
   const tel = report.telemetry;
@@ -685,4 +719,13 @@ export function readReportJson(resultsDir: string, runId: string): ReportJson {
         `re-generate it with \`quickstudy report ${runId}\``,
     );
   }
+}
+
+function collectJudgeTelemetry(attempts: AttemptRecord[]): NonNullable<ReportJson["judge_telemetry"]> {
+  const records = attempts.flatMap((a) => a.result?.judgments ?? a.judgeRecords ?? []);
+  const sum = (key: "tokensIn" | "tokensOut" | "costUsd") => {
+    const available = records.map((r) => r[key]).filter((v): v is number => v !== null);
+    return available.length ? available.reduce((a, b) => a + b, 0) : null;
+  };
+  return { provenance: "semantic-judge", calls: records.length, tokens_in: sum("tokensIn"), tokens_out: sum("tokensOut"), cost_usd: sum("costUsd") };
 }

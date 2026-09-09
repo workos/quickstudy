@@ -5,7 +5,7 @@ export const EMBEDDED_BUILD_INFO: {
   dirty: boolean | null;
   sourceHash: string | null;
 } = {
-  version: "1.1.0",
+  version: "0.1.0",
   revision: null,
   dirty: null,
   sourceHash: null,

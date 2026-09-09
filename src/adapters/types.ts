@@ -48,6 +48,8 @@ export interface AttemptMetrics {
 
 /** Everything a host adapter gets for one attempt. */
 export interface AttemptContext {
+  /** Aborted when the current stage expires. Implementations must stop work. */
+  signal?: AbortSignal;
   runId: string;
   attemptId: string;
   /** Absolute path to the directory holding the attempt's starting state. */

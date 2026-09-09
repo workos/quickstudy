@@ -286,3 +286,12 @@ export function extractSurfaceUsage(
 
   return usage;
 }
+
+/** Observe offered surfaces plus explicitly shared targets, without changing offered state. */
+export function observationConfig(offered: SurfaceUsageConfig, targets?: SurfaceUsageConfig): SurfaceUsageConfig {
+  return {
+    docsHosts: [...new Set([...(offered.docsHosts ?? []), ...(targets?.docsHosts ?? [])])].sort(),
+    cliCommands: [...new Set([...(offered.cliCommands ?? []), ...(targets?.cliCommands ?? [])])].sort(),
+    mcpServers: [...new Set([...(offered.mcpServers ?? []), ...(targets?.mcpServers ?? [])])].sort(),
+  };
+}

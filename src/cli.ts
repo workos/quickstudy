@@ -76,7 +76,7 @@ Usage:
     [--experiments-root <dir>]            Experiments root (default: experiments)
     [--suite <s>]... [--framework <f>]... Metadata filters applied before planning
     [--trials <n>]                        Trials per eval × experiment pair (default: 3)
-    [--egress-proxy]                      Route container egress through the per-run allowlist proxy
+    [--egress-proxy]                      Route container egress through the per-attempt allowlist proxy
     [--db <path>] [--results <dir>]       Stores (default: results.db, results/)
   quickstudy clean                        Remove all quickstudy-labeled containers and networks
   quickstudy images build [--pull]        Build the agent-runtime, egress-proxy and mcp-proxy images
@@ -102,11 +102,11 @@ Usage:
 
 const COMMAND_HELP: Record<string, string> = {
   validate: `Usage: quickstudy validate [--evals-root <dir>] [--experiments-root <dir>]\n\nDiscover and validate the evals root (frontmatter, scorer default exports)\nand the experiments root (defineExperiment shapes, comparison groups).\nDefaults: evals, experiments.`,
-  run: `Usage: quickstudy run [--eval <id>...] [--experiment <id>...] [options]\n\nExecute the selected eval × experiment pairs. Omit --eval to select every\ndiscovered eval; omit --experiment to select every discovered experiment.\n\nOptions:\n  --eval <id>... --experiment <id>...\n  --evals-root <dir> --experiments-root <dir>   (defaults: evals, experiments)\n  --suite <s>... --framework <f>...\n  --trials <n> --egress-proxy\n  --db <path> --results <dir>`,
+  run: `Usage: quickstudy run [--eval <id>...] [--experiment <id>...] [options]\n\nExecute the selected eval × experiment pairs. Omit --eval to select every\ndiscovered eval; omit --experiment to select every discovered experiment.\n\nOptions:\n  --eval <id>... --experiment <id>...\n  --evals-root <dir> --experiments-root <dir>   (defaults: evals, experiments)\n  --suite <s>... --framework <f>...\n  --trials <n> --egress-proxy\n  --concurrency <n> --seed <value>             (default concurrency: 1)\n  --resume <run-id> --retry-unfinished        (explicit error/timeout retries)\n  --provision-ms <n> --agent-ms <n> --score-ms <n>\n  --export-ms <n> --cleanup-ms <n>\n  --db <path> --results <dir>`,
   report: `Usage: quickstudy report <run-id> [options]\n\nBuild report.json into the results dir and print the text report\n(pass \`--latest\` to pick the most recent run; \`--json\` prints the JSON).\n\nOptions:\n  --latest --json --strict\n  --strict exits non-zero for incomplete runs or any attempt error\n  --db <path> --results <dir>`,
   diagnose: `Usage: quickstudy diagnose <run-id> [options]\n\nSend each failing (eval × experiment) pair's harness-selected evidence to a\nstructured model call and write diagnosis.json beside report.json\n(pass \`--latest\` to pick the most recent run). Findings are hypotheses with\nevidence links — never verdicts. Requires ANTHROPIC_API_KEY; override the\nanalyst model with QUICKSTUDY_ANALYST_MODEL.\n\nOptions:\n  --latest\n  --db <path> --results <dir>`,
   clean: `Usage: quickstudy clean\n\nRemove quickstudy-labeled containers, networks, and sidecars.`,
-  export: `Usage: quickstudy export <run-id>... [options]\n\nBuild a self-contained static site.\n\nOptions:\n  --runs <a,b|all> --out <dir> --db <path> --results <dir>`,
+  export: `Usage: quickstudy export <run-id>... [options]\n\nBuild a self-contained static site.\n\nOptions:\n  --runs <a,b|all> --out <dir> --db <path> --results <dir>\n  --mode <offline|hosted>                    (default: offline)\n  --expected-trials <n>                      Publish fully sampled pairs; fail if none\n                                             Writes omissions and retains source diagnostics`,
   ui: `Usage: quickstudy ui [options]\n\nExport stored runs to a temporary directory and serve the local UI.\n\nOptions:\n  --runs <a,b> --port <n> --watch --db <path> --results <dir>`,
 };
 
@@ -213,6 +213,24 @@ async function commandRun(args: string[]): Promise<void> {
   } catch (err) {
     fail(`run: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}`);
   }
+  if (values.resume) {
+    const resumeStore = new ResultsStore(values.db);
+    try {
+      const previous = resumeStore.getRun(values.resume);
+      if (!previous) fail(`run: no run "${values.resume}" to resume`);
+      const supplied = (flag: string) => args.some((arg) => arg === flag || arg.startsWith(`${flag}=`));
+      if (!supplied("--trials")) values.trials = String(previous.config.trials);
+      if (!supplied("--eval")) values.eval = previous.config.evalIds;
+      if (!supplied("--experiment")) values.experiment = previous.config.experimentIds;
+      if (!supplied("--evals-root")) values["evals-root"] = previous.config.evalsRoot ?? values["evals-root"];
+      if (!supplied("--experiments-root")) values["experiments-root"] = previous.config.experimentsRoot ?? values["experiments-root"];
+      if (!supplied("--egress-proxy")) values["egress-proxy"] = previous.config.egress?.proxy ?? false;
+      const budgets = Object.values(previous.manifest.pairs ?? {})[0]?.budgets;
+      for (const [flag, key] of [["provision-ms", "provisionMs"], ["agent-ms", "agentMs"], ["score-ms", "scoreMs"], ["export-ms", "exportMs"], ["cleanup-ms", "cleanupMs"]] as const) {
+        if (!supplied(`--${flag}`) && budgets) values[flag] = String(budgets[key]);
+      }
+    } finally { resumeStore.close(); }
+  }
   const trials = parsePositiveInt(values.trials, "--trials");
   const evalsRoot = values["evals-root"];
   const experimentsRoot = values["experiments-root"];
@@ -270,6 +288,9 @@ async function commandRun(args: string[]): Promise<void> {
 
   const store = new ResultsStore(values.db);
   const artifacts = new ArtifactsStore(values.results);
+  const cancellation = new AbortController();
+  const interrupt = () => cancellation.abort(new Error("run interrupted"));
+  process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
   try {
     const summary = await executeRunV3({
       evals,
@@ -278,6 +299,14 @@ async function commandRun(args: string[]): Promise<void> {
       store,
       artifacts,
       egressProxy: values["egress-proxy"],
+      ...(values.resume ? { resumeRunId: values.resume } : {}),
+      retryUnfinished: values["retry-unfinished"],
+      ...(values.concurrency ? { concurrency: parsePositiveInt(values.concurrency, "--concurrency") } : {}),
+      ...(values.seed !== undefined ? { seed: values.seed } : {}),
+      signal: cancellation.signal,
+      budgets: Object.fromEntries([["provision-ms", "provisionMs"], ["agent-ms", "agentMs"], ["score-ms", "scoreMs"], ["export-ms", "exportMs"], ["cleanup-ms", "cleanupMs"]].flatMap(([flag, key]) => {
+        const value = values[flag as keyof RunFlags]; return typeof value === "string" ? [[key, parsePositiveInt(value, `--${flag}`)]] : [];
+      })),
       config: { trials, evalsRoot, experimentsRoot },
     });
     console.log(
@@ -285,8 +314,9 @@ async function commandRun(args: string[]): Promise<void> {
         `${summary.incomplete} incomplete, ${summary.errors} errored`,
     );
     console.log(`  results: ${values.db} + ${values.results}/${summary.runId}/`);
-    if (summary.errors > 0) process.exitCode = 1;
+    if (summary.errors > 0 || summary.incomplete > 0) process.exitCode = 1;
   } finally {
+    process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt);
     store.close();
   }
 }
@@ -502,7 +532,7 @@ function collectRunIds(positionals: string[], runsFlag: string | undefined): str
 }
 
 async function commandExport(args: string[]): Promise<void> {
-  let values: { runs?: string; out: string; db: string; results: string };
+  let values: { runs?: string; out: string; db: string; results: string; mode: string; "expected-trials"?: string };
   let positionals: string[];
   try {
     ({ values, positionals } = parseArgs({
@@ -511,6 +541,8 @@ async function commandExport(args: string[]): Promise<void> {
       options: {
         runs: { type: "string" },
         out: { type: "string", default: "site" },
+        mode: { type: "string", default: "offline" },
+        "expected-trials": { type: "string" },
         db: { type: "string", default: "results.db" },
         results: { type: "string", default: "results" },
       },
@@ -540,13 +572,17 @@ async function commandExport(args: string[]): Promise<void> {
       resultsDir: values.results,
       runIds,
       outDir: values.out,
+      mode: values.mode === "hosted" || values.mode === "offline" ? values.mode : fail("export --mode must be hosted or offline"),
+      ...(values["expected-trials"] ? { expectedTrials: parsePositiveInt(values["expected-trials"], "--expected-trials") } : {}),
       bundleDir,
     });
     console.log(
       `exported ${summary.runs} run(s), ${summary.attempts} attempt(s) -> ${summary.outDir}` +
         (summary.missingAssets > 0 ? ` (${summary.missingAssets} missing artifact(s) skipped)` : ""),
     );
-    console.log(`open ${join(summary.outDir, "index.html")} — or host the directory anywhere static`);
+    console.log(values.mode === "hosted"
+      ? `serve ${summary.outDir} with a static server to open this hosted export`
+      : `open ${join(summary.outDir, "index.html")} — or host the directory anywhere static`);
   } finally {
     store.close();
   }
@@ -593,7 +629,7 @@ async function commandUi(args: string[]): Promise<void> {
             "  Get started: quickstudy run --eval <id> --experiment <id>",
         );
       }
-      const summary = await exportSite({ store, resultsDir: values.results, runIds, outDir, bundleDir });
+      const summary = await exportSite({ store, resultsDir: values.results, runIds, outDir, bundleDir, mode: "hosted" });
       console.log(`exported ${summary.runs} run(s), ${summary.attempts} attempt(s) -> ${outDir}`);
     } finally {
       store.close();
@@ -635,6 +671,15 @@ interface ReportFlags {
 }
 
 interface RunFlags {
+  resume?: string;
+  concurrency?: string;
+  seed?: string;
+  "retry-unfinished": boolean;
+  "provision-ms"?: string;
+  "agent-ms"?: string;
+  "score-ms"?: string;
+  "export-ms"?: string;
+  "cleanup-ms"?: string;
   eval?: string[];
   experiment?: string[];
   "evals-root": string;
@@ -651,6 +696,12 @@ function parseRunFlags(args: string[]): RunFlags {
   const { values } = parseArgs({
     args,
     options: {
+      resume: { type: "string" },
+      concurrency: { type: "string" },
+      seed: { type: "string" },
+      "retry-unfinished": { type: "boolean", default: false },
+      "provision-ms": { type: "string" }, "agent-ms": { type: "string" },
+      "score-ms": { type: "string" }, "export-ms": { type: "string" }, "cleanup-ms": { type: "string" },
       eval: { type: "string", multiple: true },
       experiment: { type: "string", multiple: true },
       "evals-root": { type: "string", default: "evals" },

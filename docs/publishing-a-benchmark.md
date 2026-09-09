@@ -187,3 +187,26 @@ any operator-only acceptance results. If you rank agents, use only the
 identical intersection of fully completed pairs for every agent shown, and
 disclose the union, intersection, coverage rate, and every omitted
 coordinate.
+
+## Resuming and publishing a complete sample
+
+For v4 runs, `quickstudy run --resume RUN_ID` verifies the recorded source and
+execution identity, runs missing coordinates, and preserves completed failures.
+Add `--retry-unfinished` only when you intend to retry errors/timeouts; their
+original evidence remains in the retry history.
+
+`quickstudy report RUN_ID --strict` checks distinct planned trial indexes and
+valid scored outcomes. A timeout-only or missing-trial run fails this gate;
+a fully scored failed task is still a valid measurement.
+
+Use `quickstudy export RUN_ID --expected-trials N --mode hosted --out site`
+for explicit complete-sample publication. It excludes incomplete pairs, uses
+identical complete eval coverage across comparison arms, and writes omission
+lists plus source diagnostics. An empty eligible set fails. Retain an ordinary
+export of the source run alongside selective publication. Historical v3 runs
+remain readable but cannot attest the stronger identity required by this mode.
+
+Hosted exports fetch run snapshots on demand and require a static server.
+`--mode offline` embeds run/report/diagnosis data for file sharing; transcript
+and diff viewing still needs a server. See [extension and execution contracts](extensions.md)
+for budgets, policy evidence, telemetry limits, and source fingerprinting.

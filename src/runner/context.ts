@@ -16,6 +16,9 @@ import { relative, resolve } from "node:path";
 import type { EvalContext, EvalExecResult } from "../evals/types.ts";
 
 export interface BuildEvalContextOptions {
+  signal?: AbortSignal;
+  agentOutput?: EvalContext["agentOutput"];
+  redact?: EvalContext["redact"];
   evalId: string;
   experimentId: string;
   trialIndex: number;
@@ -40,16 +43,19 @@ function insideWorkspace(workspaceDir: string, path: string): string {
   return abs;
 }
 
-async function hostExec(cwd: string, cmd: string[], opts?: { timeoutMs?: number }): Promise<EvalExecResult> {
+async function hostExec(cwd: string, cmd: string[], opts?: { timeoutMs?: number }, signal?: AbortSignal): Promise<EvalExecResult> {
   const [command, ...args] = cmd;
   if (command === undefined) throw new Error("exec: command must not be empty");
-  const proc = Bun.spawn([command, ...args], { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn([command, ...args], { cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe", detached: true });
+  const kill = () => { try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); } };
+  signal?.addEventListener("abort", kill, { once: true });
+  if (signal?.aborted) kill();
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   if (opts?.timeoutMs !== undefined) {
     timer = setTimeout(() => {
       timedOut = true;
-      proc.kill();
+      kill();
     }, opts.timeoutMs);
   }
   const [stdout, stderr, exitCode] = await Promise.all([
@@ -58,12 +64,16 @@ async function hostExec(cwd: string, cmd: string[], opts?: { timeoutMs?: number 
     proc.exited,
   ]);
   if (timer !== undefined) clearTimeout(timer);
+  signal?.removeEventListener("abort", kill);
   return { exitCode, stdout, stderr, timedOut };
 }
 
 export function buildEvalContext(options: BuildEvalContextOptions): EvalContext {
   const { workspaceDir } = options;
   return {
+    signal: options.signal,
+    ...(options.agentOutput ? { agentOutput: options.agentOutput } : {}),
+    ...(options.redact ? { redact: options.redact } : {}),
     evalId: options.evalId,
     experimentId: options.experimentId,
     trialIndex: options.trialIndex,
@@ -71,7 +81,7 @@ export function buildEvalContext(options: BuildEvalContextOptions): EvalContext 
     workspaceDir,
     fileExists: (path) => Promise.resolve(existsSync(insideWorkspace(workspaceDir, path))),
     readFile: (path) => readFile(insideWorkspace(workspaceDir, path), "utf8"),
-    exec: options.exec ?? ((cmd, opts) => hostExec(workspaceDir, cmd, opts)),
+    exec: (cmd, opts) => { options.signal?.throwIfAborted(); return options.exec ? options.exec(cmd, opts) : hostExec(workspaceDir, cmd, opts, options.signal); },
     query:
       options.query ??
       (() => {

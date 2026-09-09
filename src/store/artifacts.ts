@@ -20,12 +20,12 @@
  * agent actually did.
  */
 
-import { cp, mkdir, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { cp, mkdir, writeFile, lstat, realpath, readlink } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import type { TranscriptEvent } from "../adapters/types.ts";
 
 /** Dependency directories never copied into an exported workspace. */
-export const EXCLUDED_WORKSPACE_DIRS: readonly string[] = ["node_modules", "vendor", ".venv"];
+export const EXCLUDED_WORKSPACE_DIRS: readonly string[] = ["node_modules", "vendor", ".venv", ".git", ".next", ".cache", "__pycache__"];
 
 export interface AttemptArtifactPaths {
   attemptDir: string;
@@ -129,9 +129,17 @@ export class ArtifactsStore {
    */
   async exportWorkspace(runId: string, attemptId: string, sourceDir: string): Promise<string> {
     const paths = await this.prepareAttempt(runId, attemptId);
+    const canonicalSource = await realpath(sourceDir);
     await cp(sourceDir, paths.workspace, {
       recursive: true,
-      filter: (source) => !EXCLUDED_WORKSPACE_DIRS.includes(basename(source)),
+      verbatimSymlinks: true,
+      filter: async (source) => {
+        if (EXCLUDED_WORKSPACE_DIRS.includes(basename(source)) || /^\.env(?:\.|$)/.test(basename(source))) return false;
+        if (!(await lstat(source)).isSymbolicLink()) return true;
+        if ((await readlink(source)).startsWith("/")) return false;
+        const destination = await realpath(source).catch(() => "");
+        return destination.startsWith(`${canonicalSource}/`) || destination === resolve(canonicalSource);
+      },
     });
     return paths.workspace;
   }

@@ -262,13 +262,14 @@ describeDocker("docker isolation", () => {
         fixtureDir: makeFixture(),
       });
       try {
-        const slow = await container.execInWorkspace(["sleep", "30"], { timeoutMs: 1_500 });
-        expect(slow.timedOut).toBeTrue();
-
         const bad = await container.execInWorkspace(["sh", "-c", "echo boom >&2; exit 3"]);
         expect(bad.exitCode).toBe(3);
         expect(bad.stderr).toContain("boom");
         expect(bad.timedOut).toBeFalse();
+        const slow = await container.execInWorkspace(["sleep", "30"], { timeoutMs: 1_500 });
+        expect(slow.timedOut).toBeTrue();
+        // Timeout stops the sandbox, including descendants; it is no longer reusable.
+        expect((await container.execInWorkspace(["true"])).exitCode).not.toBe(0);
       } finally {
         await container.teardown();
       }

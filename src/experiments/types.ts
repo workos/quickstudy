@@ -6,6 +6,7 @@
  * manifest), so nothing may mutate it after definition.
  */
 
+import type { SurfaceUsageConfig } from "../surface-usage.ts";
 import type { RuntimeCapabilities } from "../runtime/types.ts";
 
 /** Which agent executes the attempt, plus the identity fields recorded in the manifest. */
@@ -32,6 +33,15 @@ export interface AgentSpec {
  */
 export interface Runtime extends RuntimeCapabilities {
   kind: "host" | "container";
+  /** Shared observation targets, independent of which surfaces this arm offers. */
+  observationTargets?: SurfaceUsageConfig;
+  /** Shared scarce resource pool; scheduler waits instead of starting doomed jobs. */
+  capacity?: { key: string; limit: number };
+  /** Explicit environment fields the declared treatment may vary in a comparison.
+   * Images and lifecycle budgets can never be exempted. All group members must
+   * declare the same fields. Source/config identity still changes per attempt.
+   */
+  treatmentPolicyFields?: Array<"egress" | "webPolicy" | "pathTreatment" | "mcp">;
   /** Container image tag (container runtimes; alternative to `containerImage`). */
   image?: string;
   /** Scripted command run in /workspace (container runtimes, this phase). */

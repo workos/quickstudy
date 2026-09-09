@@ -25,6 +25,7 @@ import type { InventoryEntry } from "../scripts/docs-smoke.ts";
 const FROM_SOURCE = "bun src/cli.ts";
 
 export const INVENTORY: InventoryEntry[] = [
+  { doc: "examples/harbor-notes/README.md", match: "bun scripts/portable-smoke.ts", classification: "needs-docker", note: "Required zero-key consumer acceptance: bun scripts/portable-smoke.ts" },
   // ── README.md ────────────────────────────────────────────────────────────
   {
     doc: "README.md",

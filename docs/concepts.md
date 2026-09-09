@@ -172,7 +172,7 @@ report is preserved by keeping diagnosis a separate, clearly-labeled layer.
 Each container attempt runs in its own throwaway Docker container: the eval's
 `local/` tree is copied in, the finished workspace is exported for scoring,
 and the container is destroyed afterward. With `--egress-proxy` the attempt
-has no default route and must reach the internet through a per-run allowlist
+has no default route and must reach the internet through a per-attempt allowlist
 proxy, so you can both contain a misbehaving agent and observe what it tried
 to reach.
 
@@ -208,3 +208,5 @@ exactly what a negative control should do.
 
 Next: [Getting started](./getting-started.md) ·
 [Writing an eval](./writing-an-eval.md)
+
+Comparison groups match declared configuration; they do not establish causation or remove timing/environment confounds. Compare shows arms within one run; there is no cross-run Compare or trend view. See [current identity, completeness and delivery contracts](extensions.md).

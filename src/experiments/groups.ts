@@ -22,6 +22,7 @@
  * (kind/image/command/config) so the diff can name the differing key.
  */
 
+import { pairKey } from "../execution-policy.ts";
 import { diffIdentity, type IdentityMismatch } from "../identity-diff.ts";
 import type { RunManifest } from "../manifest.ts";
 import type { Experiment } from "./types.ts";
@@ -47,7 +48,14 @@ function comparableView(experiment: Experiment, manifest: RunManifest): Record<s
   const components = manifest.experiments[experiment.id]?.components;
   const config: Record<string, unknown> = { ...experiment.runtime.config };
   if (experiment.treatment !== undefined) delete config[experiment.treatment];
+  const environments = Object.fromEntries(Object.keys(manifest.evals).sort().map((evalId) => {
+    const value = { ...manifest.pairs?.[pairKey(evalId, experiment.id)] };
+    for (const field of experiment.runtime.treatmentPolicyFields ?? []) delete value[field];
+    return [evalId, value];
+  }));
   return {
+    environments,
+    treatmentPolicyFields: [...(experiment.runtime.treatmentPolicyFields ?? [])].sort(),
     agent: components?.agent ?? {
       adapter: experiment.agent.adapter,
       provider: experiment.agent.provider ?? "unspecified",
@@ -58,6 +66,7 @@ function comparableView(experiment: Experiment, manifest: RunManifest): Record<s
     image: components?.image ?? null,
     runtime: {
       kind: experiment.runtime.kind,
+      observationTargets: experiment.runtime.observationTargets ?? null,
       image: experiment.runtime.image ?? null,
       command: experiment.runtime.command ?? null,
       config,
