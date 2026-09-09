@@ -18,6 +18,7 @@ on:
         description: Existing v* tag whose release-please draft release to attach binaries to
         required: true
         type: string
+  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -89,8 +90,9 @@ jobs:
           fi
           echo "SOURCE_REF=$source_ref" >> "$GITHUB_ENV"
           echo "SOURCE_SHA=$actual" >> "$GITHUB_ENV"
-      - uses: workos/setup-socket-firewall@ca93dd8aa351f54f4729fe3377a9be23c631c25d
-        if: runner.os == 'Linux'
+      - name: Setup Socket Firewall
+        id: sfw
+        uses: workos/setup-socket-firewall@ca93dd8aa351f54f4729fe3377a9be23c631c25d
         with:
           token: ${{ secrets.SOCKET_FIREWALL_TOKEN }}
           configure-bun: true
@@ -100,6 +102,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Build standalone executable
         run: bun scripts/build-binary.ts --target "${{ matrix.target }}" --outfile "dist/${{ matrix.asset }}/quickstudy"
+      - name: Restore public package registry
+        if: ${{ always() && steps.sfw.outputs.active == 'true' }}
+        uses: workos/setup-socket-firewall/teardown@ca93dd8aa351f54f4729fe3377a9be23c631c25d
       - name: Smoke-test the executable outside the checkout
         shell: bash
         run: |
