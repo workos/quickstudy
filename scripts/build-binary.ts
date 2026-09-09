@@ -9,7 +9,7 @@
  * placeholder so the working tree stays clean.
  *
  * Usage:
- *   bun scripts/build-binary.ts [--target <bun-target>] [--outfile <path>]
+ *   bun scripts/build-binary.ts [--target <bun-target>] [--outfile <path>] [--compile-executable-path <path>]
  *
  * `--target` cross-compiles (e.g. bun-darwin-arm64, bun-linux-x64); omit it to
  * build for the host. Cross-compiled macOS binaries must be smoke-tested on
@@ -34,6 +34,7 @@ function flag(name: string, fallback: string): string {
 
 const target = flag("--target", "");
 const outfile = flag("--outfile", join(ROOT, "dist/quickstudy"));
+const compileExecutablePath = flag("--compile-executable-path", process.env.BUN_COMPILE_EXECUTABLE_PATH ?? "");
 
 // 1. Build the UI bundle (produces ui/dist/index.html).
 console.log("• building UI bundle (bun run ui:build)…");
@@ -93,6 +94,7 @@ try {
   mkdirSync(dirname(outfile), { recursive: true });
   const cmd = ["bun", "build", "--compile", "./src/cli.ts", "./src/runner/scorer-worker.ts", "--outfile", outfile];
   if (target) cmd.push(`--target=${target}`);
+  if (compileExecutablePath) cmd.push(`--compile-executable-path=${compileExecutablePath}`);
   console.log(`• ${cmd.join(" ")}`);
   failed = Bun.spawnSync(cmd, { cwd: ROOT, stdout: "inherit", stderr: "inherit" }).exitCode !== 0;
 } finally {
