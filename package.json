@@ -1,6 +1,6 @@
 {
-  "name": "quickstudy",
-  "version": "0.1.0",
+  "name": "@workos/quickstudy",
+  "version": "0.0.1",
   "description": "An open-source, company-agnostic eval harness for measuring whether coding agents can complete real integration tasks, across an agent x feature x framework x surface matrix.",
   "license": "MIT",
   "type": "module",
@@ -34,20 +34,20 @@
     "ui:dev-data": "bun scripts/make-dev-data.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.121.0",
+    "@anthropic-ai/sdk": "^0.124.0",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@types/bun": "^1.4.0",
+    "@playwright/test": "^1.63.0",
+    "@types/bun": "^1.4.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^6.1.0",
-    "oxlint": "^1.80.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.82.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   }
 }
