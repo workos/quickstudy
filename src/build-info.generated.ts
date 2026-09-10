@@ -5,7 +5,11 @@ export const EMBEDDED_BUILD_INFO: {
   dirty: boolean | null;
   sourceHash: string | null;
 } = {
-  version: "0.1.0",
+  // release-please's generic updater bumps this semver on the release PR
+  // (the `x-release-please-version` marker anchors the replacement). It is
+  // restored as-is after a binary build (scripts/build-binary.ts), so the
+  // committed source `--version` stays in lockstep with package.json.
+  version: "0.0.1", // x-release-please-version
   revision: null,
   dirty: null,
   sourceHash: null,

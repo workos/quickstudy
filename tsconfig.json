@@ -4,6 +4,19 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
+    // The harness ships under a scoped package name, but consumer
+    // eval/experiment modules import the bare specifier "quickstudy" (see
+    // src/cli.ts's quickstudy-self-resolution plugin, which serves that
+    // specifier inside the compiled binary at runtime). Package self-reference
+    // only works by the package.json `name`, so after the scoped rename this
+    // mapping makes the source tree (tsc + bun test) resolve "quickstudy" to
+    // the same entry point the `.` export and the runtime plugin expose. It
+    // is a dev-tree alias only — tsconfig.json is not in package.json
+    // `files`, so it never reaches the published tarball; distribution still
+    // relies on the plugin and the bin, verified by scripts/pack-check.sh.
+    "paths": {
+      "quickstudy": ["./src/index.ts"]
+    },
     "lib": ["ESNext"],
     "types": ["bun"],
 

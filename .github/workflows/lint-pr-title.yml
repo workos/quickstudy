@@ -1,0 +1,19 @@
+name: lint-pr-title
+
+# Metadata only, with a read-only token (including fork PRs); no checkout.
+# pull_request lets bot-created release PRs use GitHub's CI approval flow.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  lint:
+    name: lint-pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
