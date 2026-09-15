@@ -21,6 +21,10 @@ on:
         description: Existing v* tag whose release-please draft release to attach binaries to
         required: true
         type: string
+    secrets:
+      SOCKET_FIREWALL_TOKEN:
+        description: Forwarded to workos/setup-socket-firewall. A called workflow sees none of the caller's secrets unless passed.
+        required: true
   pull_request:
   workflow_dispatch:
     inputs:
