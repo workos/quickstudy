@@ -94,13 +94,16 @@ async function mustDocker(args: string[], opts: { timeoutMs?: number; stdin?: st
 }
 
 /**
- * `docker rm -f <id>`, idempotent: an already-removed container is success,
- * and so is a removal another caller already has in flight (a deadline kill
- * racing the attempt's final teardown) — the daemon finishes that one.
+ * `docker rm -f` stderr that still means "the container is gone": it was
+ * already removed, or another caller's removal is in flight (a deadline kill
+ * racing the attempt's final teardown) and the daemon will finish that one.
  */
+export const CONTAINER_GONE_STDERR = /no such container|already in progress/i;
+
+/** `docker rm -f <id>`, idempotent per CONTAINER_GONE_STDERR. */
 async function removeContainer(id: string): Promise<void> {
   const result = await runDocker(["rm", "-f", id]);
-  if (result.exitCode !== 0 && !/no such container|already in progress/i.test(result.stderr)) {
+  if (result.exitCode !== 0 && !CONTAINER_GONE_STDERR.test(result.stderr)) {
     throw new DockerError(["rm", "-f", id], result.exitCode, result.stderr);
   }
 }

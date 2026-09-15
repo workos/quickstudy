@@ -18,6 +18,7 @@ import type { ContainerAgentAdapter } from "../src/adapters/types.ts";
 import { discoverEvals } from "../src/evals/discovery.ts";
 import type { LoadedExperiment, Runtime } from "../src/experiments/types.ts";
 import {
+  CONTAINER_GONE_STDERR,
   createAttemptContainer,
   dockerDaemonReachable,
   imageExists,
@@ -409,6 +410,16 @@ describeDocker("docker isolation", () => {
     },
     LIFECYCLE_TIMEOUT,
   );
+});
+
+describe("container removal (no daemon required)", () => {
+  test("the daemon's two 'already gone' responses to `rm -f` count as success; anything else does not", () => {
+    expect(CONTAINER_GONE_STDERR.test("Error response from daemon: No such container: abc123\n")).toBeTrue();
+    expect(
+      CONTAINER_GONE_STDERR.test("Error response from daemon: removal of container abc123 is already in progress\n"),
+    ).toBeTrue();
+    expect(CONTAINER_GONE_STDERR.test("permission denied while trying to connect to the Docker daemon socket\n")).toBeFalse();
+  });
 });
 
 describe("container agent preflight (no daemon required)", () => {
