@@ -240,7 +240,9 @@ describeDocker("docker isolation", () => {
         expect(readFileSync(join(exportDir, "app.txt"), "utf8")).toBe("fixture file contents\n");
         expect(existsSync(join(exportDir, "node_modules"))).toBeFalse();
       } finally {
-        await container.teardown();
+        // Concurrent: a deadline kill racing the attempt's final teardown
+        // must not surface the daemon's "removal already in progress".
+        await Promise.all([container.teardown(), container.teardown()]);
       }
 
       // Teardown is verifiable: the labeled listing no longer has it.

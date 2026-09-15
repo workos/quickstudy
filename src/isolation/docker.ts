@@ -93,6 +93,18 @@ async function mustDocker(args: string[], opts: { timeoutMs?: number; stdin?: st
   return result;
 }
 
+/**
+ * `docker rm -f <id>`, idempotent: an already-removed container is success,
+ * and so is a removal another caller already has in flight (a deadline kill
+ * racing the attempt's final teardown) — the daemon finishes that one.
+ */
+async function removeContainer(id: string): Promise<void> {
+  const result = await runDocker(["rm", "-f", id]);
+  if (result.exitCode !== 0 && !/no such container|already in progress/i.test(result.stderr)) {
+    throw new DockerError(["rm", "-f", id], result.exitCode, result.stderr);
+  }
+}
+
 /** Preflight: is a Docker daemon reachable at all? */
 export async function dockerDaemonReachable(): Promise<boolean> {
   const result = await runDocker(["version", "--format", "{{.Server.Version}}"], { timeoutMs: 10_000 });
@@ -277,13 +289,7 @@ export async function createAttemptContainer(opts: CreateAttemptContainerOptions
         await rm(scratch, { recursive: true, force: true });
       }
     },
-    teardown: async () => {
-      const result = await runDocker(["rm", "-f", id]);
-      // Idempotent: an already-removed container is success, not an error.
-      if (result.exitCode !== 0 && !/no such container/i.test(result.stderr)) {
-        throw new DockerError(["rm", "-f", id], result.exitCode, result.stderr);
-      }
-    },
+    teardown: () => removeContainer(id),
   };
 
   try {
@@ -510,12 +516,7 @@ export async function startEgressSidecar(opts: StartEgressSidecarOptions): Promi
       const result = await mustDocker(["logs", id]);
       return result.stdout;
     },
-    async teardown() {
-      const result = await runDocker(["rm", "-f", id]);
-      if (result.exitCode !== 0 && !/no such container/i.test(result.stderr)) {
-        throw new DockerError(["rm", "-f", id], result.exitCode, result.stderr);
-      }
-    },
+    teardown: () => removeContainer(id),
   };
   return sidecar;
 }
@@ -620,12 +621,7 @@ export async function startMcpSidecar(opts: StartMcpSidecarOptions): Promise<Mcp
       const state = await runDocker(["inspect", "--format", "{{.State.Running}}", id]);
       return state.exitCode === 0 && state.stdout.trim() === "true";
     },
-    async teardown() {
-      const result = await runDocker(["rm", "-f", id]);
-      if (result.exitCode !== 0 && !/no such container/i.test(result.stderr)) {
-        throw new DockerError(["rm", "-f", id], result.exitCode, result.stderr);
-      }
-    },
+    teardown: () => removeContainer(id),
   };
 }
 
