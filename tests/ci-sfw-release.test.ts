@@ -175,7 +175,14 @@ describe("release workflow source wiring", () => {
     }
     expect(workflow).toContain("BUN_VERSION: '1.3.11'");
     expect(workflow).toContain("bun build --help | grep -F -- '--compile-executable-path'");
-    expect(workflow).toContain('npm pack --pack-destination "$runtime_dir" "$BUN_COMPILE_PACKAGE@$BUN_VERSION"');
+    expect(workflow).toContain('npm pack --pack-destination "$runtime_dir" "$COMPILE_PACKAGE@$BUN_VERSION"');
+    expect(workflow).toContain('id: compile-runtime');
+    expect(workflow).toContain("printf 'path=%s\\n' \"$compile_executable\" >> \"$GITHUB_OUTPUT\"");
+    expect(workflow).toContain('BUN_COMPILE_EXECUTABLE_PATH: ${{ steps.compile-runtime.outputs.path }}');
+    expect(workflow).not.toContain("printf 'BUN_COMPILE_EXECUTABLE_PATH=");
+    const packCheck = workflow.slice(workflow.indexOf("\n  pack-check:"), workflow.indexOf("\n  release:"));
+    expect(packCheck).toContain("runs-on: ubuntu-24.04");
+    expect(packCheck).not.toContain("if: runner.os == 'Linux'");
     expect(workflow).toContain('--compile-executable-path "$BUN_COMPILE_EXECUTABLE_PATH"');
   });
 
