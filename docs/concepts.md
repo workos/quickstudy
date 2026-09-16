@@ -161,6 +161,11 @@ The report embeds a generated methodology note, and its language is
 deliberately conservative: raw counts, no intervals, no attribution.
 `--strict` makes an incomplete or error-bearing run exit non-zero for CI.
 
+For missing Codex dollar telemetry, `report --pricing <file>` can calculate
+[retrospective token-cost estimates](./cost-estimates.md) from saved transcripts
+and a runtime rate snapshot. These supplement reported cost rather than replacing
+it; unpriced attempts remain explicit. No eval rerun or provider call is needed.
+
 When you want hypotheses about **why** pairs failed, `quickstudy diagnose
 <run-id>` sends each failing pair's harness-selected evidence to a structured
 model call and writes `diagnosis.json` beside `report.json`. Findings are

@@ -14,6 +14,7 @@ import type { ReportGroup, ReportJson, ReportPair } from "../../../src/report/re
 import { formatAgentLabel } from "../agent-label.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
+import { CostEstimate } from "../components/CostEstimate.tsx";
 import { StatBadge } from "../components/StatBadge.tsx";
 import { ExperimentUsageSummary } from "../components/SurfaceUsage.tsx";
 import { loadReport } from "../data.ts";
@@ -202,12 +203,13 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
           <div className="kpi-meta">{scored} scored attempt(s)</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Cost</div>
+          <div className="kpi-label">Reported cost</div>
           <div className="kpi-val">{value.telemetry.cost_usd === null ? "—" : `$${value.telemetry.cost_usd.toFixed(2)}`}</div>
           <div className="kpi-meta">
             {value.telemetry.cost_usd === null ? "unavailable" : `across ${value.telemetry.cost_attempts} attempt(s)`}
           </div>
         </div>
+        <CostEstimate estimate={value.cost_estimate} />
         <div className="kpi">
           <div className="kpi-label">Tokens</div>
           <div className="kpi-val" style={{ fontSize: 15 }}>

@@ -34,6 +34,7 @@ import {
 import { trialCoverage } from "./completeness.ts";
 import { hashString } from "./hash.ts";
 import { buildReport, renderReportText, type ReportJson } from "./report/report.ts";
+import { parsePricing, type Pricing } from "./report/costs.ts";
 import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord } from "./store/db.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing bundle, ...). */
@@ -45,6 +46,8 @@ export class ExportError extends Error {
 }
 
 export interface ExportOptions {
+  /** Recalculate token-cost estimates from saved transcripts using this runtime snapshot. */
+  pricing?: Pricing;
   /** Offline embeds JSON; hosted fetches immutable per-run snapshots lazily. */
   mode?: "offline" | "hosted";
   /** Explicit publication gate; omits incompletely sampled pairs with reasons. */
@@ -175,7 +178,9 @@ function resolveReport(
   runId: string,
   log: (message: string) => void,
   generatedAt?: string,
+  pricing?: Pricing,
 ): ReportJson {
+  if (pricing !== undefined) return buildReport({ store, runId, resultsDir, generatedAt, pricing });
   const path = join(resultsDir, runId, "report.json");
   if (existsSync(path)) {
     try {
@@ -186,8 +191,9 @@ function resolveReport(
       const run = store.getRun(runId)!;
       // Historical reports retain their methodology. New reports are reused
       // only when the entire source record still matches (including retries).
-      if (run.manifest.manifestVersion === "v3") return stored;
-      const current = buildReport({ store, runId, resultsDir, generatedAt: generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)! });
+      if (run.manifest.manifestVersion === "v3" && stored.cost_estimate === undefined) return stored;
+      const current = buildReport({ store, runId, resultsDir, generatedAt: generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)!,
+        ...(stored.cost_estimate ? { pricing: parsePricing(stored.cost_estimate.pricing) } : {}) });
       return stored.source_fingerprint === current.source_fingerprint ? stored : current;
     } catch (err) {
       log(`stored report.json for ${runId} is unreadable (${err instanceof Error ? err.message : String(err)}) — rebuilding`);
@@ -256,6 +262,14 @@ export function inlineDataIntoHtml(html: string, data: InlineData): string {
   return html.replace(QS_DATA_SLOT, () => `<script id="qs-data">window.__QS_DATA__ = ${json};</script>`);
 }
 
+function publicationReport(options: ExportOptions, run: RunRecord, log: (message: string) => void): ReportJson | undefined {
+  if (options.expectedTrials === undefined) return undefined;
+  const pricing = options.pricing ?? resolveReport(options.store, options.resultsDir, run.id, log, options.generatedAt).cost_estimate?.pricing;
+  return buildReport({ store: options.store, runId: run.id, resultsDir: options.resultsDir,
+    expectedTrials: options.expectedTrials, pricing,
+    generatedAt: options.generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)! });
+}
+
 /** Export one or more runs into a self-contained static site directory. */
 export async function exportSite(options: ExportOptions): Promise<ExportSummary> {
   const log = options.log ?? ((message: string) => console.warn(message));
@@ -269,7 +283,7 @@ export async function exportSite(options: ExportOptions): Promise<ExportSummary>
     );
   }
 
-  const publications = new Map(runs.map((run) => [run.id, options.expectedTrials === undefined ? undefined : buildReport({ store, runId: run.id, resultsDir, expectedTrials: options.expectedTrials, generatedAt: options.generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)! })]));
+  const publications = new Map(runs.map((run) => [run.id, publicationReport(options, run, log)]));
   const dataDir = join(outDir, "data");
   mkdirSync(dataDir, { recursive: true });
 
@@ -321,11 +335,11 @@ export async function exportSite(options: ExportOptions): Promise<ExportSummary>
     };
     atomicWrite(join(runDir, "run.json"), `${JSON.stringify(dataRun, null, 2)}\n`, "utf8");
 
-    const report = publications.get(run.id) ?? resolveReport(store, resultsDir, run.id, log, options.generatedAt);
+    const report = publications.get(run.id) ?? resolveReport(store, resultsDir, run.id, log, options.generatedAt, options.pricing);
     if (publication) {
       atomicWrite(join(runDir, "omissions.json"), JSON.stringify(publication, null, 2));
       atomicWrite(join(runDir, "omissions.txt"), renderReportText(report));
-      atomicWrite(join(runDir, "source-report.json"), JSON.stringify(buildReport({ store, runId: run.id, resultsDir }), null, 2));
+      atomicWrite(join(runDir, "source-report.json"), JSON.stringify(buildReport({ store, runId: run.id, resultsDir, pricing: report.cost_estimate?.pricing }), null, 2));
       log(`${run.id}: complete-sample publication includes ${publication.eligible.length} pair(s), omits ${publication.omitted.length}; see data/runs/${run.id}/omissions.json and omissions.txt`);
     }
     atomicWrite(join(runDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");

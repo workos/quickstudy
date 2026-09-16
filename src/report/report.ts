@@ -18,8 +18,9 @@
  *   - offered-versus-used surface telemetry per experiment;
  *   - egress denials, when the proxied run recorded any.
  *
- * There are deliberately no intervals, no estimates, no analyst layers, and
- * no language stronger than the counts themselves (see BANNED_LANGUAGE).
+ * There are deliberately no intervals, no statistical estimates, no analyst layers,
+ * and no language stronger than the counts themselves (see BANNED_LANGUAGE).
+ * Opt-in token-cost estimates are a separate layer, never provider-reported telemetry.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -30,6 +31,7 @@ import type { ComparisonGroup } from "../experiments/groups.ts";
 import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord } from "../store/db.ts";
 import type { SurfaceUsage } from "../surface-usage.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
+import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing report.json, ...). */
 export class ReportError extends Error {
@@ -217,6 +219,8 @@ export interface ReportJson {
   retry_history?: Array<{ attempt_id: string; status: string; error: string | null }>;
   totals: ReportTotals;
   telemetry: ReportTelemetry;
+  /** Optional runtime-priced supplement; absent on historical or unpriced reports. */
+  cost_estimate?: RunCostEstimate;
   judge_telemetry?: { provenance: "semantic-judge"; calls: number; tokens_in: number | null; tokens_out: number | null; cost_usd: number | null };
   /**
    * Per-experiment identity cards (model, reasoning, adapter, ...). Optional
@@ -486,6 +490,8 @@ function collectEgressDenials(resultsDir: string, runId: string, attempts: Attem
 
 export interface BuildReportOptions {
   expectedTrials?: number;
+  /** Explicit runtime rate snapshot; never changes stored provider-reported costs. */
+  pricing?: Pricing;
   store: ResultsStore;
   runId: string;
   /** Artifacts root (the harness `--results` dir) — egress denial logs live here. */
@@ -514,8 +520,10 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   if (publication && publication.eligible.length === 0) throw new ReportError(`no eligible complete samples for run ${runId}: ${publication.omitted.map((p) => `${p.eval_id} × ${p.experiment_id}: ${p.reasons.join("; ")}`).join(" | ")}`);
   const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
   const pairs = collectPairs(attempts);
+  const costEstimate = options.pricing === undefined ? undefined : estimateRunCosts(run, attempts, options.resultsDir, options.pricing);
 
-  const methodology = methodologyNote(run.config.trials);
+  const methodology = methodologyNote(run.config.trials) + (costEstimate === undefined ? "" :
+    " Optional token-cost estimates supplement reported cost using the supplied pricing snapshot. They cover only the selected attempts, not superseded retries, tool fees, diagnosis or infrastructure, and are not billing records.");
   const banned = findBannedLanguage(methodology);
   if (banned.length > 0) {
     throw new ReportError(`report methodology violates the language guard: ${banned.join(", ")}`);
@@ -534,12 +542,13 @@ export function buildReport(options: BuildReportOptions): ReportJson {
       manifest_hash: run.manifestHash,
     },
     incomplete: publication ? false : run.finishedAt === null || coverage.length === 0 || coverage.some((pair) => !pair.complete),
-    source_fingerprint: hashString(JSON.stringify({ manifest: run.manifestHash, finishedAt: run.finishedAt, trials: run.config.trials, evals: run.config.evalIds, experiments: run.config.experimentIds, history: history.map(({ transcriptRef, diffRef, ...row }) => ({ ...row, transcript: Boolean(transcriptRef), diff: Boolean(diffRef) })) })),
+    source_fingerprint: hashString(JSON.stringify({ manifest: run.manifestHash, finishedAt: run.finishedAt, trials: run.config.trials, evals: run.config.evalIds, experiments: run.config.experimentIds, history: history.map(({ transcriptRef, diffRef, ...row }) => ({ ...row, transcript: Boolean(transcriptRef), diff: Boolean(diffRef) })), costEstimate })),
     ...(publication ? { publication: { ...publication, source_totals: collectTotals(current), source_incomplete: run.finishedAt === null || coverage.some((p) => !p.complete) } } : {}),
     coverage,
     retry_history: history.filter((a) => !current.includes(a)).map((a) => ({ attempt_id: a.id, status: a.status, error: a.error })),
     totals: collectTotals(attempts),
     telemetry: collectTelemetry(attempts),
+    ...(costEstimate === undefined ? {} : { cost_estimate: costEstimate }),
     judge_telemetry: collectJudgeTelemetry(attempts),
     experiments: collectExperiments(run),
     pairs,
@@ -605,6 +614,16 @@ export function renderReportText(report: ReportJson): string {
   lines.push(
     `  cost:    ${tel.cost_usd === null ? "unavailable" : `$${tel.cost_usd.toFixed(4)} across ${tel.cost_attempts} attempt(s)`}`,
   );
+  if (report.cost_estimate) {
+    const estimate = report.cost_estimate;
+    const cost = estimate.cost_usd;
+    const displayed = cost === null ? "unavailable" : cost > 0 && cost < 0.0001 ? "<$0.0001" : `$${cost.toFixed(4)}`;
+    lines.push(`  estimated token cost: ${displayed} (in addition to reported cost)`);
+    lines.push(`    ${estimate.cost_attempts} estimated, ${estimate.unpriced_attempts} unpriced attempt(s); pricing ${estimate.pricing.version}`);
+    for (const attempt of estimate.attempts) {
+      if (attempt.unpriced_reason) lines.push(`    ${attempt.attempt_id}: ${attempt.unpriced_reason}`);
+    }
+  }
   lines.push(
     `  tokens:  ${
       tel.tokens_in === null && tel.tokens_out === null
