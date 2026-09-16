@@ -29,9 +29,9 @@ export const INVENTORY: InventoryEntry[] = [
   // ── README.md ────────────────────────────────────────────────────────────
   {
     doc: "README.md",
-    match: "bun add quickstudy       # Bun >= 1.1 required; no Node build exists",
+    match: "bun add @workos/quickstudy   # Bun >= 1.1 required; no Node build exists",
     classification: "placeholder",
-    note: "registry install — not live until the 1.0.0 npm publish; scripts/pack-check.sh runs the tarball equivalent",
+    note: "registry install; scripts/pack-check.sh runs the tarball equivalent",
   },
   {
     doc: "README.md",
