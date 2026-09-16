@@ -127,6 +127,14 @@ describe("report and export", () => {
     expect(report().cost_estimate).toEqual(value.cost_estimate);
     expect(buildReport({ store, runId: "run", resultsDir: root }).cost_estimate).toBeUndefined();
   });
+  test("text reports distinguish tiny positive estimates from zero and missing costs", () => {
+    attempt("a");
+    const value = report();
+    for (const [cost, displayed] of [[null, "unavailable"], [0, "$0.0000"], [0.000001, "<$0.0001"], [0.0001, "$0.0001"], [1.25, "$1.2500"]] as const) {
+      value.cost_estimate!.cost_usd = cost;
+      expect(renderReportText(value)).toContain(`estimated token cost: ${displayed} (`);
+    }
+  });
   test("explicit retries do not double-count the superseded attempt", () => {
     attempt("a", modern, { status: "error", result: null });
     attempt("b", modern, { retryOf: "a" });

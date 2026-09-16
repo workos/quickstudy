@@ -616,7 +616,9 @@ export function renderReportText(report: ReportJson): string {
   );
   if (report.cost_estimate) {
     const estimate = report.cost_estimate;
-    lines.push(`  estimated token cost: ${estimate.cost_usd === null ? "unavailable" : `$${estimate.cost_usd.toFixed(4)}`} (in addition to reported cost)`);
+    const cost = estimate.cost_usd;
+    const displayed = cost === null ? "unavailable" : cost > 0 && cost < 0.0001 ? "<$0.0001" : `$${cost.toFixed(4)}`;
+    lines.push(`  estimated token cost: ${displayed} (in addition to reported cost)`);
     lines.push(`    ${estimate.cost_attempts} estimated, ${estimate.unpriced_attempts} unpriced attempt(s); pricing ${estimate.pricing.version}`);
     for (const attempt of estimate.attempts) {
       if (attempt.unpriced_reason) lines.push(`    ${attempt.attempt_id}: ${attempt.unpriced_reason}`);

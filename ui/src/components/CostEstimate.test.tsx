@@ -17,4 +17,8 @@ test("cost estimates disclose coverage, distinguish null from zero, and tolerate
   expect(renderToStaticMarkup(<CostEstimate />)).toBe("");
   expect(renderToStaticMarkup(<CostEstimate estimate={{ ...estimate, cost_usd: null }} />)).not.toContain("$0.00");
   expect(renderToStaticMarkup(<CostEstimate estimate={{ ...estimate, cost_usd: 0 }} />)).toContain("$0.00");
+  for (const cost_usd of [0.000001, 0.004, 0.009]) {
+    expect(renderToStaticMarkup(<CostEstimate estimate={{ ...estimate, cost_usd }} />)).toContain("&lt;$0.01");
+  }
+  expect(renderToStaticMarkup(<CostEstimate estimate={{ ...estimate, cost_usd: 0.01 }} />)).not.toContain("&lt;");
 });

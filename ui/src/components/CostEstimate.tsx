@@ -7,7 +7,8 @@ export function CostEstimate({ estimate }: { estimate?: RunCostEstimate }): Reac
   return (
     <div className="kpi" data-testid="cost-estimate">
       <div className="kpi-label">Estimated token cost</div>
-      <div className="kpi-val">{estimate.cost_usd === null ? "—" : `$${estimate.cost_usd.toFixed(2)}`}</div>
+      <div className="kpi-val">{estimate.cost_usd === null ? "—" :
+        estimate.cost_usd > 0 && estimate.cost_usd < 0.01 ? "<$0.01" : `$${estimate.cost_usd.toFixed(2)}`}</div>
       <div className="kpi-meta">
         In addition to reported cost · {estimate.cost_attempts} estimated, {estimate.unpriced_attempts} unpriced attempt(s)
       </div>
