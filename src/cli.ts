@@ -47,6 +47,7 @@ import {
   type ReportJson,
 } from "./report/report.ts";
 import { ExportError, exportSite } from "./export.ts";
+import { PricingError, readPricing } from "./report/costs.ts";
 import { renderDiagnosisText } from "./diagnose/render.ts";
 import { diagnosisJsonPath, runDiagnose } from "./diagnose/run.ts";
 import { DiagnoseError } from "./diagnose/types.ts";
@@ -85,6 +86,7 @@ Usage:
     [--latest]                            Report the most recent run instead of naming one
     [--json]                              Print report.json instead of the text report
     [--strict]                            Exit non-zero when incomplete or any attempt errored (CI/publication)
+    [--pricing <file>]                    Estimate missing Codex token costs from a runtime pricing JSON
     [--db <path>] [--results <dir>]       Stores (default: results.db, results/)
   quickstudy diagnose <run-id>            LLM-diagnose a run's failing pairs into diagnosis.json
     [--latest]                            Diagnose the most recent run instead of naming one
@@ -92,6 +94,7 @@ Usage:
   quickstudy export <run-id>...           Materialize a run as a self-contained static site
     [--runs <a,b|all>]                    More run ids (comma-separated), or "all" for every run in the DB
     [--out <dir>]                         Output directory (default: ./site)
+    [--pricing <file>]                    Recalculate token-cost estimates; otherwise retain saved pricing
     [--db <path>] [--results <dir>]       Stores (default: results.db, results/)
   quickstudy ui                           Export to a temp dir and serve the UI locally
     [--runs <a,b>]                        Runs to include (default: every run in the DB)
@@ -103,10 +106,10 @@ Usage:
 const COMMAND_HELP: Record<string, string> = {
   validate: `Usage: quickstudy validate [--evals-root <dir>] [--experiments-root <dir>]\n\nDiscover and validate the evals root (frontmatter, scorer default exports)\nand the experiments root (defineExperiment shapes, comparison groups).\nDefaults: evals, experiments.`,
   run: `Usage: quickstudy run [--eval <id>...] [--experiment <id>...] [options]\n\nExecute the selected eval × experiment pairs. Omit --eval to select every\ndiscovered eval; omit --experiment to select every discovered experiment.\n\nOptions:\n  --eval <id>... --experiment <id>...\n  --evals-root <dir> --experiments-root <dir>   (defaults: evals, experiments)\n  --suite <s>... --framework <f>...\n  --trials <n> --egress-proxy\n  --concurrency <n> --seed <value>             (default concurrency: 1)\n  --resume <run-id> --retry-unfinished        (explicit error/timeout retries)\n  --provision-ms <n> --agent-ms <n> --score-ms <n>\n  --export-ms <n> --cleanup-ms <n>\n  --db <path> --results <dir>`,
-  report: `Usage: quickstudy report <run-id> [options]\n\nBuild report.json into the results dir and print the text report\n(pass \`--latest\` to pick the most recent run; \`--json\` prints the JSON).\n\nOptions:\n  --latest --json --strict\n  --strict exits non-zero for incomplete runs or any attempt error\n  --db <path> --results <dir>`,
+  report: `Usage: quickstudy report <run-id> [options]\n\nBuild report.json into the results dir and print the text report\n(pass \`--latest\` to pick the most recent run; \`--json\` prints the JSON).\n\nOptions:\n  --latest --json --strict\n  --strict exits non-zero for incomplete runs or any attempt error\n  --pricing <file>   Estimate missing Codex token costs using runtime pricing JSON\n  --db <path> --results <dir>`,
   diagnose: `Usage: quickstudy diagnose <run-id> [options]\n\nSend each failing (eval × experiment) pair's harness-selected evidence to a\nstructured model call and write diagnosis.json beside report.json\n(pass \`--latest\` to pick the most recent run). Findings are hypotheses with\nevidence links — never verdicts. Requires ANTHROPIC_API_KEY; override the\nanalyst model with QUICKSTUDY_ANALYST_MODEL.\n\nOptions:\n  --latest\n  --db <path> --results <dir>`,
   clean: `Usage: quickstudy clean\n\nRemove quickstudy-labeled containers, networks, and sidecars.`,
-  export: `Usage: quickstudy export <run-id>... [options]\n\nBuild a self-contained static site.\n\nOptions:\n  --runs <a,b|all> --out <dir> --db <path> --results <dir>\n  --mode <offline|hosted>                    (default: offline)\n  --expected-trials <n>                      Publish fully sampled pairs; fail if none\n                                             Writes omissions and retains source diagnostics`,
+  export: `Usage: quickstudy export <run-id>... [options]\n\nBuild a self-contained static site.\n\nOptions:\n  --runs <a,b|all> --out <dir> --db <path> --results <dir>\n  --mode <offline|hosted>                    (default: offline)\n  --pricing <file>                           Recalculate costs using runtime pricing JSON\n  --expected-trials <n>                      Publish fully sampled pairs; fail if none\n                                             Writes omissions and retains source diagnostics`,
   ui: `Usage: quickstudy ui [options]\n\nExport stored runs to a temporary directory and serve the local UI.\n\nOptions:\n  --runs <a,b> --port <n> --watch --db <path> --results <dir>`,
 };
 
@@ -330,6 +333,7 @@ async function commandReport(args: string[]): Promise<void> {
       allowPositionals: true,
       options: {
         json: { type: "boolean", default: false },
+        pricing: { type: "string" },
         strict: { type: "boolean", default: false },
         latest: { type: "boolean", default: false },
         db: { type: "string", default: "results.db" },
@@ -342,6 +346,7 @@ async function commandReport(args: string[]): Promise<void> {
 
   const requestedRunId = positionals[0];
   if (!requestedRunId && !values.latest) fail(`report: missing <run-id> (or pass --latest)\n\n${USAGE}`);
+  const pricing = values.pricing === undefined ? undefined : readPricing(values.pricing);
 
   const store = new ResultsStore(values.db);
   try {
@@ -356,7 +361,7 @@ async function commandReport(args: string[]): Promise<void> {
       runId = latest.id;
     }
 
-    const report: ReportJson = buildReport({ store, runId: runId as string, resultsDir: values.results });
+    const report: ReportJson = buildReport({ store, runId: runId as string, resultsDir: values.results, pricing });
     const path = writeReportJson(report, values.results);
     console.log(values.json ? JSON.stringify(report, null, 2) : renderReportText(report));
     console.error(`report written: ${path}`);
@@ -532,7 +537,7 @@ function collectRunIds(positionals: string[], runsFlag: string | undefined): str
 }
 
 async function commandExport(args: string[]): Promise<void> {
-  let values: { runs?: string; out: string; db: string; results: string; mode: string; "expected-trials"?: string };
+  let values: { runs?: string; out: string; db: string; results: string; mode: string; "expected-trials"?: string; pricing?: string };
   let positionals: string[];
   try {
     ({ values, positionals } = parseArgs({
@@ -541,6 +546,7 @@ async function commandExport(args: string[]): Promise<void> {
       options: {
         runs: { type: "string" },
         out: { type: "string", default: "site" },
+        pricing: { type: "string" },
         mode: { type: "string", default: "offline" },
         "expected-trials": { type: "string" },
         db: { type: "string", default: "results.db" },
@@ -551,6 +557,7 @@ async function commandExport(args: string[]): Promise<void> {
     fail(`export: ${err instanceof Error ? err.message : String(err)}\n\n${USAGE}`);
   }
 
+  const pricing = values.pricing === undefined ? undefined : readPricing(values.pricing);
   const bundleDir = mustUiBundleDir();
   const store = new ResultsStore(values.db);
   try {
@@ -572,6 +579,7 @@ async function commandExport(args: string[]): Promise<void> {
       resultsDir: values.results,
       runIds,
       outDir: values.out,
+      pricing,
       mode: values.mode === "hosted" || values.mode === "offline" ? values.mode : fail("export --mode must be hosted or offline"),
       ...(values["expected-trials"] ? { expectedTrials: parsePositiveInt(values["expected-trials"], "--expected-trials") } : {}),
       bundleDir,
@@ -663,6 +671,7 @@ async function commandUi(args: string[]): Promise<void> {
 }
 
 interface ReportFlags {
+  pricing?: string;
   json: boolean;
   strict: boolean;
   latest: boolean;
@@ -774,6 +783,7 @@ async function main(): Promise<void> {
       err instanceof MissingProviderKeyError ||
       err instanceof InvalidProviderKeyError ||
       err instanceof ReportError ||
+      err instanceof PricingError ||
       err instanceof ExportError ||
       err instanceof DiagnoseError ||
       err instanceof ModelOutputError

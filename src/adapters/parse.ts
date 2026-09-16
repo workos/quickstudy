@@ -115,3 +115,57 @@ export function parseCodexStream(raw: string): AttemptMetrics {
   return metrics;
 }
 
+/** Pricing needs complete usage, including the cache subset; partial telemetry cannot be priced. */
+export interface CodexCostUsage {
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+}
+
+function costUsage(value: unknown): CodexCostUsage | null {
+  const usage = record(value);
+  const input = usage["input_tokens"], cached = usage["cached_input_tokens"], output = usage["output_tokens"];
+  const count = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+  if (!count(input) || !count(cached) || !count(output) || cached > input) return null;
+  const reasoning = usage["reasoning_output_tokens"];
+  if (reasoning !== undefined && (!count(reasoning) || reasoning > output)) return null;
+  // The three-rate model does not cover separately billed cache writes.
+  if (usage["cache_write_input_tokens"] !== undefined && usage["cache_write_input_tokens"] !== 0) return null;
+  return { input_tokens: input, cached_input_tokens: cached, output_tokens: output };
+}
+
+/** Strict counterpart to parseCodexStream: malformed/truncated usage stays unpriced. */
+export function parseCodexCostUsage(raw: string): CodexCostUsage | null {
+  let total: CodexCostUsage | null = null;
+  let complete = false;
+  let dialect: "thread" | "legacy" | undefined;
+  for (const line of raw.split("\n")) {
+    if (!line.trim().startsWith("{")) continue;
+    let obj: Record<string, unknown>;
+    try { obj = record(JSON.parse(line)); } catch { return null; }
+    const msg = record(obj["msg"]);
+    const type = obj["type"] ?? msg["type"];
+    if (type === "turn.failed" || type === "error") return null;
+    if (type === "turn.started" || type === "task_started") complete = false;
+    if (type === "task_complete" && dialect === "legacy") complete = true;
+    if (type !== "turn.completed" && type !== "token_count") continue;
+    const nextDialect = type === "turn.completed" ? "thread" : "legacy";
+    if (dialect !== undefined && dialect !== nextDialect) return null;
+    dialect = nextDialect;
+    const usage = costUsage(dialect === "thread" ? obj["usage"] : record(msg["info"])["total_token_usage"]);
+    if (usage === null) return null;
+    if (dialect === "legacy") {
+      total = usage; // Cumulative: never sum token_count snapshots.
+      complete = false;
+    } else {
+      total = total === null ? usage : {
+        input_tokens: total.input_tokens + usage.input_tokens,
+        cached_input_tokens: total.cached_input_tokens + usage.cached_input_tokens,
+        output_tokens: total.output_tokens + usage.output_tokens,
+      };
+      complete = true;
+    }
+  }
+  return complete && total !== null ? costUsage(total) : null;
+}
+
