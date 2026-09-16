@@ -41,7 +41,7 @@ modules), so it requires [Bun](https://bun.sh) ≥ 1.1 — there is no Node
 build. Add it to the repository that holds your evals and experiments:
 
 ```bash
-bun add quickstudy       # Bun >= 1.1 required; no Node build exists
+bun add @workos/quickstudy   # Bun >= 1.1 required; no Node build exists
 bunx quickstudy --version
 ```
 
@@ -261,7 +261,6 @@ bun run ui:e2e           # Playwright smoke: served routes + offline file:// loa
 - **[docs/getting-started.md](./docs/getting-started.md)** — install to first report.
 - **[docs/writing-an-eval.md](./docs/writing-an-eval.md)** — authoring evals and experiments.
 - **[docs/publishing-a-benchmark.md](./docs/publishing-a-benchmark.md)** — gates for publishing results.
-- **[docs/releasing.md](./docs/releasing.md)** — cutting prebuilt binaries.
 
 ## License
 

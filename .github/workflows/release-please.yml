@@ -1,8 +1,8 @@
 name: release-please
 
 # GITHUB_TOKEN-created release PRs require a maintainer to approve CI runs.
-# Invoke binary publishing directly: bot-created tag/release events do not
-# trigger other workflows. See docs/releasing.md.
+# Invoke binary + npm publishing directly: bot-created tag/release events do
+# not trigger other workflows.
 on:
   push:
     branches: [main]
@@ -26,6 +26,14 @@ jobs:
   publish:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    # A called workflow can only request permissions its caller holds, so the
+    # publish-npm job's id-token: write (npm trusted publishing, OIDC) must be
+    # granted here. Scoped to this job: release-please itself never needs it.
+    # npm validates the CALLING workflow's filename, so this file — not
+    # release.yml — is the package's only trusted publisher on npmjs.com.
+    permissions:
+      contents: write # release.yml uploads assets and undrafts the release
+      id-token: write # release.yml exchanges an OIDC token with npm
     uses: ./.github/workflows/release.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
