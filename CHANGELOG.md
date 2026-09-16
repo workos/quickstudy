@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/workos/quickstudy/compare/v0.1.0...v0.1.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **ui:** Classify Codex turns in transcript viewer ([2cec82e](https://github.com/workos/quickstudy/commit/2cec82ec9db471203d80025fc9869fffc234d961))
+
 ## [0.1.0](https://github.com/workos/quickstudy/compare/v0.0.1...v0.1.0) (2026-09-15)
 
 
