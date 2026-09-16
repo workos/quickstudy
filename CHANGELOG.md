@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/workos/quickstudy/compare/v0.1.1...v0.2.0) (2026-09-16)
+
+
+### Features
+
+* **report:** Add native retrospective Codex cost estimates ([7cd5010](https://github.com/workos/quickstudy/commit/7cd5010ce3b4346636f9d4c80fed59e9769af538))
+* **report:** estimate archived Codex token costs ([f6e43af](https://github.com/workos/quickstudy/commit/f6e43af5e30ac4d59801191d64564240192cbd76))
+
+
+### Bug Fixes
+
+* **report:** keep tiny estimates visibly nonzero ([05f9edb](https://github.com/workos/quickstudy/commit/05f9edb000ab04093d6af29b81d7900409ecf18b))
+
 ## [0.1.1](https://github.com/workos/quickstudy/compare/v0.1.0...v0.1.1) (2026-09-16)
 
 
