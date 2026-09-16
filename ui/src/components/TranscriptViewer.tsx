@@ -102,6 +102,36 @@ export function parseTurn(line: string, lineNumber: number): Turn {
   if (type === "result") {
     return { line: lineNumber, role: "system", summary: "result", detail, isError };
   }
+
+  // Codex `exec --json`: `item.*` events carry the payload (item.type splits
+  // text from tool calls); `thread.*`/`turn.*`/`error` are lifecycle.
+  if (typeof type === "string" && type.startsWith("item.")) {
+    const item = (parsed["item"] ?? {}) as Record<string, unknown>;
+    const itemType = typeof item["type"] === "string" ? item["type"] : "item";
+    const text = typeof item["text"] === "string" ? item["text"] : "";
+    if (itemType === "agent_message") {
+      return { line: lineNumber, role: "assistant", summary: truncate(text), detail, isError };
+    }
+    if (itemType === "reasoning") {
+      return { line: lineNumber, role: "assistant", summary: `reasoning · ${truncate(text)}`, detail, isError };
+    }
+    if (itemType === "error") {
+      return { line: lineNumber, role: "system", summary: `error · ${truncate(String(item["message"] ?? ""))}`, detail, isError: true };
+    }
+    const target = item["command"] ?? item["tool"] ?? item["query"];
+    const failed = (typeof item["exit_code"] === "number" && item["exit_code"] !== 0) || item["status"] === "failed";
+    return {
+      line: lineNumber,
+      role: "tool",
+      summary: `${itemType}${failed ? " · ERROR" : ""}${target === undefined ? "" : ` · ${truncate(String(target), 120)}`}`,
+      detail,
+      isError: isError || failed,
+    };
+  }
+  if (type === "error" || (typeof type === "string" && /^(thread|turn)\./.test(type))) {
+    const failed = type === "error" || type === "turn.failed";
+    return { line: lineNumber, role: "system", summary: type, detail, isError: isError || failed };
+  }
   return { line: lineNumber, role: "raw", summary: truncate(line), detail, isError };
 }
 
