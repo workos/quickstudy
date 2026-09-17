@@ -246,8 +246,13 @@ export async function createAttemptContainer(opts: CreateAttemptContainerOptions
     execInWorkspace: async (cmd, execOpts = {}) => {
       const result = await runDocker(["exec", "-w", CONTAINER_WORKSPACE, id, ...cmd], execOpts);
       // Killing only the Docker client leaves the exec process alive in the
-      // daemon. Stop the whole attempt on timeout, including descendants.
-      if (result.timedOut) await runDocker(["kill", id], { timeoutMs: 10_000 });
+      // daemon. Stop the whole attempt on timeout, including descendants —
+      // then restart PID 1 (`sleep infinity`) so the dead attempt's workspace
+      // stays exec-able for the diff. Descendants do not come back with it.
+      if (result.timedOut) {
+        await runDocker(["kill", id], { timeoutMs: 10_000 });
+        await runDocker(["start", id], { timeoutMs: 10_000 });
+      }
       return result;
     },
     writeFile: async (path, content) => {

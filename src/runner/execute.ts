@@ -826,8 +826,26 @@ async function runContainerAttemptV3(
             );
           }
         }
+        // `git add -A` stages new files so the diff captures them; diffing
+        // the recorded baseline SHA (not HEAD) also captures any commits the
+        // agent made itself.
+        const captureDiff = async (): Promise<void> => {
+          if (baselineSha === undefined) return;
+          await mustExec(container, ["git", "add", "-A"]);
+          const diff = (await mustExec(container, ["git", "diff", baselineSha])).stdout;
+          persisted.diffRef = await artifacts.writeDiff(runId, attemptId, redactSecrets(diff, secretEnv));
+        };
+        if (agentResult.timedOut || agentResult.exitCode !== 0) {
+          // The workspace is evidence of what the agent got done before it
+          // died; a failed capture must not mask the attempt's own outcome.
+          try {
+            await captureDiff();
+          } catch (err) {
+            (options.log ?? console.log)(`attempt ${attemptId}: diff unavailable after failure: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
         if (agentResult.timedOut) {
-          await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms — container removed`);
+          await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms — container killed`);
           return { status: "incomplete", error: `attempt timed out after ${args.attemptTimeoutMs}ms` };
         }
         if (agentResult.exitCode !== 0) {
@@ -836,14 +854,7 @@ async function runContainerAttemptV3(
           return { status: "error", error: `agent command exited ${agentResult.exitCode}` };
         }
 
-        if (baselineSha !== undefined) {
-          // `git add -A` stages new files so the diff captures them; diffing
-          // the recorded baseline SHA (not HEAD) also captures any commits
-          // the agent made itself.
-          await mustExec(container, ["git", "add", "-A"]);
-          const diff = (await mustExec(container, ["git", "diff", baselineSha])).stdout;
-          persisted.diffRef = await artifacts.writeDiff(runId, attemptId, redactSecrets(diff, secretEnv));
-        }
+        await captureDiff();
 
         // Export the workspace BEFORE scoring, with the container still alive:
         // file checks read the export, ctx.exec reaches into the live sandbox.

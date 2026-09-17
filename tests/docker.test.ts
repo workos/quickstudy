@@ -271,8 +271,9 @@ describeDocker("docker isolation", () => {
         expect(bad.timedOut).toBeFalse();
         const slow = await container.execInWorkspace(["sleep", "30"], { timeoutMs: 1_500 });
         expect(slow.timedOut).toBeTrue();
-        // Timeout stops the sandbox, including descendants; it is no longer reusable.
-        expect((await container.execInWorkspace(["true"])).exitCode).not.toBe(0);
+        // Timeout kills the sandbox, including descendants, then restarts its idle
+        // PID 1 so the workspace stays exec-able for the diff capture.
+        expect((await container.execInWorkspace(["true"])).exitCode).toBe(0);
       } finally {
         await container.teardown();
       }
