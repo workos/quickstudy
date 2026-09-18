@@ -16,6 +16,7 @@ import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } fr
 import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
 import { AttemptSurfaceUsage } from "../components/SurfaceUsage.tsx";
 import { loadRun } from "../data.ts";
+import { fmtTokens, incompleteReason } from "../format.ts";
 import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
 
@@ -78,6 +79,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
     const passed = completed.filter((attempt) => attempt.passed === true).length;
     const scored = completed.length;
     const outcomes = new Set(completed.map((attempt) => attempt.passed === true));
+    const checks = completed.flatMap((attempt) => attempt.checks ?? []);
     cells.push({
       evalId: first.eval_id,
       experimentId: first.experiment_id,
@@ -87,14 +89,10 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
       flaky: outcomes.size > 1,
       incomplete: group.length < expectedTrials || group.some((attempt) => attempt.status === "incomplete"),
       errors: group.filter((attempt) => attempt.status === "error").length,
+      checks: checks.length > 0 ? { passed: checks.filter((check) => check.passed).length, total: checks.length } : null,
     });
   }
   return cells;
-}
-
-function fmtTokens(tokens: number | null): string {
-  if (tokens === null) return "—";
-  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
 }
 
 function fmtDuration(attempt: DataAttempt): string {
@@ -103,8 +101,16 @@ function fmtDuration(attempt: DataAttempt): string {
   return `${Math.floor(totalSeconds / 60)}m${String(totalSeconds % 60).padStart(2, "0")}s`;
 }
 
-function AttemptRow({ attempt, runId }: { attempt: DataAttempt; runId: string }): ReactNode {
+// What an adapter's `turns` counts. Claude reports API turns (dozens per attempt); codex
+// `exec` reports thread turns — one per prompt — so a bare "turns 1" beside "turns 80" reads
+// as 80× the efficiency when it is a different unit.
+const TURN_UNIT: Record<string, { label: string; title: string }> = {
+  codex: { label: "thread turns", title: "codex exec reports one thread turn per prompt, not per agent step — not comparable to Claude's turn count" },
+};
+
+function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: string; adapter: string | null }): ReactNode {
   const status = displayStatus(attempt);
+  const turnUnit = (adapter !== null && TURN_UNIT[adapter]) || { label: "turns", title: "agent turns, as counted by the adapter" };
   return (
     <div className="attempt-row" data-testid="drill-attempt">
       <div className="attempt-line">
@@ -134,7 +140,9 @@ function AttemptRow({ attempt, runId }: { attempt: DataAttempt; runId: string })
           tokens {fmtTokens(attempt.tokens_in)} in / {fmtTokens(attempt.tokens_out)} out
         </span>
         <span>cost {attempt.cost_usd === null ? "—" : `$${attempt.cost_usd.toFixed(2)}`}</span>
-        <span>turns {attempt.turns ?? "—"}</span>
+        <span title={turnUnit.title}>
+          {turnUnit.label} {attempt.turns ?? "—"}
+        </span>
       </div>
       <AttemptSurfaceUsage treatment={attempt.treatment} usage={attempt.surface_usage} />
     </div>
@@ -248,7 +256,12 @@ function DrillDown({
         </p>
         {relevant.length === 0 && <div className="viewer-note">No attempts in this cell.</div>}
         {relevant.map((attempt) => (
-          <AttemptRow key={attempt.id} attempt={attempt} runId={runId} />
+          <AttemptRow
+            key={attempt.id}
+            attempt={attempt}
+            runId={runId}
+            adapter={run.manifest.experiments[attempt.experiment_id]?.components.agent?.adapter ?? null}
+          />
         ))}
       </aside>
     </>
@@ -338,6 +351,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
     passed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed === true).length,
     failed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed !== true).length,
     incomplete: value.attempts.filter((attempt) => attempt.status === "incomplete").length,
+    timedOut: value.attempts.filter((attempt) => attempt.status === "incomplete" && attempt.error?.startsWith("attempt timed out")).length,
     errors: value.attempts.filter((attempt) => attempt.status === "error").length,
   };
   const scored = totals.passed + totals.failed;
@@ -407,7 +421,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
       {(summary.finished_at === null || summary.incomplete) && (
         <div className="notice" data-testid="incomplete-banner">
-          Incomplete run — unfinished run or missing trial coverage. Numbers are partial.
+          Incomplete run — {incompleteReason({ unfinished: summary.finished_at === null, ...totals })}. Numbers are partial.
         </div>
       )}
 

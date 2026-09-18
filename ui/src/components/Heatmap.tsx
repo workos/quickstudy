@@ -32,6 +32,8 @@ export interface HeatCell {
   flaky: boolean;
   incomplete: boolean;
   errors: number;
+  /** Named checks passed / run over the scored attempts; null when nothing was scored. */
+  checks: { passed: number; total: number } | null;
 }
 
 export const RATE_THRESHOLDS = [0.8, 0.9, 0.95] as const;
@@ -163,6 +165,7 @@ export function Heatmap({ cells, rows, columns, onCellClick }: HeatmapProps): Re
                 const accessibleLabel =
                   `${cell.evalId}, ${cell.experimentId}: ${formatRate(cell.rate)}, ` +
                   `${cell.passed} of ${cell.scored} scored passed` +
+                  `${cell.checks ? `; ${cell.checks.passed} of ${cell.checks.total} checks passed` : ""}` +
                   `${cell.errors > 0 ? `; ${cell.errors} errored` : ""}` +
                   `${cell.flaky ? "; flaky trials" : ""}${cell.incomplete ? "; incomplete" : ""}`;
                 return (
@@ -185,6 +188,7 @@ export function Heatmap({ cells, rows, columns, onCellClick }: HeatmapProps): Re
                       <span className="cell-rate">{formatRate(cell.rate)}</span>
                       <span className="cell-sub">
                         {cell.passed}/{cell.scored}
+                        {cell.checks ? ` · ${cell.checks.passed}/${cell.checks.total} checks` : ""}
                         {cell.errors > 0 ? ` · ${cell.errors} err` : ""}
                       </span>
                       {cell.incomplete && (

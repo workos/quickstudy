@@ -75,11 +75,15 @@ dockerTest("a timed-out Docker exec cannot leave a delayed child writing evidenc
     expect(result.timedOut).toBe(true);
     await Bun.sleep(500);
     expect(existsSync(join(root, "late.txt"))).toBe(false);
+    // The killed attempt's workspace is still exec-able afterwards (the diff capture relies on it).
+    const after = await container.execInWorkspace(["sh", "-c", "echo alive"]);
+    expect(after.exitCode).toBe(0);
+    expect(after.stdout.trim()).toBe("alive");
   } finally {
     await container.teardown();
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 60_000); // four daemon round trips (exec, kill, start, exec); a slow daemon blows the 5 s default
 dockerTest("workspace transfer excludes bulk before copying and preserves safe source links", async () => {
   const root = mkdtempSync(join(tmpdir(), "qs-transfer-"));
   const fixtureDir = join(root, "fixture");

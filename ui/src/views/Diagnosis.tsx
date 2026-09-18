@@ -13,12 +13,14 @@
  * command that produces one.
  */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { DIAGNOSIS_TARGETS, DIAGNOSIS_SCHEMA_VERSION, type DiagnosisEvidence, type DiagnosisFinding, type DiagnosisJson } from "../../../src/diagnose/types.ts";
 import type { DataMeta } from "../../../src/export-types.ts";
+import { CopyButton } from "../components/CopyButton.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { StatBadge, type BadgeTone } from "../components/StatBadge.tsx";
 import { loadDiagnosis } from "../data.ts";
+import { diagnosisMarkdown, findingMarkdown } from "../diagnosis-markdown.ts";
 import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
 
@@ -34,13 +36,18 @@ function confidenceTone(confidence: DiagnosisFinding["confidence"]): BadgeTone {
   return "gray";
 }
 
+function evidenceHref(runId: string, evidence: DiagnosisEvidence): string {
+  return links.attempt(runId, evidence.attempt_id, evidence.artifact, evidence.lines);
+}
+
+/** Absolute evidence URL for copied Markdown, so a pasted link opens the hosted bundle. */
+function evidenceUrl(runId: string): (evidence: DiagnosisEvidence) => string {
+  return (evidence) => new URL(evidenceHref(runId, evidence), window.location.href).href;
+}
+
 function EvidenceLink({ runId, evidence }: { runId: string; evidence: DiagnosisEvidence }): ReactNode {
   return (
-    <a
-      className="evidence-chip"
-      data-testid="evidence-link"
-      href={links.attempt(runId, evidence.attempt_id, evidence.artifact, evidence.lines)}
-    >
+    <a className="evidence-chip" data-testid="evidence-link" href={evidenceHref(runId, evidence)}>
       {evidence.artifact} L{evidence.lines[0]}–{evidence.lines[1]}
     </a>
   );
@@ -51,7 +58,10 @@ function FindingCard({ runId, finding }: { runId: string; finding: DiagnosisFind
     <div className="card" data-testid="diagnosis-finding">
       <div className="head">
         <h3>{finding.claim}</h3>
-        <StatBadge tone={confidenceTone(finding.confidence)}>{finding.confidence} confidence</StatBadge>
+        <span className="head-actions">
+          <StatBadge tone={confidenceTone(finding.confidence)}>{finding.confidence} confidence</StatBadge>
+          <CopyButton testId="copy-finding" text={() => findingMarkdown(finding, evidenceUrl(runId))} />
+        </span>
       </div>
       <div className="body">
         <div className="attribution-reason">
@@ -73,6 +83,9 @@ function FindingCard({ runId, finding }: { runId: string; finding: DiagnosisFind
 }
 
 function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: DiagnosisJson }): ReactNode {
+  // null = every target. A 179-finding page is unreadable as one wall; the per-target
+  // counts are the summary and the filter at once.
+  const [target, setTarget] = useState<string | null>(null);
   if (diagnosis.schema_version !== DIAGNOSIS_SCHEMA_VERSION) {
     // Artifact-level version check, view-local by design: DataError's
     // "schema" kind belongs to the data directory (meta.json); this banner
@@ -138,12 +151,33 @@ function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: Diagnos
         </div>
       )}
 
-      {DIAGNOSIS_TARGETS.filter((target) => byTarget.has(target)).map((target) => (
-        <section key={target} data-testid={`diagnosis-target-${target}`}>
+      {diagnosis.findings.length > 0 && (
+        <div className="toolbar" style={{ justifyContent: "flex-start" }}>
+          <div className="seg" role="group" aria-label="Finding target" data-testid="diagnosis-target-filter">
+            <button type="button" className={target === null ? "active" : ""} aria-pressed={target === null} onClick={() => setTarget(null)}>
+              all ({diagnosis.findings.length})
+            </button>
+            {DIAGNOSIS_TARGETS.filter((candidate) => byTarget.has(candidate)).map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                className={target === candidate ? "active" : ""}
+                aria-pressed={target === candidate}
+                onClick={() => setTarget(candidate)}
+              >
+                {candidate} ({byTarget.get(candidate)?.length})
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {DIAGNOSIS_TARGETS.filter((candidate) => byTarget.has(candidate) && (target === null || target === candidate)).map((candidate) => (
+        <section key={candidate} data-testid={`diagnosis-target-${candidate}`}>
           <h2>
-            <code>{target}</code> findings
+            <code>{candidate}</code> findings
           </h2>
-          {(byTarget.get(target) ?? []).map((finding, index) => (
+          {(byTarget.get(candidate) ?? []).map((finding, index) => (
             <FindingCard
               key={`${finding.eval_id}|${finding.experiment_id}|${index}`}
               runId={runId}
@@ -219,6 +253,16 @@ export function Diagnosis({ meta, runId }: DiagnosisProps): ReactNode {
           </select>
         </div>
       </div>
+
+      {diagnosis !== null && diagnosis.schema_version === DIAGNOSIS_SCHEMA_VERSION && (
+        <div className="toolbar" data-testid="diagnosis-toolbar">
+          <CopyButton
+            testId="copy-diagnosis"
+            label="Copy all findings as Markdown"
+            text={() => diagnosisMarkdown(diagnosis, evidenceUrl(runId))}
+          />
+        </div>
+      )}
 
       {diagnosis === null ? (
         <div className="empty-state" data-testid="diagnosis-empty">
