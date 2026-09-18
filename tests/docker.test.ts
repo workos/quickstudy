@@ -54,6 +54,20 @@ if (!enabled) {
 }
 const describeDocker = enabled ? describe : describe.skip;
 
+// The failure-path diff capture needs git in the image; the alpine test image has none, so
+// build a one-layer derivative on demand (needs the network once, like the alpine pull).
+const GIT_IMAGE = "quickstudy-test-alpine-git:3";
+let gitImageReady = false;
+if (enabled) {
+  gitImageReady =
+    (await imageExists(GIT_IMAGE)) ||
+    Bun.spawnSync(["docker", "build", "-q", "-t", GIT_IMAGE, "-"], {
+      stdin: Buffer.from(`FROM ${TEST_IMAGE}\nRUN apk add --no-cache git\n`),
+    }).exitCode === 0;
+  if (!gitImageReady) console.warn(`\n⚠️  SKIPPING failure-path diff tests — could not build ${GIT_IMAGE}\n`);
+}
+const describeGit = gitImageReady ? describe : describe.skip;
+
 // The mcp sidecar suite additionally needs the harness-built proxy image.
 const mcpImageReady = daemonUp && (await imageExists(MCP_PROXY_IMAGE));
 if (daemonUp && !mcpImageReady) {
@@ -167,10 +181,11 @@ async function runFakeAttempt(options: {
   store: ResultsStore;
   artifacts: ArtifactsStore;
   attemptTimeoutMs?: number;
+  image?: string;
   log?: (line: string) => void;
 }): Promise<Awaited<ReturnType<typeof executeRunV3>>> {
   const evals = discoverAlpineEval();
-  const experiments = [alpineExperiment()];
+  const experiments = [alpineExperiment(options.image !== undefined ? { image: options.image } : {})];
   return executeRunV3({
     evals,
     experiments,
@@ -404,6 +419,61 @@ describeDocker("docker isolation", () => {
         expect(attempt.error).toContain("agent command exited 7");
         const errorText = readFileSync(join(artifacts.paths(summary.runId, attempt.id).error), "utf8");
         expect(errorText).toContain("segfault somewhere");
+      } finally {
+        store.close();
+        delete process.env["FAKE_PROVIDER_KEY"];
+      }
+    },
+    LIFECYCLE_TIMEOUT,
+  );
+});
+
+describeGit("failure-path diff capture (git-enabled image)", () => {
+  // The agent edits a tracked file and adds a new one, then dies. Both edits must reach the
+  // persisted diff while the attempt keeps its own outcome.
+  const EDIT = "echo changed >> app.txt && echo brand-new > new.txt";
+
+  async function expectDiffPersisted(attempt: { diffRef: string | null }): Promise<void> {
+    expect(attempt.diffRef).not.toBeNull();
+    const diff = readFileSync(attempt.diffRef as string, "utf8");
+    expect(diff).toContain("+++ b/app.txt");
+    expect(diff).toContain("+fixture filechanged"); // the fixture has no trailing newline
+    expect(diff).toContain("+++ b/new.txt");
+    expect(diff).toContain("+brand-new");
+  }
+
+  test(
+    "a timed-out attempt stays 'incomplete' and keeps the diff of what it got done",
+    async () => {
+      process.env["FAKE_PROVIDER_KEY"] = FAKE_PROVIDER_KEY;
+      const { store, artifacts } = makeStores();
+      try {
+        const summary = await runFakeAttempt({ script: `${EDIT} && sleep 60`, store, artifacts, attemptTimeoutMs: 2_000, image: GIT_IMAGE });
+        expect(summary.incomplete).toBe(1);
+        const attempt = store.listAttempts(summary.runId)[0]!;
+        expect(attempt.status).toBe("incomplete");
+        expect(attempt.error).toContain("timed out");
+        await expectDiffPersisted(attempt);
+      } finally {
+        store.close();
+        delete process.env["FAKE_PROVIDER_KEY"];
+      }
+    },
+    LIFECYCLE_TIMEOUT,
+  );
+
+  test(
+    "a non-zero-exit attempt stays 'error' with its exit code and keeps the diff",
+    async () => {
+      process.env["FAKE_PROVIDER_KEY"] = FAKE_PROVIDER_KEY;
+      const { store, artifacts } = makeStores();
+      try {
+        const summary = await runFakeAttempt({ script: `${EDIT} && exit 7`, store, artifacts, image: GIT_IMAGE });
+        expect(summary.errors).toBe(1);
+        const attempt = store.listAttempts(summary.runId)[0]!;
+        expect(attempt.status).toBe("error");
+        expect(attempt.error).toContain("agent command exited 7");
+        await expectDiffPersisted(attempt);
       } finally {
         store.close();
         delete process.env["FAKE_PROVIDER_KEY"];
