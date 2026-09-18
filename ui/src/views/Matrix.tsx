@@ -16,6 +16,7 @@ import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } fr
 import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
 import { AttemptSurfaceUsage } from "../components/SurfaceUsage.tsx";
 import { loadRun } from "../data.ts";
+import { fmtTokens, incompleteReason } from "../format.ts";
 import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
 
@@ -92,11 +93,6 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
     });
   }
   return cells;
-}
-
-function fmtTokens(tokens: number | null): string {
-  if (tokens === null) return "—";
-  return tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
 }
 
 function fmtDuration(attempt: DataAttempt): string {
@@ -340,6 +336,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
     passed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed === true).length,
     failed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed !== true).length,
     incomplete: value.attempts.filter((attempt) => attempt.status === "incomplete").length,
+    timedOut: value.attempts.filter((attempt) => attempt.status === "incomplete" && attempt.error?.startsWith("attempt timed out")).length,
     errors: value.attempts.filter((attempt) => attempt.status === "error").length,
   };
   const scored = totals.passed + totals.failed;
@@ -409,7 +406,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
       {(summary.finished_at === null || summary.incomplete) && (
         <div className="notice" data-testid="incomplete-banner">
-          Incomplete run — unfinished run or missing trial coverage. Numbers are partial.
+          Incomplete run — {incompleteReason({ unfinished: summary.finished_at === null, ...totals })}. Numbers are partial.
         </div>
       )}
 

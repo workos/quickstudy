@@ -18,6 +18,7 @@ import { CostEstimate } from "../components/CostEstimate.tsx";
 import { StatBadge } from "../components/StatBadge.tsx";
 import { ExperimentUsageSummary } from "../components/SurfaceUsage.tsx";
 import { loadReport } from "../data.ts";
+import { fmtTokens, incompleteReason } from "../format.ts";
 import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
 
@@ -151,6 +152,8 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
     ]),
   );
   const labelOf = (experimentId: string): string | null => agentLabels.get(experimentId) ?? null;
+  // pass@k / pass^k restate a single scored trial as "—" on every row: the column is dead until trials > 1.
+  const multiTrial = value.run.trials > 1;
 
   return (
     <div data-testid="report-view">
@@ -182,7 +185,8 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
 
       {value.incomplete && (
         <div className="notice" data-testid="incomplete-banner">
-          ⚠️ INCOMPLETE RUN — unfinished run or invalid trial coverage. Numbers below are partial and NOT comparable to a full sweep.
+          ⚠️ INCOMPLETE RUN — {incompleteReason({ unfinished: value.run.finished_at === null, ...value.totals })}. Numbers
+          below are partial and NOT comparable to a full sweep.
         </div>
       )}
 
@@ -206,7 +210,12 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
           <div className="kpi-label">Reported cost</div>
           <div className="kpi-val">{value.telemetry.cost_usd === null ? "—" : `$${value.telemetry.cost_usd.toFixed(2)}`}</div>
           <div className="kpi-meta">
-            {value.telemetry.cost_usd === null ? "unavailable" : `across ${value.telemetry.cost_attempts} attempt(s)`}
+            {value.telemetry.cost_usd === null
+              ? "unavailable"
+              : `${value.telemetry.cost_attempts} of ${value.totals.attempts} attempts reported a cost` +
+                (value.totals.attempts > value.telemetry.cost_attempts
+                  ? ` · ${value.totals.attempts - value.telemetry.cost_attempts} unpriced, so this understates the spend`
+                  : "")}
           </div>
         </div>
         <CostEstimate estimate={value.cost_estimate} />
@@ -215,9 +224,11 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
           <div className="kpi-val" style={{ fontSize: 15 }}>
             {value.telemetry.tokens_in === null && value.telemetry.tokens_out === null
               ? "unavailable"
-              : `${value.telemetry.tokens_in ?? 0} in / ${value.telemetry.tokens_out ?? 0} out`}
+              : `${fmtTokens(value.telemetry.tokens_in)} in / ${fmtTokens(value.telemetry.tokens_out)} out`}
           </div>
-          <div className="kpi-meta">from {value.telemetry.token_attempts} attempt(s)</div>
+          <div className="kpi-meta">
+            from {value.telemetry.token_attempts} of {value.totals.attempts} attempts
+          </div>
         </div>
       </div>
 
@@ -234,9 +245,11 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
                 <th>experiment</th>
                 <th>pass rate</th>
                 <th>raw</th>
-                <th title="pass@k: fraction of size-k subsets of the scored trials with ≥1 pass; pass^k: (passed/scored)^k">
-                  pass@k / pass^k
-                </th>
+                {multiTrial && (
+                  <th title="pass@k: fraction of size-k subsets of the scored trials with ≥1 pass; pass^k: (passed/scored)^k">
+                    pass@k / pass^k
+                  </th>
+                )}
                 <th>notes</th>
                 <th>checks</th>
               </tr>
@@ -260,9 +273,11 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
                   <td>
                     {pair.passed}/{pair.scored}
                   </td>
-                  <td>
-                    <PassAtKCell pair={pair} />
-                  </td>
+                  {multiTrial && (
+                    <td>
+                      <PassAtKCell pair={pair} />
+                    </td>
+                  )}
                   <td>
                     {[
                       pair.incomplete > 0 ? `${pair.incomplete} incomplete` : "",
