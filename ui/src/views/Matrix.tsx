@@ -78,6 +78,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
     const passed = completed.filter((attempt) => attempt.passed === true).length;
     const scored = completed.length;
     const outcomes = new Set(completed.map((attempt) => attempt.passed === true));
+    const checks = completed.flatMap((attempt) => attempt.checks ?? []);
     cells.push({
       evalId: first.eval_id,
       experimentId: first.experiment_id,
@@ -87,6 +88,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
       flaky: outcomes.size > 1,
       incomplete: group.length < expectedTrials || group.some((attempt) => attempt.status === "incomplete"),
       errors: group.filter((attempt) => attempt.status === "error").length,
+      checks: checks.length > 0 ? { passed: checks.filter((check) => check.passed).length, total: checks.length } : null,
     });
   }
   return cells;
