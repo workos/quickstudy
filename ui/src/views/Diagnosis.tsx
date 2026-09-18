@@ -13,7 +13,7 @@
  * command that produces one.
  */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { DIAGNOSIS_TARGETS, DIAGNOSIS_SCHEMA_VERSION, type DiagnosisEvidence, type DiagnosisFinding, type DiagnosisJson } from "../../../src/diagnose/types.ts";
 import type { DataMeta } from "../../../src/export-types.ts";
 import { CopyButton } from "../components/CopyButton.tsx";
@@ -83,6 +83,9 @@ function FindingCard({ runId, finding }: { runId: string; finding: DiagnosisFind
 }
 
 function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: DiagnosisJson }): ReactNode {
+  // null = every target. A 179-finding page is unreadable as one wall; the per-target
+  // counts are the summary and the filter at once.
+  const [target, setTarget] = useState<string | null>(null);
   if (diagnosis.schema_version !== DIAGNOSIS_SCHEMA_VERSION) {
     // Artifact-level version check, view-local by design: DataError's
     // "schema" kind belongs to the data directory (meta.json); this banner
@@ -148,12 +151,33 @@ function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: Diagnos
         </div>
       )}
 
-      {DIAGNOSIS_TARGETS.filter((target) => byTarget.has(target)).map((target) => (
-        <section key={target} data-testid={`diagnosis-target-${target}`}>
+      {diagnosis.findings.length > 0 && (
+        <div className="toolbar" style={{ justifyContent: "flex-start" }}>
+          <div className="seg" role="group" aria-label="Finding target" data-testid="diagnosis-target-filter">
+            <button type="button" className={target === null ? "active" : ""} aria-pressed={target === null} onClick={() => setTarget(null)}>
+              all ({diagnosis.findings.length})
+            </button>
+            {DIAGNOSIS_TARGETS.filter((candidate) => byTarget.has(candidate)).map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                className={target === candidate ? "active" : ""}
+                aria-pressed={target === candidate}
+                onClick={() => setTarget(candidate)}
+              >
+                {candidate} ({byTarget.get(candidate)?.length})
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {DIAGNOSIS_TARGETS.filter((candidate) => byTarget.has(candidate) && (target === null || target === candidate)).map((candidate) => (
+        <section key={candidate} data-testid={`diagnosis-target-${candidate}`}>
           <h2>
-            <code>{target}</code> findings
+            <code>{candidate}</code> findings
           </h2>
-          {(byTarget.get(target) ?? []).map((finding, index) => (
+          {(byTarget.get(candidate) ?? []).map((finding, index) => (
             <FindingCard
               key={`${finding.eval_id}|${finding.experiment_id}|${index}`}
               runId={runId}
