@@ -101,8 +101,16 @@ function fmtDuration(attempt: DataAttempt): string {
   return `${Math.floor(totalSeconds / 60)}m${String(totalSeconds % 60).padStart(2, "0")}s`;
 }
 
-function AttemptRow({ attempt, runId }: { attempt: DataAttempt; runId: string }): ReactNode {
+// What an adapter's `turns` counts. Claude reports API turns (dozens per attempt); codex
+// `exec` reports thread turns — one per prompt — so a bare "turns 1" beside "turns 80" reads
+// as 80× the efficiency when it is a different unit.
+const TURN_UNIT: Record<string, { label: string; title: string }> = {
+  codex: { label: "thread turns", title: "codex exec reports one thread turn per prompt, not per agent step — not comparable to Claude's turn count" },
+};
+
+function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: string; adapter: string | null }): ReactNode {
   const status = displayStatus(attempt);
+  const turnUnit = (adapter !== null && TURN_UNIT[adapter]) || { label: "turns", title: "agent turns, as counted by the adapter" };
   return (
     <div className="attempt-row" data-testid="drill-attempt">
       <div className="attempt-line">
@@ -132,7 +140,9 @@ function AttemptRow({ attempt, runId }: { attempt: DataAttempt; runId: string })
           tokens {fmtTokens(attempt.tokens_in)} in / {fmtTokens(attempt.tokens_out)} out
         </span>
         <span>cost {attempt.cost_usd === null ? "—" : `$${attempt.cost_usd.toFixed(2)}`}</span>
-        <span>turns {attempt.turns ?? "—"}</span>
+        <span title={turnUnit.title}>
+          {turnUnit.label} {attempt.turns ?? "—"}
+        </span>
       </div>
       <AttemptSurfaceUsage treatment={attempt.treatment} usage={attempt.surface_usage} />
     </div>
@@ -246,7 +256,12 @@ function DrillDown({
         </p>
         {relevant.length === 0 && <div className="viewer-note">No attempts in this cell.</div>}
         {relevant.map((attempt) => (
-          <AttemptRow key={attempt.id} attempt={attempt} runId={runId} />
+          <AttemptRow
+            key={attempt.id}
+            attempt={attempt}
+            runId={runId}
+            adapter={run.manifest.experiments[attempt.experiment_id]?.components.agent?.adapter ?? null}
+          />
         ))}
       </aside>
     </>
