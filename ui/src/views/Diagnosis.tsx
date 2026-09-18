@@ -254,7 +254,7 @@ export function Diagnosis({ meta, runId }: DiagnosisProps): ReactNode {
         </div>
       </div>
 
-      {diagnosis !== null && (
+      {diagnosis !== null && diagnosis.schema_version === DIAGNOSIS_SCHEMA_VERSION && (
         <div className="toolbar" data-testid="diagnosis-toolbar">
           <CopyButton
             testId="copy-diagnosis"
