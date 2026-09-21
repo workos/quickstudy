@@ -54,6 +54,15 @@ fi
 
 # validate never reads the UI shell, so assert the installed tree directly.
 # -s also catches the empty-ui/dist-packs-"successfully" failure mode.
+# The `./ui/viewers` export (embeddable transcript/diff viewers) must ship as source.
+for viewer_file in ui/src/viewers.ts ui/src/components/TranscriptViewer.tsx ui/src/components/DiffViewer.tsx ui/src/components/viewers.css; do
+  if ! test -s "$install_dir/$viewer_file"; then
+    echo "pack-check: $install_dir/$viewer_file is missing or empty" >&2
+    echo "            (is it listed in package.json \"files\"?)" >&2
+    exit 1
+  fi
+done
+
 if ! test -s "$install_dir/ui/dist/index.html"; then
   echo "pack-check: $install_dir/ui/dist/index.html is missing or empty" >&2
   echo "            (is ui/dist in package.json \"files\", and did prepack build it?)" >&2

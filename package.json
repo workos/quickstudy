@@ -9,7 +9,9 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./ui/viewers": "./ui/src/viewers.ts",
+    "./ui/viewers.css": "./ui/src/components/viewers.css"
   },
   "files": [
     "src",
@@ -17,7 +19,11 @@
     "images",
     "examples",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "ui/src/viewers.ts",
+    "ui/src/components/TranscriptViewer.tsx",
+    "ui/src/components/DiffViewer.tsx",
+    "ui/src/components/viewers.css"
   ],
   "engines": {
     "bun": ">=1.1"
@@ -49,5 +55,13 @@
     "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

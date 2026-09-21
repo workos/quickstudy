@@ -1,0 +1,167 @@
+/*
+ * The transcript and diff viewers' styles (components/TranscriptViewer.tsx and
+ * DiffViewer.tsx), also published as the package's `./ui/viewers.css` export for hosts that
+ * embed the viewers. They read the theme through custom properties the host defines:
+ *   --surface --bg --line --muted --accent --green --amber --amber-bg --green-bg --red-bg
+ *   --gray-bg --mono
+ * (styles.css sets them on :root for this app). No selector here is scoped: embed the
+ * viewers inside an element that sets those variables.
+ */
+
+.viewer {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.turn {
+  border-bottom: 1px solid var(--line);
+}
+
+.turn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 0;
+  cursor: pointer;
+}
+
+.turn-head:hover {
+  background: var(--bg);
+}
+
+.turn-head .line-no {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 46px;
+}
+
+.turn-head .role {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-width: 72px;
+}
+
+.role-assistant {
+  color: var(--accent);
+}
+
+.role-user {
+  color: var(--green);
+}
+
+.role-tool {
+  color: var(--amber);
+}
+
+.role-system {
+  color: var(--muted);
+}
+
+.turn-head .summary {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.turn-body {
+  padding: 8px 12px 12px 70px;
+  background: var(--bg);
+}
+
+.turn-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.turn.highlight {
+  background: var(--amber-bg);
+}
+
+.turn.highlight .turn-head {
+  background: var(--amber-bg);
+}
+
+.viewer-note {
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.viewer-note button {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+/* --- diff --- */
+
+.diff {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+}
+
+.diff-line {
+  display: flex;
+  white-space: pre;
+}
+
+.diff-line .line-no {
+  min-width: 46px;
+  padding: 0 8px;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.diff-line .text {
+  flex: 1;
+  padding-right: 12px;
+}
+
+.diff-add {
+  background: var(--green-bg);
+}
+
+.diff-del {
+  background: var(--red-bg);
+}
+
+.diff-hunk {
+  background: var(--gray-bg);
+  color: var(--accent);
+}
+
+.diff-file {
+  background: var(--gray-bg);
+  font-weight: 700;
+}
+
+.diff-line.highlight {
+  outline: 2px solid var(--amber);
+  outline-offset: -2px;
+}
