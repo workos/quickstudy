@@ -9,7 +9,7 @@ export const EMBEDDED_BUILD_INFO: {
   // (the `x-release-please-version` marker anchors the replacement). It is
   // restored as-is after a binary build (scripts/build-binary.ts), so the
   // committed source `--version` stays in lockstep with package.json.
-  version: "0.2.0", // x-release-please-version
+  version: "0.2.1", // x-release-please-version
   revision: null,
   dirty: null,
   sourceHash: null,

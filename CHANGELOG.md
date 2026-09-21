@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/workos/quickstudy/compare/v0.2.0...v0.2.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **ui:** make the hosted report say what it knows ([#14](https://github.com/workos/quickstudy/issues/14)) ([4d38f6e](https://github.com/workos/quickstudy/commit/4d38f6e04991dbdccf1334169c6dab888f918d9e))
+
 ## [0.2.0](https://github.com/workos/quickstudy/compare/v0.1.1...v0.2.0) (2026-09-16)
 
 
