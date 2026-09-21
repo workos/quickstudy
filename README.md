@@ -231,6 +231,27 @@ quickstudy export <run-id> --out ./site
 npx gh-pages -d site        # or push ./site to any static host
 ```
 
+### Embedding the viewers
+
+A host that renders exported bundles in its own UI can use this UI's transcript and
+diff viewers directly instead of copying them:
+
+```tsx
+import { DiffViewer, TranscriptViewer } from "@workos/quickstudy/ui/viewers";
+import "@workos/quickstudy/ui/viewers.css";
+
+// Fetch data/runs/<run>/attempts/<id>.transcript.txt yourself (the bundle lazy-loads it
+// the same way), then render it; `lines` highlights and scrolls to a cited range.
+<div className="my-theme"><TranscriptViewer text={text} lines={[21, 60]} /></div>
+```
+
+The components import React only (an optional peer dependency). Every rule in
+`viewers.css` is scoped under the components' root class `.quickstudy-viewer`, so importing
+it restyles nothing else in the host. It reads the theme through custom properties the host sets on a wrapping element: `--surface`, `--bg`,
+`--line`, `--muted`, `--accent`, `--green`, `--amber`, `--amber-bg`, `--green-bg`,
+`--red-bg`, `--gray-bg` and `--mono`. Turn parsing, roles, collapsing and the `L<n>`
+anchors are exactly what this UI shows, so evidence links carry over unchanged.
+
 ## Development
 
 Run the CLI from source as `bun src/cli.ts <cmd>` (what `quickstudy` is,

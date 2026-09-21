@@ -27,6 +27,8 @@ escaped_name="${pkg_name#@}"
 escaped_name="${escaped_name//\//-}"
 tarball="${escaped_name}-${expected_version}.tgz"
 install_dir="node_modules/${pkg_name}"
+# The viewers' optional peer, installed alongside the tarball the way an embedding host would.
+react_version="$(bun -e 'console.log(require("./package.json").devDependencies.react)')"
 
 echo "• building the UI bundle (bun run ui:build)…"
 bun run ui:build >/dev/null
@@ -54,6 +56,37 @@ fi
 
 # validate never reads the UI shell, so assert the installed tree directly.
 # -s also catches the empty-ui/dist-packs-"successfully" failure mode.
+# The `./ui/viewers` export (embeddable transcript/diff viewers) must ship as source…
+for viewer_file in ui/src/viewers.ts ui/src/components/TranscriptViewer.tsx ui/src/components/DiffViewer.tsx ui/src/components/viewers.css; do
+  if ! test -s "$install_dir/$viewer_file"; then
+    echo "pack-check: $install_dir/$viewer_file is missing or empty" >&2
+    echo "            (is it listed in package.json \"files\"?)" >&2
+    exit 1
+  fi
+done
+# …and resolve and import through the package's exports map from the installed tree, with
+# React present as a host would have it — the failure class a file listing cannot catch (a
+# transitive import left out of `files`, a broken subpath).
+echo "• importing ${pkg_name}/ui/viewers from the installed tarball…"
+bun add "react@${react_version}" >/dev/null
+bun -e "
+  const viewers = await import('${pkg_name}/ui/viewers');
+  for (const name of ['TranscriptViewer', 'DiffViewer', 'parseTranscript', 'parseTurn']) {
+    if (typeof viewers[name] !== 'function') throw new Error(\`${pkg_name}/ui/viewers exports no \${name}\`);
+  }
+  const css = import.meta.resolve('${pkg_name}/ui/viewers.css');
+  if (!css.endsWith('/ui/src/components/viewers.css')) throw new Error(\`viewers.css resolved to \${css}\`);
+  const turn = viewers.parseTurn('{\"role\":\"user\",\"content\":\"hi\"}', 1);
+  if (turn.role !== 'user' || turn.line !== 1) throw new Error('parseTurn misread a role event');
+"
+for viewer_file in ui/src/viewers.ts ui/src/components/TranscriptViewer.tsx ui/src/components/DiffViewer.tsx ui/src/components/viewers.css; do
+  if ! test -s "$install_dir/$viewer_file"; then
+    echo "pack-check: $install_dir/$viewer_file is missing or empty" >&2
+    echo "            (is it listed in package.json \"files\"?)" >&2
+    exit 1
+  fi
+done
+
 if ! test -s "$install_dir/ui/dist/index.html"; then
   echo "pack-check: $install_dir/ui/dist/index.html is missing or empty" >&2
   echo "            (is ui/dist in package.json \"files\", and did prepack build it?)" >&2
