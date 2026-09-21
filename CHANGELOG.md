@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/workos/quickstudy/compare/v0.2.1...v0.3.0) (2026-09-21)
+
+
+### Features
+
+* **ui:** export the transcript and diff viewers ([#16](https://github.com/workos/quickstudy/issues/16)) ([c054326](https://github.com/workos/quickstudy/commit/c0543268ec0638f60d54679a889aea50096903c1))
+
 ## [0.2.1](https://github.com/workos/quickstudy/compare/v0.2.0...v0.2.1) (2026-09-18)
 
 
