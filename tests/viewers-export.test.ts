@@ -55,4 +55,18 @@ describe("ui/viewers export", () => {
       expect(styles).not.toContain(`\n${selector} {`);
     }
   });
+  test("every public rule is scoped under the components' root class, which both roots carry", () => {
+    const css = readFileSync(join(root, "ui/src/components/viewers.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const selectors = [...css.matchAll(/(^|\n)([^@{}\n][^{}]*?)\s*\{/g)].flatMap((match) =>
+      match[2]!.split(",").map((selector) => selector.trim()),
+    );
+    expect(selectors.length).toBeGreaterThan(20);
+    for (const selector of selectors) {
+      expect(selector, `${selector} is not scoped`).toMatch(/^\.quickstudy-viewer(\.|\s|$)/);
+    }
+    for (const component of ["TranscriptViewer.tsx", "DiffViewer.tsx"]) {
+      const source = readFileSync(join(root, "ui/src/components", component), "utf8");
+      expect(source).toMatch(/className="quickstudy-viewer viewer/);
+    }
+  });
 });

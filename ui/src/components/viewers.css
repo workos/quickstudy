@@ -1,25 +1,26 @@
 /*
  * The transcript and diff viewers' styles (components/TranscriptViewer.tsx and
  * DiffViewer.tsx), also published as the package's `./ui/viewers.css` export for hosts that
- * embed the viewers. They read the theme through custom properties the host defines:
+ * embed the viewers. Every rule is scoped under the components' root class
+ * `.quickstudy-viewer`, so importing this file restyles nothing else in a host. The theme
+ * comes through custom properties the host defines on any ancestor:
  *   --surface --bg --line --muted --accent --green --amber --amber-bg --green-bg --red-bg
  *   --gray-bg --mono
- * (styles.css sets them on :root for this app). No selector here is scoped: embed the
- * viewers inside an element that sets those variables.
+ * (styles.css sets them on :root for this app).
  */
 
-.viewer {
+.quickstudy-viewer.viewer {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
 }
 
-.turn {
+.quickstudy-viewer .turn {
   border-bottom: 1px solid var(--line);
 }
 
-.turn-head {
+.quickstudy-viewer .turn-head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -32,18 +33,18 @@
   cursor: pointer;
 }
 
-.turn-head:hover {
+.quickstudy-viewer .turn-head:hover {
   background: var(--bg);
 }
 
-.turn-head .line-no {
+.quickstudy-viewer .turn-head .line-no {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);
   min-width: 46px;
 }
 
-.turn-head .role {
+.quickstudy-viewer .turn-head .role {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -51,23 +52,23 @@
   min-width: 72px;
 }
 
-.role-assistant {
+.quickstudy-viewer .role-assistant {
   color: var(--accent);
 }
 
-.role-user {
+.quickstudy-viewer .role-user {
   color: var(--green);
 }
 
-.role-tool {
+.quickstudy-viewer .role-tool {
   color: var(--amber);
 }
 
-.role-system {
+.quickstudy-viewer .role-system {
   color: var(--muted);
 }
 
-.turn-head .summary {
+.quickstudy-viewer .turn-head .summary {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
@@ -76,26 +77,26 @@
   flex: 1;
 }
 
-.turn-body {
+.quickstudy-viewer .turn-body {
   padding: 8px 12px 12px 70px;
   background: var(--bg);
 }
 
-.turn-body pre {
+.quickstudy-viewer .turn-body pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.turn.highlight {
+.quickstudy-viewer .turn.highlight {
   background: var(--amber-bg);
 }
 
-.turn.highlight .turn-head {
+.quickstudy-viewer .turn.highlight .turn-head {
   background: var(--amber-bg);
 }
 
-.viewer-note {
+.quickstudy-viewer .viewer-note {
   padding: 10px 14px;
   color: var(--muted);
   font-size: 12px;
@@ -106,7 +107,7 @@
   gap: 12px;
 }
 
-.viewer-note button {
+.quickstudy-viewer .viewer-note button {
   font: inherit;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -117,19 +118,19 @@
 
 /* --- diff --- */
 
-.diff {
+.quickstudy-viewer.diff {
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.45;
   overflow-x: auto;
 }
 
-.diff-line {
+.quickstudy-viewer .diff-line {
   display: flex;
   white-space: pre;
 }
 
-.diff-line .line-no {
+.quickstudy-viewer .diff-line .line-no {
   min-width: 46px;
   padding: 0 8px;
   color: var(--muted);
@@ -138,30 +139,30 @@
   flex-shrink: 0;
 }
 
-.diff-line .text {
+.quickstudy-viewer .diff-line .text {
   flex: 1;
   padding-right: 12px;
 }
 
-.diff-add {
+.quickstudy-viewer .diff-add {
   background: var(--green-bg);
 }
 
-.diff-del {
+.quickstudy-viewer .diff-del {
   background: var(--red-bg);
 }
 
-.diff-hunk {
+.quickstudy-viewer .diff-hunk {
   background: var(--gray-bg);
   color: var(--accent);
 }
 
-.diff-file {
+.quickstudy-viewer .diff-file {
   background: var(--gray-bg);
   font-weight: 700;
 }
 
-.diff-line.highlight {
+.quickstudy-viewer .diff-line.highlight {
   outline: 2px solid var(--amber);
   outline-offset: -2px;
 }

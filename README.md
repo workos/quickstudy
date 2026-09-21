@@ -245,8 +245,9 @@ import "@workos/quickstudy/ui/viewers.css";
 <div className="my-theme"><TranscriptViewer text={text} lines={[21, 60]} /></div>
 ```
 
-The components import React only (an optional peer dependency). `viewers.css` reads the
-theme through custom properties the host sets on a wrapping element: `--surface`, `--bg`,
+The components import React only (an optional peer dependency). Every rule in
+`viewers.css` is scoped under the components' root class `.quickstudy-viewer`, so importing
+it restyles nothing else in the host. It reads the theme through custom properties the host sets on a wrapping element: `--surface`, `--bg`,
 `--line`, `--muted`, `--accent`, `--green`, `--amber`, `--amber-bg`, `--green-bg`,
 `--red-bg`, `--gray-bg` and `--mono`. Turn parsing, roles, collapsing and the `L<n>`
 anchors are exactly what this UI shows, so evidence links carry over unchanged.

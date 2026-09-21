@@ -49,7 +49,7 @@ export function DiffViewer({ text, lines }: DiffViewerProps): ReactNode {
   }
 
   return (
-    <div className="viewer diff" ref={containerRef} data-testid="diff-viewer">
+    <div className="quickstudy-viewer viewer diff" ref={containerRef} data-testid="diff-viewer">
       {rows.map((row, index) => {
         const line = index + 1;
         const kind = classify(row);

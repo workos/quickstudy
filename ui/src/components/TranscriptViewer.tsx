@@ -200,7 +200,7 @@ export function TranscriptViewer({ text, lines }: TranscriptViewerProps): ReactN
   const inRange = (line: number): boolean => lines !== undefined && line >= lines[0] && line <= lines[1];
 
   return (
-    <div className="viewer" ref={containerRef} data-testid="transcript-viewer">
+    <div className="quickstudy-viewer viewer" ref={containerRef} data-testid="transcript-viewer">
       {windowNote !== null && (
         <div className="viewer-note">
           <span>{windowNote}</span>
