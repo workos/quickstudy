@@ -70,7 +70,7 @@ function attemptedArms(attempts: DataAttempt[]): Map<string, Set<string>> {
  * The not-comparable statement(s) for a run's compared groups: fewer than 3
  * trials per pair, and/or a shared eval (every member has attempts) where some
  * arm scored nothing (an arm with no completed attempt has no `countArms`
- * entry at all). An eval only some members ran — a suite scoped to one
+ * entry at all) — including one where no arm scored anything. An eval only some members ran — a suite scoped to one
  * treatment — is not shared, so its dashes do not trigger the notice. Empty
  * when neither applies or no group is compared. Counts stay listed either way.
  */
@@ -89,7 +89,7 @@ export function nNoticeSentences(
     );
   }
   const emptyArm = compared.some((group) =>
-    groupEvalIds(group, arms).some(
+    [...attempted.keys()].some(
       (evalId) =>
         group.experimentIds.every((experimentId) => attempted.get(evalId)?.has(experimentId) === true) &&
         group.experimentIds.some((experimentId) => (arms.get(evalId)?.get(experimentId)?.scored ?? 0) === 0),

@@ -184,7 +184,7 @@ describe("aggregate", () => {
       attempt("e", "x", { status: "incomplete", limitHit: "timeout" }),
       fail("e", "y"),
     ], "x");
-    expect([agg.attempts, agg.completed, agg.passed, agg.failed, agg.incomplete, agg.errors, agg.timeouts]).toEqual([3, 1, 1, 0, 1, 1, 2]);
+    expect([agg.attempts, agg.completed, agg.passed, agg.failed, agg.incomplete, agg.errors, agg.timeouts]).toEqual([3, 1, 1, 0, 1, 1, 1]);
     expect(agg.pass_rate_all).toBe(1);
     const empty = aggregateOf([fail("e", "y")], "absent");
     expect(empty).toEqual({

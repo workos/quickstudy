@@ -341,6 +341,12 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       );
     }
     if (experiment.runtime.kind === "container") {
+      if ((experiment.runtime.command ?? []).length > 0 && experiment.agent.adapter === "oracle") {
+        throw new Error(
+          `experiment "${experiment.id}" selects the oracle adapter but sets runtime.command, which bypasses it — ` +
+            `drop runtime.command so the reference solution is what gets scored`,
+        );
+      }
       if ((experiment.runtime.command ?? []).length === 0 && !containerAgents.has(experiment.id)) {
         const adapter = resolveContainerAdapter(experiment, containerAdapterFactories);
         // Provider keys are validated here — before any run row, sidecar, or
@@ -563,6 +569,9 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
 
       persisted.status = disposition.status;
       persisted.errorKind = disposition.status === "error" ? (disposition.errorKind ?? "harness") : null;
+      // A limit hit means the workspace it left was graded; an unscored
+      // attempt (incomplete, or a later stage errored) carries none.
+      if (disposition.status !== "completed") persisted.limitHit = null;
       if (disposition.judgeRecords) persisted.judgeRecords = disposition.judgeRecords;
       if (disposition.result !== undefined) persisted.result = disposition.result;
       if (disposition.error !== undefined) persisted.error = disposition.error;

@@ -15,7 +15,7 @@ import { DEFAULT_BUDGETS } from "../execution-policy.ts";
 import { validEvalResult } from "../evals/result.ts";
 import type { EvalExecResult, LoadedEval } from "../evals/types.ts";
 import { buildEvalContext, RuntimeCapabilityError } from "./context.ts";
-import { deadline } from "./deadline.ts";
+import { deadline, StageTimeoutError } from "./deadline.ts";
 import { scoreInWorker } from "./score-worker.ts";
 import { prepWorkspaceSource } from "./workspace-source.ts";
 
@@ -68,17 +68,20 @@ export async function validateOracle(loaded: LoadedEval, opts: ValidateOracleOpt
       );
       if (!validEvalResult(result)) throw new Error("scorer returned an invalid EvalResult");
     } catch (err) {
-      if (used.size > 0) return { kind: "deferred", capabilities: [...used].sort() };
+      // A scorer that runs past its deadline failed, whatever it touched first.
+      if (used.size > 0 && !(err instanceof StageTimeoutError)) return { kind: "deferred", capabilities: [...used].sort() };
       return { kind: "failed", failingChecks: [], error: err instanceof Error ? err.message : String(err) };
     }
 
+    // A scorer that reached for a runtime-only capability has not been proven
+    // here, even when it swallowed the error and returned passing checks.
+    if (used.size > 0) return { kind: "deferred", capabilities: [...used].sort() };
     const graded = result.checks.filter((check) => check.graded !== false);
     const failingGraded = graded.filter((check) => !check.passed).map((check) => check.name);
     if (result.passed && failingGraded.length === 0) {
       const ungradedFailures = result.checks.filter((check) => check.graded === false && !check.passed).map((check) => check.name);
       return { kind: "pass", ungradedFailures };
     }
-    if (used.size > 0) return { kind: "deferred", capabilities: [...used].sort() };
     return failingGraded.length > 0
       ? { kind: "failed", failingChecks: failingGraded }
       : { kind: "failed", failingChecks: [], error: "scorer returned passed: false" };

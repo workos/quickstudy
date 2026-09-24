@@ -101,7 +101,7 @@ export function collectExperimentAggregate(
     failed: completed.length - passed,
     incomplete: mine.filter((a) => a.status === "incomplete").length,
     errors: mine.filter((a) => a.status === "error").length,
-    timeouts: mine.filter((a) => a.limitHit === "timeout").length,
+    timeouts: mine.filter((a) => a.status === "completed" && a.limitHit === "timeout").length,
     pass_rate_all: scoredAll > 0 ? passedAll / scoredAll : null,
     pass_rate_discriminating: discScored > 0 ? discPassed / discScored : null,
     discriminating_evals: new Set(discriminating.map((p) => p.eval_id)).size,

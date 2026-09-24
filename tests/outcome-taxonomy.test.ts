@@ -253,6 +253,17 @@ describe("graded timeout", () => {
     store.close();
   });
 
+  test("a timeout whose scoring then errors carries no limit: nothing was graded", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qs-outcome-evals-"));
+    writeTmpEval(root, "boom", `export default async () => { throw new Error("scorer exploded"); };\n`);
+    const stall: AgentAdapter = { name: "stall-idle", runAttempt: () => new Promise(() => {}) };
+    const { attempt, store } = await runOne(discoverEvals(root), stall, { attemptTimeoutMs: 50 });
+    expect(attempt.status).toBe("error");
+    expect(attempt.errorKind).toBe("scorer");
+    expect(attempt.limitHit).toBeNull();
+    store.close();
+  });
+
   test("a timed-out agent that wrote nothing is scored on the empty tree: completed, failed", async () => {
     const stall: AgentAdapter = { name: "stall-idle", runAttempt: () => new Promise(() => {}) };
     const { summary, attempt, store } = await runOne(helloLocal(), stall, { attemptTimeoutMs: 50 });

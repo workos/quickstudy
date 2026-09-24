@@ -170,6 +170,29 @@ describe("run", () => {
     expect(store.listRuns()).toHaveLength(0);
     store.close();
   });
+  test("preflight refuses a container oracle experiment that sets runtime.command", async () => {
+    const evals = discoverEvals(join(ORACLE, "ready")).filter((entry) => entry.metadata.id === "hello-solution");
+    const dir = mkdtempSync(join(tmpdir(), "qs-oracle-exp-"));
+    const path = join(dir, "oracle-scripted.ts");
+    writeFileSync(path, "// synthetic module for oracle-scripted\n");
+    const experiments: LoadedExperiment[] = [
+      {
+        experiment: {
+          id: "oracle-scripted",
+          agent: { adapter: "oracle", provider: "local", model: "oracle-v1", reasoning: "none" },
+          runtime: { kind: "container", image: "alpine:3", command: ["true"] },
+        },
+        path,
+      },
+    ];
+    const plan = planRun(evals, experiments.map((entry) => entry.experiment), 1);
+    const { store, artifacts } = makeStores();
+    await expect(executeRunV3({ evals, experiments, plan, store, artifacts, log: silent })).rejects.toThrow(
+      /selects the oracle adapter but sets runtime\.command/,
+    );
+    expect(store.listRuns()).toHaveLength(0);
+    store.close();
+  });
 });
 
 describe("validate", () => {
@@ -198,6 +221,29 @@ describe("validate", () => {
     const { exitCode, stdout } = validateCli("tests/__fixtures__/evals");
     expect(exitCode).toBe(1);
     expect(stdout.match(/MISSING \(no solution\/\)/g)).toHaveLength(6);
+  });
+
+  test("a scorer that swallows a runtime-only error and returns passing checks is deferred, not 1.0", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qs-oracle-swallow-"));
+    writeTmpEval(root, "swallow", { "solution/NOTES.md": "# Notes\n" });
+    writeFileSync(
+      join(root, "swallow", "EVAL.ts"),
+      `export default async (ctx) => { try { await ctx.exec(["true"]); } catch {} return { passed: true, checks: [{ name: "ok", passed: true }] }; };\n`,
+    );
+    const [loaded] = discoverEvals(root);
+    expect(await validateOracle(loaded!)).toEqual({ kind: "deferred", capabilities: ["exec"] });
+  });
+
+  test("a scorer that touches a runtime-only capability and then hangs fails, not deferred", async () => {
+    const root = mkdtempSync(join(tmpdir(), "qs-oracle-hang-exec-"));
+    writeTmpEval(root, "hang-exec", { "solution/NOTES.md": "# Notes\n" });
+    writeFileSync(
+      join(root, "hang-exec", "EVAL.ts"),
+      `export default async (ctx) => { try { await ctx.exec(["true"]); } catch {} return new Promise(() => {}); };\n`,
+    );
+    const [loaded] = discoverEvals(root);
+    const outcome = await validateOracle(loaded!, { timeoutMs: 200 });
+    expect(outcome).toMatchObject({ kind: "failed", error: expect.stringContaining("scoring timed out") });
   });
 
   test("a hanging scorer fails with a scoring timeout", async () => {
