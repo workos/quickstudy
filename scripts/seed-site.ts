@@ -252,11 +252,17 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
   return runId;
 }
 
+/** The trials-1 run's start: older than the cell-states run (2026-07-19). */
+const N1_STARTED_AT = "2026-07-18T00:00:00.000Z";
+
 export interface SeedSiteResult {
   dbPath: string;
   resultsDir: string;
-  /** [full sweep run, cell-states run] — meta lists the sweep first (newest). */
-  runIds: [string, string];
+  /**
+   * [full sweep run, cell-states run, trials-1 run] — meta lists them in
+   * that order (newest first), so the sweep stays the default run.
+   */
+  runIds: [string, string, string];
   /** The 600-turn transcript's attempt (transcript deep-link target). */
   longTranscriptAttemptId: string;
   /** An attempt with a diff artifact (diff deep-link target). */
@@ -270,6 +276,10 @@ export function seedSite(root: string): SeedSiteResult {
   // Regression suite included: the dev/e2e data must exercise the suite
   // toggle and the tagged pair rows.
   const seeded = seedRun({ dbPath, resultsDir, withRegression: true });
+  // A one-trial run (each pair's first outcome) so Compare's not-comparable
+  // notice ships in dev data and e2e. Started before the cell-states run so
+  // it sorts oldest and never becomes the default run.
+  const n1 = seedRun({ dbPath, resultsDir, trials: 1, idSalt: "n1", startedAt: N1_STARTED_AT });
 
   const store = new ResultsStore(dbPath);
   try {
@@ -305,6 +315,7 @@ export function seedSite(root: string): SeedSiteResult {
     // writes.
     writeReportJson(buildReport({ store, runId: seeded.runId, resultsDir, generatedAt: SEED_GENERATED_AT }), resultsDir);
     writeReportJson(buildReport({ store, runId: cellStatesRunId, resultsDir, generatedAt: SEED_GENERATED_AT }), resultsDir);
+    writeReportJson(buildReport({ store, runId: n1.runId, resultsDir, generatedAt: SEED_GENERATED_AT }), resultsDir);
 
     // Diagnosis fixture on the sweep run ONLY — the cell-states run stays
     // diagnosis-less so both view states ship in dev data and e2e.
@@ -321,7 +332,7 @@ export function seedSite(root: string): SeedSiteResult {
     return {
       dbPath,
       resultsDir,
-      runIds: [seeded.runId, cellStatesRunId],
+      runIds: [seeded.runId, cellStatesRunId, n1.runId],
       longTranscriptAttemptId: longAttempt.id,
       diffAttemptId: diffAttempt.id,
     };

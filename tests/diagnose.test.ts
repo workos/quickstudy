@@ -248,10 +248,13 @@ describe("excerptTranscript", () => {
     expect(excerpt.totalLines).toBe(5);
   });
 
-  test("a marker span wider than the cap truncates to the cap", () => {
+  test("a marker span wider than the cap keeps the last cluster that fits", () => {
     const excerpt = excerptTranscript(Array.from({ length: 60 }, (_, i) => `${i + 1} error: x`).join("\n"));
-    expect(excerpt.lines).toEqual([1, EXCERPT_MAX_LINES]);
-    expect(excerpt.text.split("\n")).toHaveLength(EXCERPT_MAX_LINES);
+    // Last marker at line 60; earlier markers join while span + 2·context <= cap,
+    // so the first kept marker is line 29 and the window is [25, 60].
+    expect(excerpt.lines).toEqual([25, 60]);
+    expect(excerpt.text.split("\n")).toHaveLength(36);
+    expect(excerpt.text.split("\n").length).toBeLessThanOrEqual(EXCERPT_MAX_LINES);
   });
 
   test("an overlong line is truncated in text while line ranges stay exact", () => {

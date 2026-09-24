@@ -103,7 +103,10 @@ withheld group before paying for a run.
 A compared gap means: under this recorded harness, offering this treatment
 came with these counts. It is not proof that the treatment made any
 individual attempt succeed or fail, and small trial counts stay small — the
-report's own methodology note says exactly this.
+report's own methodology note says exactly this. The Compare view says so
+too: when a run has fewer than three trials per pair, or a shared eval has an
+arm with nothing scored, a notice states that those counts are listed but not
+comparable. Nothing is hidden or recoloured; the notice is the whole change.
 
 ## Units: attempt, trial, pair, run
 
@@ -199,6 +202,17 @@ When you want hypotheses about **why** pairs failed, `quickstudy diagnose
 model call and writes `diagnosis.json` beside `report.json`. Findings are
 evidence-linked hypotheses — the conservative no-attribution stance of the
 report is preserved by keeping diagnosis a separate, clearly-labeled layer.
+
+The Diagnosis view clusters findings by eval and by the graded checks that
+failed on the cited pairs (joined from the run's `report.json`), largest
+cluster first, so one root cause surfacing across several arms reads as one
+group instead of scattered cards. When `eval-defect` findings make up a
+quarter or more of the total, that target leads inside every cluster. Without
+a readable report, clusters fall back to one per eval. Transcript evidence
+windows anchor on the last cluster of error markers, so an early false
+positive (such as error wording in a system prompt) no longer pins the window
+to the transcript's first lines; `prompt_version` 2 marks diagnoses built
+this way.
 
 ## Isolation and secrets
 

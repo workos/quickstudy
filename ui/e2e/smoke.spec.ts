@@ -44,10 +44,11 @@ function fixtureRun(runId: string): FixtureRun {
   return JSON.parse(readFileSync(join(SITE_DIR, "data", "runs", runId, "run.json"), "utf8")) as FixtureRun;
 }
 
-/** meta lists newest first: [full sweep, cell-states]. */
-function runIds(): { sweep: string; cellStates: string } {
+/** meta lists newest first: [full sweep, cell-states, trials-1]. */
+function runIds(): { sweep: string; cellStates: string; n1: string } {
   const runs = fixtureMeta().runs;
-  return { sweep: runs[0]!.id, cellStates: runs[1]!.id };
+  expect(runs).toHaveLength(3);
+  return { sweep: runs[0]!.id, cellStates: runs[1]!.id, n1: runs[2]!.id };
 }
 
 /** The seeded 600-turn transcript lives on claude-mcp × auth-nextjs trial 0. */
@@ -103,6 +104,21 @@ test.describe("served mode: three routes render with data", () => {
     await expect(page.getByTestId("group-withheld-codex")).toBeVisible();
     await expect(page.getByTestId("group-diff-codex")).toContainText("model");
     await expect(page.getByTestId("group-table-codex")).toHaveCount(0);
+
+    // Three trials per pair and every listed arm scored: no not-comparable notice.
+    await expect(page.getByTestId("compare-n-notice")).toHaveCount(0);
+  });
+
+  test("compare states counts are not comparable on a trials-1 run", async ({ page }) => {
+    const { n1 } = runIds();
+    await page.goto(`/site/index.html#/compare/${n1}`);
+    await expect(page.getByTestId("group-table-claude")).toBeVisible();
+    const notice = page.getByTestId("compare-n-notice");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("this run: 1");
+    await expect(notice).toContainText("not comparable");
+    // Counts stay listed.
+    await expect(page.getByTestId("arm-auth-nextjs-claude-docs")).toContainText("1/1");
   });
 
   test("report renders totals, per-pair rates, groups, and methodology", async ({ page }) => {
@@ -297,6 +313,14 @@ test.describe("diagnosis view", () => {
     await expect(page.getByTestId("diagnosis-disclaimer")).toContainText("hypotheses, not verdicts");
     await expect(page.getByTestId("diagnosis-provenance")).toContainText("model-a-analyst");
 
+    // Findings cluster by (eval, failing graded checks) from the report,
+    // largest first; the ungraded sdk-wired miss never enters a heading.
+    const clusters = page.getByTestId("diagnosis-cluster");
+    await expect(clusters).toHaveCount(3);
+    await expect(clusters.filter({ hasText: "auth-nextjs · flow-wired failed under 1 arm · 1 finding" })).toHaveCount(1);
+    await expect(clusters.filter({ hasText: "auth-nextjs · build-passes failed under 1 arm" })).toHaveCount(1);
+    await expect(clusters.filter({ hasText: "sdk-wired" })).toHaveCount(0);
+
     // The seeded fixture spans three targets; each renders its own section.
     await expect(page.getByTestId("diagnosis-target-mcp")).toBeVisible();
     await expect(page.getByTestId("diagnosis-target-cli")).toBeVisible();
@@ -306,6 +330,14 @@ test.describe("diagnosis view", () => {
 
     // The unanalyzable pair is recorded, never silently dropped.
     await expect(page.getByTestId("diagnosis-errors")).toContainText("codex-mcp");
+
+    // Target filter buttons still narrow within clusters.
+    await page.getByTestId("diagnosis-target-filter").getByRole("button", { name: "mcp (1)" }).click();
+    await expect(page.getByTestId("diagnosis-finding")).toHaveCount(1);
+    await expect(clusters).toHaveCount(1);
+    await expect(page.getByTestId("diagnosis-target-cli")).toHaveCount(0);
+    await page.getByTestId("diagnosis-target-filter").getByRole("button", { name: "all (3)" }).click();
+    await expect(page.getByTestId("diagnosis-finding")).toHaveCount(3);
   });
 
   test("an evidence link deep-links to the highlighted line window in the transcript", async ({ page }) => {

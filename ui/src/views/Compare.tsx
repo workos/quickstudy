@@ -45,6 +45,62 @@ function countArms(attempts: DataAttempt[]): Map<string, Map<string, ArmCount>> 
   return byEval;
 }
 
+/** Eval rows a compared group lists: evals where any member has a scored attempt. */
+function groupEvalIds(group: ComparisonGroup, arms: Map<string, Map<string, ArmCount>>): string[] {
+  return [...arms.keys()]
+    .filter((evalId) => group.experimentIds.some((experimentId) => arms.get(evalId)?.has(experimentId)))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+const isCompared = (group: ComparisonGroup): boolean =>
+  group.comparison === "allowed" && group.experimentIds.length >= 2;
+
+/** eval id -> experiment ids with any attempt (any status): the arms that actually ran. */
+function attemptedArms(attempts: DataAttempt[]): Map<string, Set<string>> {
+  const byEval = new Map<string, Set<string>>();
+  for (const attempt of attempts) {
+    const experiments = byEval.get(attempt.eval_id) ?? new Set<string>();
+    experiments.add(attempt.experiment_id);
+    byEval.set(attempt.eval_id, experiments);
+  }
+  return byEval;
+}
+
+/**
+ * The not-comparable statement(s) for a run's compared groups: fewer than 3
+ * trials per pair, and/or a shared eval (every member has attempts) where some
+ * arm scored nothing (an arm with no completed attempt has no `countArms`
+ * entry at all). An eval only some members ran — a suite scoped to one
+ * treatment — is not shared, so its dashes do not trigger the notice. Empty
+ * when neither applies or no group is compared. Counts stay listed either way.
+ */
+export function nNoticeSentences(
+  trials: number,
+  groups: ComparisonGroup[],
+  arms: Map<string, Map<string, ArmCount>>,
+  attempted: Map<string, Set<string>>,
+): string[] {
+  const compared = groups.filter(isCompared);
+  if (compared.length === 0) return [];
+  const sentences: string[] = [];
+  if (trials < 3) {
+    sentences.push(
+      `With fewer than 3 trials per pair (this run: ${trials}), per-arm counts are listed but not comparable.`,
+    );
+  }
+  const emptyArm = compared.some((group) =>
+    groupEvalIds(group, arms).some(
+      (evalId) =>
+        group.experimentIds.every((experimentId) => attempted.get(evalId)?.has(experimentId) === true) &&
+        group.experimentIds.some((experimentId) => (arms.get(evalId)?.get(experimentId)?.scored ?? 0) === 0),
+    ),
+  );
+  if (emptyArm) {
+    sentences.push("Some shared evals have an arm with nothing scored; those rows are listed but not comparable.");
+  }
+  return sentences;
+}
+
 function treatmentOf(run: DataRun, experimentId: string): string | null {
   return run.manifest.experiments[experimentId]?.components.treatment ?? null;
 }
@@ -105,9 +161,7 @@ function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup;
     );
   }
 
-  const evalIds = [...arms.keys()]
-    .filter((evalId) => group.experimentIds.some((experimentId) => arms.get(evalId)?.has(experimentId)))
-    .sort((a, b) => a.localeCompare(b));
+  const evalIds = groupEvalIds(group, arms);
 
   return (
     <div className="card" data-testid={`group-${group.group}`}>
@@ -180,6 +234,7 @@ export function Compare({ meta, runId }: CompareProps): ReactNode {
   if (run.status === "loading" || arms === null) return <div className="loading">Loading run…</div>;
 
   const groups = run.value.groups;
+  const nNotice = nNoticeSentences(run.value.run.trials, groups, arms, attemptedArms(run.value.attempts));
 
   return (
     <div data-testid="compare-view">
@@ -211,6 +266,12 @@ export function Compare({ meta, runId }: CompareProps): ReactNode {
       {run.value.run.finished_at === null && (
         <div className="notice" data-testid="incomplete-banner">
           Incomplete run — this run never finished. Counts are partial.
+        </div>
+      )}
+
+      {nNotice.length > 0 && (
+        <div className="notice" data-testid="compare-n-notice">
+          {nNotice.join(" ")}
         </div>
       )}
 

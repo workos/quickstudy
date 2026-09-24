@@ -29,8 +29,9 @@ export const BUNDLE_DIFF_CAP = 3_000;
 
 /**
  * Heuristic error scan. Matches benign prose too ("failed" in discussion) —
- * accepted: the window stays deterministic and human-verifiable, and the
- * tail fallback bounds the damage.
+ * accepted: the window stays deterministic and human-verifiable, and
+ * anchoring on the last marker cluster keeps an early false positive from
+ * pinning the window to the transcript's head.
  */
 export const ERROR_MARKER = /"is_error"\s*:\s*true|error:|failed|unauthorized|timed out|not found|exited [1-9]/i;
 
@@ -42,8 +43,11 @@ export interface ArtifactExcerpt {
 }
 
 /**
- * Deterministically select the excerpt window: context around the span of
- * error markers (capped), or the tail when nothing matches.
+ * Deterministically select the excerpt window: context around the last
+ * cluster of error markers (walking back from the final marker while the
+ * window stays within {@link EXCERPT_MAX_LINES}), or the tail when nothing
+ * matches. Earlier markers that do not fit are dropped; the window always
+ * ends at the last marker plus context.
  */
 export function excerptTranscript(content: string): ArtifactExcerpt {
   const lines = content.split("\n");
@@ -63,11 +67,18 @@ export function excerptTranscript(content: string): ArtifactExcerpt {
     start = Math.max(0, totalLines - EXCERPT_TAIL_LINES);
     end = totalLines - 1;
   } else {
-    start = Math.max(0, (matches[0] as number) - EXCERPT_CONTEXT_LINES);
-    end = Math.min(totalLines - 1, (matches.at(-1) as number) + EXCERPT_CONTEXT_LINES);
-    if (end - start + 1 > EXCERPT_MAX_LINES) {
-      end = start + EXCERPT_MAX_LINES - 1;
+    // Anchor on the last marker cluster: walk back from the final marker while
+    // the span plus context still fits the window. Early markers (often
+    // system-prompt prose) no longer pin the window to the transcript's head.
+    const last = matches.at(-1) as number;
+    let first = last;
+    for (let i = matches.length - 2; i >= 0; i -= 1) {
+      const candidate = matches[i] as number;
+      if (last - candidate + 2 * EXCERPT_CONTEXT_LINES + 1 > EXCERPT_MAX_LINES) break;
+      first = candidate;
     }
+    start = Math.max(0, first - EXCERPT_CONTEXT_LINES);
+    end = Math.min(totalLines - 1, last + EXCERPT_CONTEXT_LINES);
   }
 
   return {

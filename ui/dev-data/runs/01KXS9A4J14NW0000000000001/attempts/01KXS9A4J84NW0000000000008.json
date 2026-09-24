@@ -1,0 +1,60 @@
+{
+  "id": "01KXS9A4J84NW0000000000008",
+  "run_id": "01KXS9A4J14NW0000000000001",
+  "eval_id": "auth-rails",
+  "experiment_id": "claude-docs",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    },
+    {
+      "name": "sdk-wired",
+      "passed": false,
+      "graded": false
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "claude",
+  "surface_usage": {
+    "docs": {
+      "count": 2,
+      "urls": [
+        "https://docs.acme.test/auth"
+      ]
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 0,
+      "commands": []
+    }
+  },
+  "tokens_in": 207,
+  "tokens_out": 1207,
+  "cost_usd": 0.11,
+  "turns": 6,
+  "started_at": "2026-07-18T00:07:00.000Z",
+  "finished_at": "2026-07-18T00:08:30.700Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-18T00:07:05.000Z",
+  "agent_finished_at": "2026-07-18T00:08:27.700Z",
+  "transcript": "attempts/01KXS9A4J84NW0000000000008.transcript.txt",
+  "diff": "attempts/01KXS9A4J84NW0000000000008.diff.patch"
+}

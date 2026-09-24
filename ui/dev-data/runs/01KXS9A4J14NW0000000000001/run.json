@@ -1,0 +1,1330 @@
+{
+  "schemaVersion": 3,
+  "run": {
+    "id": "01KXS9A4J14NW0000000000001",
+    "started_at": "2026-07-18T00:00:00.000Z",
+    "finished_at": "2026-07-18T01:00:00.000Z",
+    "trials": 1,
+    "eval_ids": [
+      "auth-nextjs",
+      "auth-rails",
+      "auth-django"
+    ],
+    "experiment_ids": [
+      "claude-docs",
+      "claude-mcp",
+      "claude-cli",
+      "codex-docs",
+      "codex-mcp",
+      "codex-cli"
+    ],
+    "manifest_hash": "5329c49f0943c0c7ed11c55ca46d83d557020a1b53994c1c0416f198cb1b98e3",
+    "attempts": 18,
+    "incomplete": false
+  },
+  "manifest": {
+    "manifestVersion": "v3",
+    "harness": {
+      "version": "seed",
+      "revision": "seed",
+      "dirty": false,
+      "source": {
+        "sha256": "fb39e8d17445d5cedc36ae042d0ac50727b9050bd9e5a0f68ec9ea6338ea3150"
+      }
+    },
+    "evals": {
+      "auth-nextjs": {
+        "id": "auth-nextjs",
+        "metadata": {
+          "id": "auth-nextjs",
+          "suite": "benchmark",
+          "product": "identity",
+          "framework": "nextjs",
+          "topics": [
+            "auth",
+            "nextjs"
+          ]
+        },
+        "components": {
+          "promptSource": "e0fe9261a243ea43ed1dbc6955cea1e3c0f3450e135292e793e28bc5b8cc4330",
+          "effectivePrompt": "3dd00b72a7b6ef1c2e4841cf2d243906838b75621d2dfc1c1c0487bb3b058d1e",
+          "local": null,
+          "scorer": "f26d9314a9268f810895cdef0016f3abd6ef526a673deb43667b7e8b55bb6c77",
+          "metadata": "3eb249ed7619869fba78f6bfa9c4738267c22c81a674f484d3da59076aeaf1d8"
+        },
+        "hash": "b6109cad4cc1db5ac56f90d8ccba4349eb4863cae4608d61499848c91eba9ff0",
+        "solution": null
+      },
+      "auth-rails": {
+        "id": "auth-rails",
+        "metadata": {
+          "id": "auth-rails",
+          "suite": "benchmark",
+          "product": "identity",
+          "framework": "rails",
+          "topics": [
+            "auth",
+            "rails"
+          ]
+        },
+        "components": {
+          "promptSource": "0515478e034fdeef7754624b25fdd25a291c7a190e235cd22b28eaeb9fd908cc",
+          "effectivePrompt": "006c5f89a8f46772d59fabfc218f2c26a3653ed1162ca9ddd0da702f1b0586fb",
+          "local": null,
+          "scorer": "c4a6d787e36e3cabefd981c995d01ca0632ddbccb140d639b2e5b4d7fd3005ff",
+          "metadata": "2eb4808d77cd92ba492c3b4a963899f0986ce8db5cec765792af3f255e90d0ab"
+        },
+        "hash": "e3cc7583acdd27601126488503cca851cbce086354738f95b0934888c375dfe4",
+        "solution": null
+      },
+      "auth-django": {
+        "id": "auth-django",
+        "metadata": {
+          "id": "auth-django",
+          "suite": "benchmark",
+          "product": "identity",
+          "framework": "django",
+          "topics": [
+            "auth",
+            "django"
+          ]
+        },
+        "components": {
+          "promptSource": "d294f3e35eb4892bf03f2e715480f856050c976da913985cfaf61e6eb3fd019f",
+          "effectivePrompt": "edceb801701a6563e657a88a235784983e120104cd8914e02495af15d532c637",
+          "local": null,
+          "scorer": "ca566df09d7cd28494cdcddae1be35f88314b531146e3a0070998f0374f411e0",
+          "metadata": "db4368619f264e288128929986379de3c18eb257e5ececa2ffc0332e2fb81c9f"
+        },
+        "hash": "258e828c62c81fdfaa02c192030f6b40d28ff7f0bef41bd5a107b854a55518cb",
+        "solution": null
+      }
+    },
+    "experiments": {
+      "claude-docs": {
+        "id": "claude-docs",
+        "components": {
+          "source": "0c0d6f8d58a8ce06b80d7a8e9484e9fe3f4fec8d5279f74d1a1b49fc6a4d572c",
+          "agent": {
+            "adapter": "claude",
+            "provider": "anthropic",
+            "model": "model-a-1",
+            "reasoning": "high",
+            "cliVersion": "1.0.0"
+          },
+          "runtime": "95debe8d9d17d52cc88af30bbe04864b8eeb493e3af3befa529735da3d2cb0bb",
+          "image": null,
+          "treatment": "docs",
+          "harness": "c1bd370439648142bd732e399b5252fa98c21edbcde8aeb934b3a15eb08638d9"
+        },
+        "hash": "80af752ad9395ed5221cdb20bef0b42c6dd5e393442f550731cec229dda10dea"
+      },
+      "claude-mcp": {
+        "id": "claude-mcp",
+        "components": {
+          "source": "0c05dcfe973d4743614efb816aa8ba2d8f79e37c804089fa5b88d0ea34d235d8",
+          "agent": {
+            "adapter": "claude",
+            "provider": "anthropic",
+            "model": "model-a-1",
+            "reasoning": "high",
+            "cliVersion": "1.0.0"
+          },
+          "runtime": "329ae21f4f869799bbf7a83405800bb6fc85974cf78c23b19141b9db56616788",
+          "image": null,
+          "treatment": "mcp",
+          "harness": "c1bd370439648142bd732e399b5252fa98c21edbcde8aeb934b3a15eb08638d9"
+        },
+        "hash": "c2224d1d5db552ac1d6e206c0504ba671c03e690075ca55d140b4a1ef62c1ecc"
+      },
+      "claude-cli": {
+        "id": "claude-cli",
+        "components": {
+          "source": "095ee7eb98f6606e8268de96e3861363abf44ac3f3f4c85473ee914b4217f275",
+          "agent": {
+            "adapter": "claude",
+            "provider": "anthropic",
+            "model": "model-a-1",
+            "reasoning": "high",
+            "cliVersion": "1.0.0"
+          },
+          "runtime": "578fedfc578b7812503d9acd2d3e0812006b7cfb06f5cec8ea7b45dd96f181f0",
+          "image": null,
+          "treatment": "cli",
+          "harness": "c1bd370439648142bd732e399b5252fa98c21edbcde8aeb934b3a15eb08638d9"
+        },
+        "hash": "d3f0e686cb5c706d7014c373eceef40f7d0bd9a5cf82c82a27d992ccf963abb8"
+      },
+      "codex-docs": {
+        "id": "codex-docs",
+        "components": {
+          "source": "223062c5d8ff8b12872cb0965b230e0468fc1f1993479c09a1d5aeb3f9cda7ed",
+          "agent": {
+            "adapter": "codex",
+            "provider": "openai",
+            "model": "model-b-1",
+            "reasoning": "high",
+            "cliVersion": "1.0.0"
+          },
+          "runtime": "95debe8d9d17d52cc88af30bbe04864b8eeb493e3af3befa529735da3d2cb0bb",
+          "image": null,
+          "treatment": "docs",
+          "harness": "c1bd370439648142bd732e399b5252fa98c21edbcde8aeb934b3a15eb08638d9"
+        },
+        "hash": "a6e751e8810f31697edf820e71bc743f3d45a2d91936ffe3a460af91ca209b89"
+      },
+      "codex-mcp": {
+        "id": "codex-mcp",
+        "components": {
+          "source": "29b8b463cef918d72084fa06e1ed298c0300cc2fd7a44088d3ba60575904eb7d",
+          "agent": {
+            "adapter": "codex",
+            "provider": "openai",
+            "model": "model-b-2",
+            "reasoning": "high",
+            "cliVersion": "1.0.0"
+          },
+          "runtime": "329ae21f4f869799bbf7a83405800bb6fc85974cf78c23b19141b9db56616788",
+          "image": null,
+          "treatment": "mcp",
+          "harness": "c1bd370439648142bd732e399b5252fa98c21edbcde8aeb934b3a15eb08638d9"
+        },
+        "hash": "9cf35e387eaf65d1958110f3bc5a0cdaece29f3b911aa282639f15438181fb81"
+      },
+      "codex-cli": {
+        "id": "codex-cli",
+        "components": {
+          "source": "aaefb497b51777db914f1c73bf6663fd7500945d9f63bad303cec407351dc325",
+          "agent": {
+            "adapter": "codex",
+            "provider": "openai",
+            "model": "model-b-1",
+            "reasoning": "high",
+            "cliVersion": "1.0.0"
+          },
+          "runtime": "578fedfc578b7812503d9acd2d3e0812006b7cfb06f5cec8ea7b45dd96f181f0",
+          "image": null,
+          "treatment": "cli",
+          "harness": "c1bd370439648142bd732e399b5252fa98c21edbcde8aeb934b3a15eb08638d9"
+        },
+        "hash": "719344c1a1dbed7a4e9bbdd7dc9fcde4f977455c26d38ee407c64b0fa24841f1"
+      }
+    },
+    "images": {},
+    "hash": "5329c49f0943c0c7ed11c55ca46d83d557020a1b53994c1c0416f198cb1b98e3"
+  },
+  "groups": [
+    {
+      "group": "claude",
+      "experimentIds": [
+        "claude-cli",
+        "claude-docs",
+        "claude-mcp"
+      ],
+      "comparison": "allowed",
+      "mismatches": [],
+      "details": []
+    },
+    {
+      "group": "codex",
+      "experimentIds": [
+        "codex-cli",
+        "codex-docs",
+        "codex-mcp"
+      ],
+      "comparison": "withheld",
+      "mismatches": [
+        {
+          "path": "identity.agent.model",
+          "a": "model-b-1",
+          "b": "model-b-2"
+        }
+      ],
+      "details": [
+        "codex: codex-cli vs codex-mcp: identity.agent.model changed (\"model-b-1\" -> \"model-b-2\")"
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "id": "01KXS9A4J24NW0000000000002",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 2,
+          "urls": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 201,
+      "tokens_out": 1201,
+      "cost_usd": 0.11,
+      "turns": 5,
+      "started_at": "2026-07-18T00:01:00.000Z",
+      "finished_at": "2026-07-18T00:02:30.100Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:01:05.000Z",
+      "agent_finished_at": "2026-07-18T00:02:27.100Z",
+      "transcript": "attempts/01KXS9A4J24NW0000000000002.transcript.txt",
+      "diff": "attempts/01KXS9A4J24NW0000000000002.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J34NW0000000000003",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 2,
+          "tools": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 202,
+      "tokens_out": 1202,
+      "cost_usd": 0.11,
+      "turns": 6,
+      "started_at": "2026-07-18T00:02:00.000Z",
+      "finished_at": "2026-07-18T00:03:30.200Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:02:05.000Z",
+      "agent_finished_at": "2026-07-18T00:03:27.200Z",
+      "transcript": "attempts/01KXS9A4J34NW0000000000003.transcript.txt",
+      "diff": "attempts/01KXS9A4J34NW0000000000003.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J44NW0000000000004",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-nextjs",
+      "experiment_id": "claude-cli",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "cli",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 2,
+          "commands": [
+            "acme auth"
+          ]
+        }
+      },
+      "tokens_in": 203,
+      "tokens_out": 1203,
+      "cost_usd": 0.11,
+      "turns": 7,
+      "started_at": "2026-07-18T00:03:00.000Z",
+      "finished_at": "2026-07-18T00:04:30.300Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:03:05.000Z",
+      "agent_finished_at": "2026-07-18T00:04:27.300Z",
+      "transcript": "attempts/01KXS9A4J44NW0000000000004.transcript.txt",
+      "diff": "attempts/01KXS9A4J44NW0000000000004.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J54NW0000000000005",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-nextjs",
+      "experiment_id": "codex-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 2,
+          "urls": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 204,
+      "tokens_out": 1204,
+      "cost_usd": 0.11,
+      "turns": 8,
+      "started_at": "2026-07-18T00:04:00.000Z",
+      "finished_at": "2026-07-18T00:05:30.400Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:04:05.000Z",
+      "agent_finished_at": "2026-07-18T00:05:27.400Z",
+      "transcript": "attempts/01KXS9A4J54NW0000000000005.transcript.txt",
+      "diff": "attempts/01KXS9A4J54NW0000000000005.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J64NW0000000000006",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-nextjs",
+      "experiment_id": "codex-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 2,
+          "tools": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 205,
+      "tokens_out": 1205,
+      "cost_usd": 0.11,
+      "turns": 4,
+      "started_at": "2026-07-18T00:05:00.000Z",
+      "finished_at": "2026-07-18T00:06:30.500Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:05:05.000Z",
+      "agent_finished_at": "2026-07-18T00:06:27.500Z",
+      "transcript": "attempts/01KXS9A4J64NW0000000000006.transcript.txt",
+      "diff": "attempts/01KXS9A4J64NW0000000000006.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J74NW0000000000007",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-nextjs",
+      "experiment_id": "codex-cli",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "cli",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 2,
+          "commands": [
+            "acme auth"
+          ]
+        }
+      },
+      "tokens_in": 206,
+      "tokens_out": 1206,
+      "cost_usd": 0.11,
+      "turns": 5,
+      "started_at": "2026-07-18T00:06:00.000Z",
+      "finished_at": "2026-07-18T00:07:30.600Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:06:05.000Z",
+      "agent_finished_at": "2026-07-18T00:07:27.600Z",
+      "transcript": "attempts/01KXS9A4J74NW0000000000007.transcript.txt",
+      "diff": "attempts/01KXS9A4J74NW0000000000007.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J84NW0000000000008",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 2,
+          "urls": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 207,
+      "tokens_out": 1207,
+      "cost_usd": 0.11,
+      "turns": 6,
+      "started_at": "2026-07-18T00:07:00.000Z",
+      "finished_at": "2026-07-18T00:08:30.700Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:07:05.000Z",
+      "agent_finished_at": "2026-07-18T00:08:27.700Z",
+      "transcript": "attempts/01KXS9A4J84NW0000000000008.transcript.txt",
+      "diff": "attempts/01KXS9A4J84NW0000000000008.diff.patch"
+    },
+    {
+      "id": "01KXS9A4J94NW0000000000009",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 2,
+          "tools": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 208,
+      "tokens_out": 1208,
+      "cost_usd": 0.11,
+      "turns": 7,
+      "started_at": "2026-07-18T00:08:00.000Z",
+      "finished_at": "2026-07-18T00:09:30.800Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:08:05.000Z",
+      "agent_finished_at": "2026-07-18T00:09:27.800Z",
+      "transcript": "attempts/01KXS9A4J94NW0000000000009.transcript.txt",
+      "diff": "attempts/01KXS9A4J94NW0000000000009.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JA4NW000000000000A",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-cli",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "cli",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 2,
+          "commands": [
+            "acme auth"
+          ]
+        }
+      },
+      "tokens_in": 209,
+      "tokens_out": 1209,
+      "cost_usd": 0.11,
+      "turns": 8,
+      "started_at": "2026-07-18T00:09:00.000Z",
+      "finished_at": "2026-07-18T00:10:30.900Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:09:05.000Z",
+      "agent_finished_at": "2026-07-18T00:10:27.900Z",
+      "transcript": "attempts/01KXS9A4JA4NW000000000000A.transcript.txt",
+      "diff": "attempts/01KXS9A4JA4NW000000000000A.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JB4NW000000000000B",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "codex-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 2,
+          "urls": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 210,
+      "tokens_out": 1210,
+      "cost_usd": 0.11,
+      "turns": 4,
+      "started_at": "2026-07-18T00:10:00.000Z",
+      "finished_at": "2026-07-18T00:11:31.000Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:10:05.000Z",
+      "agent_finished_at": "2026-07-18T00:11:28.000Z",
+      "transcript": "attempts/01KXS9A4JB4NW000000000000B.transcript.txt",
+      "diff": "attempts/01KXS9A4JB4NW000000000000B.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JC4NW000000000000C",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "codex-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 2,
+          "tools": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 211,
+      "tokens_out": 1211,
+      "cost_usd": 0.11,
+      "turns": 5,
+      "started_at": "2026-07-18T00:11:00.000Z",
+      "finished_at": "2026-07-18T00:12:31.100Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:11:05.000Z",
+      "agent_finished_at": "2026-07-18T00:12:28.100Z",
+      "transcript": "attempts/01KXS9A4JC4NW000000000000C.transcript.txt",
+      "diff": "attempts/01KXS9A4JC4NW000000000000C.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JD4NW000000000000D",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "codex-cli",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "cli",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 2,
+          "commands": [
+            "acme auth"
+          ]
+        }
+      },
+      "tokens_in": 212,
+      "tokens_out": 1212,
+      "cost_usd": 0.11,
+      "turns": 6,
+      "started_at": "2026-07-18T00:12:00.000Z",
+      "finished_at": "2026-07-18T00:13:31.200Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:12:05.000Z",
+      "agent_finished_at": "2026-07-18T00:13:28.200Z",
+      "transcript": "attempts/01KXS9A4JD4NW000000000000D.transcript.txt",
+      "diff": "attempts/01KXS9A4JD4NW000000000000D.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JE4NW000000000000E",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-django",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 2,
+          "urls": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 213,
+      "tokens_out": 1213,
+      "cost_usd": 0.11,
+      "turns": 7,
+      "started_at": "2026-07-18T00:13:00.000Z",
+      "finished_at": "2026-07-18T00:14:31.300Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:13:05.000Z",
+      "agent_finished_at": "2026-07-18T00:14:28.300Z",
+      "transcript": "attempts/01KXS9A4JE4NW000000000000E.transcript.txt",
+      "diff": "attempts/01KXS9A4JE4NW000000000000E.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JF4NW000000000000F",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-django",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 2,
+          "tools": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 214,
+      "tokens_out": 1214,
+      "cost_usd": 0.11,
+      "turns": 8,
+      "started_at": "2026-07-18T00:14:00.000Z",
+      "finished_at": "2026-07-18T00:15:31.400Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:14:05.000Z",
+      "agent_finished_at": "2026-07-18T00:15:28.400Z",
+      "transcript": "attempts/01KXS9A4JF4NW000000000000F.transcript.txt",
+      "diff": "attempts/01KXS9A4JF4NW000000000000F.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JG4NW000000000000G",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-django",
+      "experiment_id": "claude-cli",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "cli",
+      "comparison_group": "claude",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 2,
+          "commands": [
+            "acme auth"
+          ]
+        }
+      },
+      "tokens_in": 215,
+      "tokens_out": 1215,
+      "cost_usd": 0.11,
+      "turns": 4,
+      "started_at": "2026-07-18T00:15:00.000Z",
+      "finished_at": "2026-07-18T00:16:31.500Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:15:05.000Z",
+      "agent_finished_at": "2026-07-18T00:16:28.500Z",
+      "transcript": "attempts/01KXS9A4JG4NW000000000000G.transcript.txt",
+      "diff": "attempts/01KXS9A4JG4NW000000000000G.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JH4NW000000000000H",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-django",
+      "experiment_id": "codex-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 2,
+          "urls": [
+            "https://docs.acme.test/auth"
+          ]
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 216,
+      "tokens_out": 1216,
+      "cost_usd": 0.11,
+      "turns": 5,
+      "started_at": "2026-07-18T00:16:00.000Z",
+      "finished_at": "2026-07-18T00:17:31.600Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:16:05.000Z",
+      "agent_finished_at": "2026-07-18T00:17:28.600Z",
+      "transcript": "attempts/01KXS9A4JH4NW000000000000H.transcript.txt",
+      "diff": "attempts/01KXS9A4JH4NW000000000000H.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JJ4NW000000000000J",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-django",
+      "experiment_id": "codex-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 2,
+          "tools": [
+            "acme__list_orgs"
+          ]
+        },
+        "cli": {
+          "count": 0,
+          "commands": []
+        }
+      },
+      "tokens_in": 217,
+      "tokens_out": 1217,
+      "cost_usd": 0.11,
+      "turns": 6,
+      "started_at": "2026-07-18T00:17:00.000Z",
+      "finished_at": "2026-07-18T00:18:31.700Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:17:05.000Z",
+      "agent_finished_at": "2026-07-18T00:18:28.700Z",
+      "transcript": "attempts/01KXS9A4JJ4NW000000000000J.transcript.txt",
+      "diff": "attempts/01KXS9A4JJ4NW000000000000J.diff.patch"
+    },
+    {
+      "id": "01KXS9A4JK4NW000000000000K",
+      "run_id": "01KXS9A4J14NW0000000000001",
+      "eval_id": "auth-django",
+      "experiment_id": "codex-cli",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "no-secrets-in-client",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
+        }
+      ],
+      "treatment": "cli",
+      "comparison_group": "codex",
+      "surface_usage": {
+        "docs": {
+          "count": 0,
+          "urls": []
+        },
+        "mcp": {
+          "count": 0,
+          "tools": []
+        },
+        "cli": {
+          "count": 2,
+          "commands": [
+            "acme auth"
+          ]
+        }
+      },
+      "tokens_in": 218,
+      "tokens_out": 1218,
+      "cost_usd": 0.11,
+      "turns": 7,
+      "started_at": "2026-07-18T00:18:00.000Z",
+      "finished_at": "2026-07-18T00:19:31.800Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-18T00:18:05.000Z",
+      "agent_finished_at": "2026-07-18T00:19:28.800Z",
+      "transcript": "attempts/01KXS9A4JK4NW000000000000K.transcript.txt",
+      "diff": "attempts/01KXS9A4JK4NW000000000000K.diff.patch"
+    }
+  ]
+}

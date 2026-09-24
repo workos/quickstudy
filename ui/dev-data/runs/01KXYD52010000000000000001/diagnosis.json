@@ -6,7 +6,7 @@
     "requested": "model-a-analyst",
     "resolved": "model-a-analyst-20260601"
   },
-  "prompt_version": 1,
+  "prompt_version": 2,
   "disclaimer": "These findings are model-drafted hypotheses, not verdicts. Scope is this single run: no cross-run claims, no attribution beyond the cited evidence. Each evidence link names a harness-selected excerpt (artifact + 1-indexed line range) — verify the cited lines before acting.",
   "pairs_diagnosed": 3,
   "pairs_skipped": 15,

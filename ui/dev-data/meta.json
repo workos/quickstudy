@@ -42,10 +42,33 @@
       "manifest_hash": "0ba000db714e52a0f1848c3a62b7c4655fbe474b9618f106941b293b932f433b",
       "attempts": 13,
       "incomplete": true
+    },
+    {
+      "id": "01KXS9A4J14NW0000000000001",
+      "started_at": "2026-07-18T00:00:00.000Z",
+      "finished_at": "2026-07-18T01:00:00.000Z",
+      "trials": 1,
+      "eval_ids": [
+        "auth-nextjs",
+        "auth-rails",
+        "auth-django"
+      ],
+      "experiment_ids": [
+        "claude-docs",
+        "claude-mcp",
+        "claude-cli",
+        "codex-docs",
+        "codex-mcp",
+        "codex-cli"
+      ],
+      "manifest_hash": "5329c49f0943c0c7ed11c55ca46d83d557020a1b53994c1c0416f198cb1b98e3",
+      "attempts": 18,
+      "incomplete": false
     }
   ],
   "run_paths": {
-    "01KXYD52010000000000000001": "runs/01KXYD52010000000000000001/snapshots/94fe6e083422d5222af1b506",
-    "01KXVTRB010000000000000001": "runs/01KXVTRB010000000000000001/snapshots/353e58e11501aa55db69e212"
+    "01KXYD52010000000000000001": "runs/01KXYD52010000000000000001/snapshots/ab146821d91d0b1d256a4192",
+    "01KXVTRB010000000000000001": "runs/01KXVTRB010000000000000001/snapshots/8834e337b1af31965e782b02",
+    "01KXS9A4J14NW0000000000001": "runs/01KXS9A4J14NW0000000000001/snapshots/8579a689a5af0435c8e7a2d4"
   }
 }

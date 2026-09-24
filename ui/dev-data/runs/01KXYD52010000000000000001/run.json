@@ -53,7 +53,8 @@
           "scorer": "f26d9314a9268f810895cdef0016f3abd6ef526a673deb43667b7e8b55bb6c77",
           "metadata": "3eb249ed7619869fba78f6bfa9c4738267c22c81a674f484d3da59076aeaf1d8"
         },
-        "hash": "b6109cad4cc1db5ac56f90d8ccba4349eb4863cae4608d61499848c91eba9ff0"
+        "hash": "b6109cad4cc1db5ac56f90d8ccba4349eb4863cae4608d61499848c91eba9ff0",
+        "solution": null
       },
       "auth-rails": {
         "id": "auth-rails",
@@ -74,7 +75,8 @@
           "scorer": "c4a6d787e36e3cabefd981c995d01ca0632ddbccb140d639b2e5b4d7fd3005ff",
           "metadata": "2eb4808d77cd92ba492c3b4a963899f0986ce8db5cec765792af3f255e90d0ab"
         },
-        "hash": "e3cc7583acdd27601126488503cca851cbce086354738f95b0934888c375dfe4"
+        "hash": "e3cc7583acdd27601126488503cca851cbce086354738f95b0934888c375dfe4",
+        "solution": null
       },
       "auth-django": {
         "id": "auth-django",
@@ -95,7 +97,8 @@
           "scorer": "ca566df09d7cd28494cdcddae1be35f88314b531146e3a0070998f0374f411e0",
           "metadata": "db4368619f264e288128929986379de3c18eb257e5ececa2ffc0332e2fb81c9f"
         },
-        "hash": "258e828c62c81fdfaa02c192030f6b40d28ff7f0bef41bd5a107b854a55518cb"
+        "hash": "258e828c62c81fdfaa02c192030f6b40d28ff7f0bef41bd5a107b854a55518cb",
+        "solution": null
       },
       "callback-redirect-loop": {
         "id": "callback-redirect-loop",
@@ -116,7 +119,8 @@
           "scorer": "887727583acecbc51dbadd787b9a9de4c58cc296b1f14247eb12721654d66783",
           "metadata": "0a6b2aba4794b4730821c8c50caca821ca92b5b6bb57803a7ddb0d4b96e6c84e"
         },
-        "hash": "2f1e0c555038ee0d36ce53d560adc6873bc8b5c73f00729d9c8cdc7b3bc4abf5"
+        "hash": "2f1e0c555038ee0d36ce53d560adc6873bc8b5c73f00729d9c8cdc7b3bc4abf5",
+        "solution": null
       }
     },
     "experiments": {

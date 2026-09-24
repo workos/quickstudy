@@ -925,3 +925,7 @@ td.delta-zero {
   justify-content: flex-end;
   margin-bottom: 12px;
 }
+
+.cluster {
+  margin-bottom: 24px;
+}

@@ -1,0 +1,60 @@
+{
+  "id": "01KXS9A4JC4NW000000000000C",
+  "run_id": "01KXS9A4J14NW0000000000001",
+  "eval_id": "auth-rails",
+  "experiment_id": "codex-mcp",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    },
+    {
+      "name": "sdk-wired",
+      "passed": true,
+      "graded": false
+    }
+  ],
+  "treatment": "mcp",
+  "comparison_group": "codex",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 2,
+      "tools": [
+        "acme__list_orgs"
+      ]
+    },
+    "cli": {
+      "count": 0,
+      "commands": []
+    }
+  },
+  "tokens_in": 211,
+  "tokens_out": 1211,
+  "cost_usd": 0.11,
+  "turns": 5,
+  "started_at": "2026-07-18T00:11:00.000Z",
+  "finished_at": "2026-07-18T00:12:31.100Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-18T00:11:05.000Z",
+  "agent_finished_at": "2026-07-18T00:12:28.100Z",
+  "transcript": "attempts/01KXS9A4JC4NW000000000000C.transcript.txt",
+  "diff": "attempts/01KXS9A4JC4NW000000000000C.diff.patch"
+}
