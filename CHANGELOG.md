@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/workos/quickstudy/compare/v0.3.0...v0.4.0) (2026-09-24)
+
+
+### Features
+
+* prove the bench — oracle, graded checks, scorer health, leaderboard ([#18](https://github.com/workos/quickstudy/issues/18)) ([cebcbab](https://github.com/workos/quickstudy/commit/cebcbab8b4b63092e924646e9efbb6b6eab943bc))
+
 ## [0.3.0](https://github.com/workos/quickstudy/compare/v0.2.1...v0.3.0) (2026-09-21)
 
 
