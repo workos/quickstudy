@@ -32,7 +32,13 @@ CREATE TABLE IF NOT EXISTS attempts (
   tokens_in INTEGER, tokens_out INTEGER,
   turns INTEGER,                  -- agent steps; NULL = no adapter stream (scripted commands)
   started_at INTEGER, finished_at INTEGER,
-  error TEXT                      -- only when status = 'error'
+  error TEXT,                     -- only when status = 'error'
+  -- Outcome taxonomy + agent-phase timing. NULL = unavailable / not applicable
+  -- (rows written before these columns existed read NULL; never backfilled).
+  limit_hit TEXT,                 -- 'timeout' when the agent hit its wall-clock limit and the tree it left was graded
+  error_kind TEXT,                -- 'environment' | 'agent' | 'scorer' | 'harness' (status = 'error' only)
+  agent_started_at INTEGER,       -- epoch ms; agent phase only
+  agent_finished_at INTEGER       -- epoch ms; agent phase only
 );
 
 CREATE INDEX IF NOT EXISTS idx_attempts_run_pair ON attempts(run_id, eval_id, experiment_id);

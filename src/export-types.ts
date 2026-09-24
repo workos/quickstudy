@@ -89,6 +89,13 @@ export interface DataAttempt {
   finished_at: string | null;
   /** Present when status = "error" (and for recorded teardown notes). */
   error: string | null;
+  /** "timeout" when the agent hit its wall-clock limit and the tree it left was graded; null otherwise. */
+  limit: "timeout" | null;
+  /** Which stage failed when status = "error"; null for completed/incomplete rows and for rows written before this field existed. */
+  error_kind: "environment" | "agent" | "scorer" | "harness" | null;
+  /** Agent phase only (excludes provisioning, container start, export, scoring); null = not recorded. */
+  agent_started_at: string | null;
+  agent_finished_at: string | null;
   /** Relative to the run's data dir (e.g. `attempts/<id>.transcript.txt`); null = artifact missing. */
   transcript: string | null;
   diff: string | null;

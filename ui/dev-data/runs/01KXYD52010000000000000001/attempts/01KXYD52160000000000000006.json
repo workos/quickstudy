@@ -46,6 +46,10 @@
   "started_at": "2026-07-20T00:37:00.000Z",
   "finished_at": "2026-07-20T00:38:33.700Z",
   "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-20T00:37:05.000Z",
+  "agent_finished_at": "2026-07-20T00:38:30.700Z",
   "transcript": "attempts/01KXYD52160000000000000006.transcript.txt",
   "diff": "attempts/01KXYD52160000000000000006.diff.patch"
 }

@@ -95,14 +95,17 @@ interface CellStateSpec {
   evalId: string;
   experimentId: string;
   passes: boolean[];
+  /** Every trial hit its time limit; the tree each left was graded. */
+  limitHit?: "timeout";
 }
 
-/** The four heatmap states, unambiguous. */
+/** The heatmap states, unambiguous. */
 const CELL_STATES: readonly CellStateSpec[] = [
   { evalId: "auth-nextjs", experimentId: "claude-docs", passes: [false, false, false] }, // 0%
   { evalId: "auth-rails", experimentId: "claude-docs", passes: [true, true, true] }, // 100%
   { evalId: "auth-django", experimentId: "claude-docs", passes: [true, false, true] }, // flaky
   { evalId: "auth-nextjs", experimentId: "claude-mcp", passes: [true] }, // incomplete (1/3)
+  { evalId: "auth-rails", experimentId: "claude-mcp", passes: [false, false, false], limitHit: "timeout" }, // graded timeouts
 ];
 
 /**
@@ -217,6 +220,7 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
 
       const status: AttemptStatus = "completed";
       const attemptStartedAt = startedAtMs + sequence * 60_000;
+      const attemptFinishedAt = attemptStartedAt + 60_000 + sequence * 50;
       store.insertAttempt({
         id: attemptId,
         runId,
@@ -237,7 +241,10 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
         tokensOut: 900 + sequence,
         turns: 3 + (sequence % 4),
         startedAt: attemptStartedAt,
-        finishedAt: attemptStartedAt + 60_000 + sequence * 50,
+        finishedAt: attemptFinishedAt,
+        agentStartedAt: attemptStartedAt + 5_000,
+        agentFinishedAt: attemptFinishedAt - 3_000,
+        ...(spec.limitHit !== undefined ? { limitHit: spec.limitHit } : {}),
       });
     });
   }

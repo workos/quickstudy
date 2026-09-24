@@ -3,7 +3,7 @@
  *   - served mode: matrix / compare / report render with data
  *   - offline mode: file:// load with every network scheme aborted → the
  *     heatmap still renders (inline data index)
- *   - the four heatmap cell states render distinctly and drill down correctly
+ *   - the heatmap cell states (incl. graded timeouts) render distinctly and drill down correctly
  *   - attempt deep links land on a highlighted transcript/diff range
  *   - diagnosis: findings grouped by target with evidence deep links into the
  *     line-anchored viewers; a diagnosis-less run renders the command-hint
@@ -120,13 +120,37 @@ test.describe("served mode: three routes render with data", () => {
 });
 
 test.describe("matrix cell states + drill-down", () => {
-  test("0%, 100%, flaky and incomplete cells render distinctly", async ({ page }) => {
+  test("0%, 100%, flaky, incomplete and timeout cells render distinctly", async ({ page }) => {
     const { cellStates } = runIds();
     await page.goto(`/site/index.html#/run/${cellStates}`);
     await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toHaveAttribute("data-rate", "0");
     await expect(page.getByTestId("cell-auth-rails-claude-docs")).toHaveAttribute("data-rate", "100");
     await expect(page.getByTestId("cell-auth-django-claude-docs")).toHaveAttribute("data-flaky", "true");
     await expect(page.getByTestId("cell-auth-nextjs-claude-mcp")).toHaveAttribute("data-incomplete", "true");
+    // Graded timeouts are completed attempts: a scored 0% cell, not an incomplete one.
+    await expect(page.getByTestId("cell-auth-rails-claude-mcp")).toHaveAttribute("data-rate", "0");
+    await expect(page.getByTestId("cell-auth-rails-claude-mcp")).not.toHaveAttribute("data-incomplete", "true");
+  });
+
+  test("the timeout cell's drill-down shows the limit badge; a plain completed attempt shows none", async ({ page }) => {
+    const { cellStates } = runIds();
+    await page.goto(`/site/index.html#/run/${cellStates}/cell/auth-rails/claude-mcp`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    expect(await page.getByTestId("drill-attempt").count()).toBe(3);
+    await expect(page.getByTestId("drill-attempt").first()).toContainText("failed");
+    await expect(page.getByTestId("drill-attempt").first().getByTestId("limit-badge")).toHaveText("timeout");
+    await expect(page.getByTestId("drill-down").getByTestId("error-kind-badge")).toHaveCount(0);
+
+    await page.goto(`/site/index.html#/run/${cellStates}/cell/auth-rails/claude-docs`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    await expect(page.getByTestId("drill-down").getByTestId("limit-badge")).toHaveCount(0);
+  });
+
+  test("the seeded error attempt shows its error-kind badge", async ({ page }) => {
+    const { sweep } = runIds();
+    await page.goto(`/site/index.html#/run/${sweep}/cell/auth-django/codex-mcp`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    await expect(page.getByTestId("drill-down").getByTestId("error-kind-badge")).toHaveText("agent");
   });
 
   test("clicking a cell opens the URL-addressable drill-down with attempt detail", async ({ page }) => {

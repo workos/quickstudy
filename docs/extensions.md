@@ -41,8 +41,8 @@ container command for executable agent extensions.
 Default stage budgets are provisioning 120 s, agent 600 s, scoring 180 s,
 workspace export 60 s, cleanup 30 s. Run flags `--provision-ms`, `--agent-ms`,
 `--score-ms`, `--export-ms`, `--cleanup-ms` override them and enter identity.
-A scorer timeout/provider failure is an instrument error; agent timeouts are
-incomplete. Cleanup errors are recorded alongside the original outcome. A Docker
+A scorer timeout/provider failure is an instrument error (`error_kind: scorer`);
+an agent timeout is graded on the workspace it left (completed, `limit: timeout`). Cleanup errors are recorded alongside the original outcome. A Docker
 exec timeout stops the entire attempt container, including child processes.
 Scoring cannot continue on that sandbox. SIGINT stops new scheduling and lets
 active attempts finish within their budgets before releasing run infrastructure.

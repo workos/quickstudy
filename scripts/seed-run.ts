@@ -408,6 +408,7 @@ export function seedRun(options: SeedOptions): SeedResult {
         checks === undefined ? undefined : { passed: entry.outcome === "pass", checks };
       const telemetryAvailable = status === "completed";
       const attemptStartedAt = startedAtMs + sequence * 60_000;
+      const attemptFinishedAt = attemptStartedAt + 90_000 + sequence * 100;
 
       store.insertAttempt({
         id: attemptId,
@@ -429,8 +430,10 @@ export function seedRun(options: SeedOptions): SeedResult {
         tokensOut: telemetryAvailable ? 1200 + sequence : null,
         turns: telemetryAvailable ? 4 + (sequence % 5) : null,
         startedAt: attemptStartedAt,
-        finishedAt: attemptStartedAt + 90_000 + sequence * 100,
-        ...(entry.outcome === "error" ? { error: "attempt timed out after 1500000ms" } : {}),
+        finishedAt: attemptFinishedAt,
+        ...(entry.outcome === "error" ? { error: "attempt timed out after 1500000ms", errorKind: "agent" as const } : {}),
+        // Agent phase inside the wall-clock window (provisioning before, export + scoring after).
+        ...(status === "completed" ? { agentStartedAt: attemptStartedAt + 5_000, agentFinishedAt: attemptFinishedAt - 3_000 } : {}),
       });
     }
 

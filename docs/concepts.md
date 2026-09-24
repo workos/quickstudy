@@ -119,6 +119,30 @@ report's own methodology note says exactly this.
 - **run** — one `quickstudy run`: all selected pairs and trials under one
   run id, persisted to the results store.
 
+## Outcomes
+
+Every attempt ends in one of three statuses. **completed** means the scorer
+graded the workspace (passed or failed). **incomplete** means there was
+nothing to score — the workspace could not be exported, or the run was
+cancelled. **error** means a stage failed before a verdict existed.
+
+An agent that runs out of time is not discarded: the tree it left behind is
+exported and scored like any other, so the attempt is **completed** with
+`limit: "timeout"` and counts in the pass rate. A limit hit is a statement
+about the agent, not the harness.
+
+An **error** carries an `error_kind` naming the stage that failed:
+`environment` (provisioning, workspace prep, network, container create,
+setup, export), `agent` (the agent command exited non-zero or threw),
+`scorer` (the scorer threw, returned an invalid result, or ran past its
+budget), or `harness` (anything else — a quickstudy bug). Infrastructure
+failures read apart from agent failures without opening a transcript.
+
+`agent_started_at` / `agent_finished_at` bracket the agent phase only.
+Wall time (`started_at` → `finished_at`) also covers provisioning, container
+start, export, and scoring, so agent time ≤ wall time. Rows written before
+these fields existed read `null` (unavailable), never `0`.
+
 ## Immutable run identity
 
 Before the first attempt, quickstudy writes an immutable **run manifest**

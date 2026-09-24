@@ -10,7 +10,7 @@
 import type { ReactNode } from "react";
 import { DiffViewer } from "../components/DiffViewer.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
-import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
+import { OutcomeBadges, StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
 import { AttemptSurfaceUsage } from "../components/SurfaceUsage.tsx";
 import { TranscriptViewer } from "../components/TranscriptViewer.tsx";
 import { DataError, loadRun, loadTextAsset } from "../data.ts";
@@ -66,6 +66,7 @@ export function AttemptView({ runId, attemptId, artifact, lines }: AttemptViewPr
         </div>
         <div className="controls">
           <StatBadge tone={statusTone(status)}>{status}</StatBadge>
+          <OutcomeBadges attempt={attempt} />
           {otherAvailable && <a href={links.attempt(runId, attempt.id, other)}>view {other}</a>}
           <a href={links.cell(runId, { evalId: attempt.eval_id, experimentId: attempt.experiment_id })}>open cell</a>
         </div>

@@ -162,6 +162,10 @@ function toDataAttempt(
     started_at: iso(attempt.startedAt),
     finished_at: iso(attempt.finishedAt),
     error: attempt.error,
+    limit: attempt.limitHit ?? null,
+    error_kind: attempt.errorKind ?? null,
+    agent_started_at: iso(attempt.agentStartedAt ?? null),
+    agent_finished_at: iso(attempt.agentFinishedAt ?? null),
     transcript,
     diff,
   };

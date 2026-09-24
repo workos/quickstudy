@@ -13,7 +13,7 @@ import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } from "../components/Heatmap.tsx";
-import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
+import { OutcomeBadges, StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
 import { AttemptSurfaceUsage } from "../components/SurfaceUsage.tsx";
 import { loadRun } from "../data.ts";
 import { fmtTokens, incompleteReason } from "../format.ts";
@@ -108,6 +108,11 @@ const TURN_UNIT: Record<string, { label: string; title: string }> = {
   codex: { label: "thread turns", title: "codex exec reports one thread turn per prompt, not per agent step — not comparable to Claude's turn count" },
 };
 
+/** A timeout recorded before graded timeouts existed: incomplete, never scored. */
+function isUnscoredTimeout(attempt: DataAttempt): boolean {
+  return attempt.status === "incomplete" && attempt.error?.startsWith("attempt timed out") === true;
+}
+
 function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: string; adapter: string | null }): ReactNode {
   const status = displayStatus(attempt);
   const turnUnit = (adapter !== null && TURN_UNIT[adapter]) || { label: "turns", title: "agent turns, as counted by the adapter" };
@@ -116,6 +121,7 @@ function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: 
       <div className="attempt-line">
         <span className="kpi-meta">trial {attempt.trial_index + 1}</span>
         <StatBadge tone={statusTone(status)}>{status}</StatBadge>
+        <OutcomeBadges attempt={attempt} />
         <span className="spacer" />
         {attempt.transcript !== null && <a href={links.attempt(runId, attempt.id, "transcript")}>transcript</a>}
         {attempt.diff !== null && <a href={links.attempt(runId, attempt.id, "diff")}>diff</a>}
@@ -351,7 +357,10 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
     passed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed === true).length,
     failed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed !== true).length,
     incomplete: value.attempts.filter((attempt) => attempt.status === "incomplete").length,
-    timedOut: value.attempts.filter((attempt) => attempt.status === "incomplete" && attempt.error?.startsWith("attempt timed out")).length,
+    // Graded timeouts (completed, limit "timeout") plus legacy unscored ones.
+    timedOut: value.attempts.filter((attempt) => (attempt.status === "completed" && attempt.limit === "timeout") || isUnscoredTimeout(attempt)).length,
+    // Only unscored timeouts explain an incomplete run; graded ones are complete.
+    unscoredTimedOut: value.attempts.filter(isUnscoredTimeout).length,
     errors: value.attempts.filter((attempt) => attempt.status === "error").length,
   };
   const scored = totals.passed + totals.failed;
@@ -421,7 +430,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
       {(summary.finished_at === null || summary.incomplete) && (
         <div className="notice" data-testid="incomplete-banner">
-          Incomplete run — {incompleteReason({ unfinished: summary.finished_at === null, ...totals })}. Numbers are partial.
+          Incomplete run — {incompleteReason({ unfinished: summary.finished_at === null, incomplete: totals.incomplete, errors: totals.errors, timedOut: totals.unscoredTimedOut })}. Numbers are partial.
         </div>
       )}
 
@@ -432,6 +441,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
           <div className="kpi-meta">
             <StatBadge tone="green">{totals.passed} passed</StatBadge> <StatBadge tone="red">{totals.failed} failed</StatBadge>{" "}
             <StatBadge tone="gray">{totals.incomplete} incomplete</StatBadge> <StatBadge tone="amber">{totals.errors} errored</StatBadge>
+            {totals.timedOut > 0 && <> <StatBadge tone="gray">{totals.timedOut} timed out</StatBadge></>}
           </div>
         </div>
         <div className="kpi">

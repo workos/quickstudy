@@ -5,9 +5,9 @@ import type { DataAttempt } from "../../../src/export-types.ts";
 
 export type BadgeTone = "green" | "red" | "amber" | "gray" | "blue";
 
-export function StatBadge({ tone, children, title }: { tone: BadgeTone; children: ReactNode; title?: string }): ReactNode {
+export function StatBadge({ tone, children, title, testId }: { tone: BadgeTone; children: ReactNode; title?: string; testId?: string }): ReactNode {
   return (
-    <span className={`badge ${tone}`} {...(title !== undefined ? { title } : {})}>
+    <span className={`badge ${tone}`} {...(title !== undefined ? { title } : {})} {...(testId !== undefined ? { "data-testid": testId } : {})}>
       <span className="dot" aria-hidden="true" />
       {children}
     </span>
@@ -28,4 +28,30 @@ export function statusTone(status: AttemptDisplayStatus): BadgeTone {
   if (status === "failed") return "red";
   if (status === "incomplete") return "gray";
   return "amber";
+}
+
+/** Which stage failed: infrastructure (environment, harness) reads apart from the agent and the scorer. */
+export function errorKindTone(kind: NonNullable<DataAttempt["error_kind"]>): BadgeTone {
+  if (kind === "environment") return "amber";
+  if (kind === "agent") return "red";
+  if (kind === "scorer") return "blue";
+  return "gray";
+}
+
+/** The error-kind and limit badges an attempt carries, if any (none on a plain completed attempt). */
+export function OutcomeBadges({ attempt }: { attempt: Pick<DataAttempt, "error_kind" | "limit"> }): ReactNode {
+  return (
+    <>
+      {attempt.error_kind !== null && (
+        <StatBadge tone={errorKindTone(attempt.error_kind)} testId="error-kind-badge" title="the stage that failed">
+          {attempt.error_kind}
+        </StatBadge>
+      )}
+      {attempt.limit === "timeout" && (
+        <StatBadge tone="gray" testId="limit-badge" title="the agent hit its time limit; the workspace it left was graded">
+          timeout
+        </StatBadge>
+      )}
+    </>
+  );
 }
