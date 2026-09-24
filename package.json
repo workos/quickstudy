@@ -1,6 +1,6 @@
 {
   "name": "@workos/quickstudy",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "An open-source, company-agnostic eval harness for measuring whether coding agents can complete real integration tasks, across an agent x feature x framework x surface matrix.",
   "license": "MIT",
   "type": "module",
