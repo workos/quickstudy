@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ComparisonGroup } from "../../../src/experiments/groups.ts";
-import { nNoticeSentences } from "./Compare.tsx";
+import { groupEvalIds, nNoticeSentences } from "./Compare.tsx";
 
 const group: ComparisonGroup = { group: "g", experimentIds: ["a", "b"], comparison: "allowed", mismatches: [], details: [] };
 const EMPTY_ARM = "Some shared evals have an arm with nothing scored; those rows are listed but not comparable.";
@@ -19,4 +19,10 @@ test("every arm scored at three trials: no notice", () => {
   const attempted = new Map([["e", new Set(["a", "b"])]]);
   const arms = new Map([["e", new Map([["a", { passed: 1, scored: 3 }], ["b", { passed: 2, scored: 3 }]])]]);
   expect(nNoticeSentences(3, [group], arms, attempted)).toEqual([]);
+});
+
+test("a shared eval nothing scored is listed as a row, so the notice points at something visible", () => {
+  const attempted = new Map([["e", new Set(["a", "b"])], ["solo", new Set(["a"])]]);
+  const arms = new Map([["scored", new Map([["a", { passed: 1, scored: 1 }]])]]);
+  expect(groupEvalIds(group, arms, attempted)).toEqual(["e", "scored"]);
 });

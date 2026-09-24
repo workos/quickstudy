@@ -45,11 +45,21 @@ function countArms(attempts: DataAttempt[]): Map<string, Map<string, ArmCount>> 
   return byEval;
 }
 
-/** Eval rows a compared group lists: evals where any member has a scored attempt. */
-function groupEvalIds(group: ComparisonGroup, arms: Map<string, Map<string, ArmCount>>): string[] {
-  return [...arms.keys()]
-    .filter((evalId) => group.experimentIds.some((experimentId) => arms.get(evalId)?.has(experimentId)))
-    .sort((a, b) => a.localeCompare(b));
+/**
+ * Eval rows a compared group lists: evals where any member has a scored
+ * attempt, plus shared evals (every member attempted) that nothing scored —
+ * the not-comparable notice names those, so they must render as dashes.
+ */
+export function groupEvalIds(
+  group: ComparisonGroup,
+  arms: Map<string, Map<string, ArmCount>>,
+  attempted: Map<string, Set<string>>,
+): string[] {
+  const scored = [...arms.keys()].filter((evalId) => group.experimentIds.some((experimentId) => arms.get(evalId)?.has(experimentId)));
+  const sharedUnscored = [...attempted.keys()].filter((evalId) =>
+    group.experimentIds.every((experimentId) => attempted.get(evalId)?.has(experimentId) === true),
+  );
+  return [...new Set([...scored, ...sharedUnscored])].sort((a, b) => a.localeCompare(b));
 }
 
 const isCompared = (group: ComparisonGroup): boolean =>
@@ -120,7 +130,17 @@ function GroupHeading({ run, group }: { run: DataRun; group: ComparisonGroup }):
   );
 }
 
-function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup; arms: Map<string, Map<string, ArmCount>> }): ReactNode {
+function GroupCard({
+  run,
+  group,
+  arms,
+  attempted,
+}: {
+  run: DataRun;
+  group: ComparisonGroup;
+  arms: Map<string, Map<string, ArmCount>>;
+  attempted: Map<string, Set<string>>;
+}): ReactNode {
   if (group.comparison === "withheld") {
     return (
       <div className="card" data-testid={`group-${group.group}`}>
@@ -161,7 +181,7 @@ function GroupCard({ run, group, arms }: { run: DataRun; group: ComparisonGroup;
     );
   }
 
-  const evalIds = groupEvalIds(group, arms);
+  const evalIds = groupEvalIds(group, arms, attempted);
 
   return (
     <div className="card" data-testid={`group-${group.group}`}>
@@ -234,7 +254,8 @@ export function Compare({ meta, runId }: CompareProps): ReactNode {
   if (run.status === "loading" || arms === null) return <div className="loading">Loading run…</div>;
 
   const groups = run.value.groups;
-  const nNotice = nNoticeSentences(run.value.run.trials, groups, arms, attemptedArms(run.value.attempts));
+  const attempted = attemptedArms(run.value.attempts);
+  const nNotice = nNoticeSentences(run.value.run.trials, groups, arms, attempted);
 
   return (
     <div data-testid="compare-view">
@@ -284,7 +305,7 @@ export function Compare({ meta, runId }: CompareProps): ReactNode {
           </p>
         </div>
       ) : (
-        groups.map((group) => <GroupCard key={group.group} run={run.value} group={group} arms={arms} />)
+        groups.map((group) => <GroupCard key={group.group} run={run.value} group={group} arms={arms} attempted={attempted} />)
       )}
     </div>
   );
