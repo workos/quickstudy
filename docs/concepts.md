@@ -103,7 +103,10 @@ withheld group before paying for a run.
 A compared gap means: under this recorded harness, offering this treatment
 came with these counts. It is not proof that the treatment made any
 individual attempt succeed or fail, and small trial counts stay small — the
-report's own methodology note says exactly this.
+report's own methodology note says exactly this. The Compare view says so
+too: when a run has fewer than three trials per pair, or a shared eval has an
+arm with nothing scored, a notice states that those counts are listed but not
+comparable. Nothing is hidden or recoloured; the notice is the whole change.
 
 ## Units: attempt, trial, pair, run
 
@@ -118,6 +121,30 @@ report's own methodology note says exactly this.
   denominator. (The UI calls a pair drill-down a *cell*.)
 - **run** — one `quickstudy run`: all selected pairs and trials under one
   run id, persisted to the results store.
+
+## Outcomes
+
+Every attempt ends in one of three statuses. **completed** means the scorer
+graded the workspace (passed or failed). **incomplete** means there was
+nothing to score — the workspace could not be exported, or the run was
+cancelled. **error** means a stage failed before a verdict existed.
+
+An agent that runs out of time is not discarded: the tree it left behind is
+exported and scored like any other, so the attempt is **completed** with
+`limit: "timeout"` and counts in the pass rate. A limit hit is a statement
+about the agent, not the harness.
+
+An **error** carries an `error_kind` naming the stage that failed:
+`environment` (provisioning, workspace prep, network, container create,
+setup, export), `agent` (the agent command exited non-zero or threw),
+`scorer` (the scorer threw, returned an invalid result, or ran past its
+budget), or `harness` (anything else — a quickstudy bug). Infrastructure
+failures read apart from agent failures without opening a transcript.
+
+`agent_started_at` / `agent_finished_at` bracket the agent phase only.
+Wall time (`started_at` → `finished_at`) also covers provisioning, container
+start, export, and scoring, so agent time ≤ wall time. Rows written before
+these fields existed read `null` (unavailable), never `0`.
 
 ## Immutable run identity
 
@@ -146,7 +173,11 @@ manifest is stored with the run, and comparison groups are diffed against it.
    that is unavailable is shown as unavailable, never as zero).
 2. **Pairs** — one row per eval × experiment: pass rate, scored counts, and
    per-check pass counts (`build_passes 10/10`, `login_flow_e2e 1/10`, …),
-   with a `trials disagreed` flag when trials split.
+   with a `trials disagreed` flag when trials split. Each experiment also
+   reports **SDK recall** — `recalled / attempts`, where attempts are the
+   scored attempts that recorded at least one ungraded (`graded: false`)
+   check and recalled are those whose ungraded checks all passed (`n/a` when
+   none recorded one). Ungraded checks are tallied but never enter pass/fail.
 3. **Comparison groups** — raw per-arm counts for groups whose members agree
    beyond their declared treatment; a component diff for withheld groups.
 4. **Surface usage** — offered-versus-used telemetry per experiment: observed
@@ -161,6 +192,64 @@ The report embeds a generated methodology note, and its language is
 deliberately conservative: raw counts, no intervals, no attribution.
 `--strict` makes an incomplete or error-bearing run exit non-zero for CI.
 
+### Bands and scorer health
+
+Each eval gets a **band**, decided over the experiments that scored at least
+one attempt on it (an arm whose attempts all errored is ignored):
+
+- `discriminating` — the arms disagree; this is where comparisons live.
+- `solved-by-all` — every arm passed every scored attempt.
+- `failed-by-all` — every arm failed every scored attempt.
+- no band (`null`) — fewer than two arms scored, so "every arm" means nothing.
+
+The band is copied onto each of the eval's pairs (`pairs[].band`). The
+matrix view splits rows by band: discriminating evals (plus the unbanded
+ones, noted in the header) stay open, while the two uniform bands are
+collapsed so they never crowd out the rows that separate the arms.
+
+**Scorer health** (`scorer_health` in `report.json`) lists suspects: a graded
+check that failed in every scored attempt of a `failed-by-all` eval, under
+every arm, while another graded check passed in every one of those attempts.
+That pattern (the work demonstrably happened, one check never passed) points
+at the instrument, not at any treatment, so treat that eval's pass rates as
+unverified until its scorer is reviewed. Ungraded checks never count on
+either side. The summary sentence is a fixed template that never includes
+eval or check names; the names are in the structured `suspects` list, which
+the matrix banner and the text report's `suspect:` lines display.
+
+### Leaderboard
+
+Each entry in `report.json`'s `experiments[]` carries an `aggregate`: one
+leaderboard row per experiment, rendered as a table above the matrix and in
+the text report. Every number in it except SDK recall counts **benchmark-suite
+attempts only**, so regression evals never move the ranking. That is why the
+row's `cost_usd` can be lower than the run-wide `telemetry.cost_usd`. Its
+columns and their denominators:
+
+- **Pass rate (all · discriminating)**: `passed / scored` over the
+  experiment's benchmark pairs, then the same over only the evals whose band
+  is `discriminating` (`discriminating_passed / discriminating_scored`).
+  Incomplete and errored attempts count in `attempts` but never in `scored`.
+  The discriminating rate is null when the experiment scored no
+  discriminating eval.
+- **Agent time (median)**: the median of `agent_finished_at − agent_started_at`
+  over scored attempts that recorded both stamps (`agent_time_attempts`). An
+  even count takes the mean of the two middle values.
+- **Tokens/run (in)**: the mean over attempts that reported input tokens.
+- **Cost/run**: the mean provider-reported cost over the attempts that
+  reported it, shown with `cost_attempts / attempts reported`, or
+  `not reported (0/N)` when none did. With `--pricing`, the row also carries
+  `estimated_cost_usd` and `estimated_attempts` (shown as `est.`). Without
+  pricing, those keys are absent.
+- **SDK recall**: the same `sdk_recall` the report already states per
+  experiment, over every suite.
+
+Rows sort by discriminating pass rate (nulls last), then the all-eval pass
+rate, then experiment id. Unavailable values render as "—", never 0. A report
+written before the leaderboard existed (`schema_version` < 9) shows a
+one-line note to regenerate it with `quickstudy report <run-id>`. `export`
+rebuilds such stored reports automatically.
+
 For missing Codex dollar telemetry, `report --pricing <file>` can calculate
 [retrospective token-cost estimates](./cost-estimates.md) from saved transcripts
 and a runtime rate snapshot. These supplement reported cost rather than replacing
@@ -171,6 +260,17 @@ When you want hypotheses about **why** pairs failed, `quickstudy diagnose
 model call and writes `diagnosis.json` beside `report.json`. Findings are
 evidence-linked hypotheses — the conservative no-attribution stance of the
 report is preserved by keeping diagnosis a separate, clearly-labeled layer.
+
+The Diagnosis view clusters findings by eval and by the graded checks that
+failed on the cited pairs (joined from the run's `report.json`), largest
+cluster first, so one root cause surfacing across several arms reads as one
+group instead of scattered cards. When `eval-defect` findings make up a
+quarter or more of the total, that target leads inside every cluster. Without
+a readable report, clusters fall back to one per eval. Transcript evidence
+windows anchor on the last cluster of error markers, so an early false
+positive (such as error wording in a system prompt) no longer pins the window
+to the transcript's first lines; `prompt_version` 2 marks diagnoses built
+this way.
 
 ## Isolation and secrets
 
@@ -204,6 +304,8 @@ exactly what a negative control should do.
 | **comparisonGroup** | Experiments claiming to differ only by treatment; agreement is checked, never assumed.       |
 | **scorer**          | `EVAL.ts`'s default export: returns named pass/fail checks for one attempt.                  |
 | **check**           | One named verdict inside a scorer result (`build_passes`, `no_secrets_in_client`, …).        |
+| **ungraded check**  | A check marked `graded: false`: recorded and tallied, never part of pass/fail.              |
+| **SDK recall**      | Per experiment: scored attempts whose ungraded checks all passed / those that recorded one. |
 | **attempt**         | One agent × eval × experiment execution, run once, in isolation.                             |
 | **trial**           | A repeat of the same pair (default 3).                                                       |
 | **pair**            | One eval × experiment combination — the report's row unit (a *cell* in the UI).              |

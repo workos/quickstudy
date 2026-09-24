@@ -68,6 +68,23 @@ async function hostExec(cwd: string, cmd: string[], opts?: { timeoutMs?: number 
   return { exitCode, stdout, stderr, timedOut };
 }
 
+/**
+ * A scorer called a capability the current context does not provide — a
+ * runtime without `query()`/`getClient()`, or anything runtime-only under
+ * `validate --oracle` (including `exec`). The class does not survive the
+ * scorer worker boundary (only the message does), so callers that need to
+ * know a capability was requested track invocations themselves.
+ */
+export class RuntimeCapabilityError extends Error {
+  constructor(
+    readonly capability: "exec" | "query" | "getClient",
+    detail: string,
+  ) {
+    super(detail);
+    this.name = "RuntimeCapabilityError";
+  }
+}
+
 export function buildEvalContext(options: BuildEvalContextOptions): EvalContext {
   const { workspaceDir } = options;
   return {
@@ -85,12 +102,12 @@ export function buildEvalContext(options: BuildEvalContextOptions): EvalContext 
     query:
       options.query ??
       (() => {
-        throw new Error(`this experiment runtime does not provide query() (experiment "${options.experimentId}")`);
+        throw new RuntimeCapabilityError("query", `this experiment runtime does not provide query() (experiment "${options.experimentId}")`);
       }),
     getClient:
       options.getClient ??
       (() => {
-        throw new Error(`this experiment runtime does not provide getClient() (experiment "${options.experimentId}")`);
+        throw new RuntimeCapabilityError("getClient", `this experiment runtime does not provide getClient() (experiment "${options.experimentId}")`);
       }),
   };
 }

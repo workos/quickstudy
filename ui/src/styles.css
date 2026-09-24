@@ -364,6 +364,31 @@ select {
   padding: 8px 16px 16px;
 }
 
+.band + .band {
+  border-top: 1px solid var(--line);
+}
+
+.band > h4,
+details.band > summary {
+  margin: 0;
+  padding: 10px 16px 0;
+  font-size: 13px;
+}
+
+details.band > summary {
+  cursor: pointer;
+  padding-bottom: 10px;
+}
+
+.band-notice {
+  margin: 12px 16px 0;
+}
+
+.band-notice ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
 .scroll-hint {
   display: none;
   padding: 8px 16px 0;
@@ -408,6 +433,11 @@ table.matrix th.matrix-group-head {
   color: var(--muted);
   font-size: 10px;
   font-weight: 400;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 h3 .group-sub {
@@ -635,6 +665,14 @@ table.matrix td.cell:focus-within {
 .crit.fail {
   background: var(--red-bg);
   color: var(--red);
+}
+
+.tag {
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--gray-bg);
+  color: var(--muted);
 }
 
 .telemetry {
@@ -916,4 +954,8 @@ td.delta-zero {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 12px;
+}
+
+.cluster {
+  margin-bottom: 24px;
 }

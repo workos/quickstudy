@@ -95,6 +95,10 @@ quickstudy report <run-id>
 writes NOTES.md, so this toy check passes; against real evals every check
 fails, which is exactly what a negative control should do. Completing the
 run → score → persist loop is what it proves.
+The positive control is the built-in `oracle` agent: give an eval a
+`solution/` reference solution and `quickstudy validate --oracle` checks that
+it scores 1.0 before any paid run (see
+[Writing an eval](docs/writing-an-eval.md#prove-the-scorer-with-a-reference-solution)).
 
 Real measurements come from a benchmark repository built on quickstudy: an
 `evals/` root of real integration tasks (tiny HTTP apps under `local/`) and

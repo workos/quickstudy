@@ -192,11 +192,12 @@ coordinate.
 
 For v4 runs, `quickstudy run --resume RUN_ID` verifies the recorded source and
 execution identity, runs missing coordinates, and preserves completed failures.
-Add `--retry-unfinished` only when you intend to retry errors/timeouts; their
-original evidence remains in the retry history.
+Add `--retry-unfinished` only when you intend to retry errored or incomplete
+attempts (graded timeouts are completed and are not retried); their original
+evidence remains in the retry history.
 
 `quickstudy report RUN_ID --strict` checks distinct planned trial indexes and
-valid scored outcomes. A timeout-only or missing-trial run fails this gate;
+valid scored outcomes. A run with unscored (incomplete) trials or missing trials fails this gate;
 a fully scored failed task is still a valid measurement.
 
 Use `quickstudy export RUN_ID --expected-trials N --mode hosted --out site`

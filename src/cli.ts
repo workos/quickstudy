@@ -59,6 +59,7 @@ import { compareGroups } from "./experiments/groups.ts";
 import { buildRunManifest } from "./manifest.ts";
 import { filterEvals, planRun } from "./plan.ts";
 import { executeRunV3 } from "./runner/execute.ts";
+import { formatOracleOutcome, validateOracle } from "./runner/oracle-validate.ts";
 import { collectProviderKeys, InvalidProviderKeyError, MissingProviderKeyError } from "./secrets.ts";
 import { serveSite } from "./serve.ts";
 import { UI_INDEX_HTML_BASE64 } from "./ui-bundle.generated.ts";
@@ -71,6 +72,7 @@ Usage:
   quickstudy validate                     Validate the evals and experiments roots
     [--evals-root <dir>]                  Evals root (default: evals)
     [--experiments-root <dir>]            Experiments root (default: experiments)
+    [--oracle]                            Score each eval's solution/ reference solution (expects 1.0)
   quickstudy run [--eval <id>...]         Execute evals against experiments
     [--experiment <id>...]                Omit either selector to include every discovered item
     [--evals-root <dir>]                  Evals root (default: evals)
@@ -104,7 +106,7 @@ Usage:
 `;
 
 const COMMAND_HELP: Record<string, string> = {
-  validate: `Usage: quickstudy validate [--evals-root <dir>] [--experiments-root <dir>]\n\nDiscover and validate the evals root (frontmatter, scorer default exports)\nand the experiments root (defineExperiment shapes, comparison groups).\nDefaults: evals, experiments.`,
+  validate: `Usage: quickstudy validate [--evals-root <dir>] [--experiments-root <dir>] [--oracle]\n\nDiscover and validate the evals root (frontmatter, scorer default exports)\nand the experiments root (defineExperiment shapes, comparison groups).\nDefaults: evals, experiments.\n\n--oracle scores each eval's solution/ reference solution on the host and\nprints 1.0, deferred (the scorer needs a runtime capability), FAILED or\nMISSING per eval; exits 1 on any FAILED or MISSING.`,
   run: `Usage: quickstudy run [--eval <id>...] [--experiment <id>...] [options]\n\nExecute the selected eval × experiment pairs. Omit --eval to select every\ndiscovered eval; omit --experiment to select every discovered experiment.\n\nOptions:\n  --eval <id>... --experiment <id>...\n  --evals-root <dir> --experiments-root <dir>   (defaults: evals, experiments)\n  --suite <s>... --framework <f>...\n  --trials <n> --egress-proxy\n  --concurrency <n> --seed <value>             (default concurrency: 1)\n  --resume <run-id> --retry-unfinished        (explicit error/timeout retries)\n  --provision-ms <n> --agent-ms <n> --score-ms <n>\n  --export-ms <n> --cleanup-ms <n>\n  --db <path> --results <dir>`,
   report: `Usage: quickstudy report <run-id> [options]\n\nBuild report.json into the results dir and print the text report\n(pass \`--latest\` to pick the most recent run; \`--json\` prints the JSON).\n\nOptions:\n  --latest --json --strict\n  --strict exits non-zero for incomplete runs or any attempt error\n  --pricing <file>   Estimate missing Codex token costs using runtime pricing JSON\n  --db <path> --results <dir>`,
   diagnose: `Usage: quickstudy diagnose <run-id> [options]\n\nSend each failing (eval × experiment) pair's harness-selected evidence to a\nstructured model call and write diagnosis.json beside report.json\n(pass \`--latest\` to pick the most recent run). Findings are hypotheses with\nevidence links — never verdicts. Requires ANTHROPIC_API_KEY; override the\nanalyst model with QUICKSTUDY_ANALYST_MODEL.\n\nOptions:\n  --latest\n  --db <path> --results <dir>`,
@@ -126,7 +128,7 @@ function fail(message: string): never {
 }
 
 async function commandValidate(args: string[]): Promise<void> {
-  let values: { "evals-root": string; "experiments-root": string };
+  let values: { "evals-root": string; "experiments-root": string; oracle: boolean };
   let positionals: string[];
   try {
     ({ values, positionals } = parseArgs({
@@ -135,6 +137,7 @@ async function commandValidate(args: string[]): Promise<void> {
       options: {
         "evals-root": { type: "string", default: "evals" },
         "experiments-root": { type: "string", default: "experiments" },
+        oracle: { type: "boolean", default: false },
       },
     }));
   } catch (err) {
@@ -157,6 +160,10 @@ async function commandValidate(args: string[]): Promise<void> {
         `("${experimentsRoot}") exists\n\n${USAGE}`,
     );
   }
+  if (values.oracle && !haveEvals) {
+    fail(`validate --oracle: evals root "${evalsRoot}" does not exist`);
+  }
+  let oracleFailure: string | undefined;
   if (haveEvals) {
     const evals = discoverEvals(evalsRoot);
     // A missing/non-function default export is a validation error HERE, not
@@ -170,8 +177,23 @@ async function commandValidate(args: string[]): Promise<void> {
         `    - ${meta.id} (suite: ${meta.suite}` +
           `${meta.product !== undefined ? `; product: ${meta.product}` : ""}` +
           `${meta.framework !== undefined ? `; framework: ${meta.framework}` : ""}` +
-          `${loaded.localDir !== null ? "; local/" : ""})`,
+          `${loaded.localDir !== null ? "; local/" : ""}` +
+          `${loaded.solutionDir !== null ? "; solution/" : ""})`,
       );
+    }
+    if (values.oracle) {
+      console.log(`  oracle:`);
+      let failed = 0;
+      let missing = 0;
+      for (const loaded of evals) {
+        const outcome = await validateOracle(loaded);
+        if (outcome.kind === "failed") failed++;
+        if (outcome.kind === "missing") missing++;
+        console.log(`    - ${formatOracleOutcome(loaded.metadata.id, outcome)}`);
+      }
+      if (failed + missing > 0) {
+        oracleFailure = `validate --oracle: ${failed} eval(s) FAILED, ${missing} eval(s) MISSING a solution/`;
+      }
     }
   }
   if (haveExperiments) {
@@ -200,6 +222,7 @@ async function commandValidate(args: string[]): Promise<void> {
       }
     }
   }
+  if (oracleFailure !== undefined) fail(oracleFailure);
 }
 
 function parsePositiveInt(value: string, flag: string): number {

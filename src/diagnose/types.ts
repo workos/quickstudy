@@ -20,8 +20,11 @@ export class DiagnoseError extends Error {
 
 export const DIAGNOSIS_SCHEMA_VERSION = 1;
 
-/** Bumped whenever the system/user prompt text changes shape. */
-export const DIAGNOSIS_PROMPT_VERSION = 1;
+/**
+ * Bumped whenever the system/user prompt text changes shape. v2: excerpt
+ * windows anchor on the last marker cluster.
+ */
+export const DIAGNOSIS_PROMPT_VERSION = 2;
 
 /** Fixed self-labeling carried inside every diagnosis.json. */
 export const DIAGNOSIS_DISCLAIMER =

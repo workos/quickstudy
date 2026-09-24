@@ -3,7 +3,7 @@
  * E2E fixture server: seed → export (real pipeline, real ui/dist bundle) →
  * serve. Three sites under ui/e2e/.fixtures:
  *
- *   /site           two runs (full sweep + cell-states), groups + reports wired
+ *   /site           three runs (full sweep + cell-states + trials-1), groups + reports wired
  *   /site-mismatch  same site with schemaVersion bumped → error banner
  *   /site-empty     zero runs → friendly empty state
  */
@@ -76,7 +76,9 @@ writeFileSync(
 );
 
 const server = serveSite(FIXTURES, FIXTURE_PORT);
-console.log(`fixture server: ${server.url} (sweep run ${seeded.runIds[0]}, cell-states run ${seeded.runIds[1]})`);
+console.log(
+  `fixture server: ${server.url} (sweep run ${seeded.runIds[0]}, cell-states run ${seeded.runIds[1]}, trials-1 run ${seeded.runIds[2]})`,
+);
 
 // Serve until Playwright tears the process down.
 await new Promise(() => {});

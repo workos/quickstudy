@@ -21,7 +21,7 @@
  * and never allowed to mask the attempt's result.
  */
 
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -33,10 +33,12 @@ import type {
 import { ClaudeCodeAdapter } from "../adapters/claude.ts";
 import { CodexAdapter } from "../adapters/codex.ts";
 import { EchoAdapter } from "../adapters/echo.ts";
+import { OracleAdapter, OracleContainerAdapter } from "../adapters/oracle.ts";
 import { validEvalResult } from "../evals/result.ts";
 import { importEvalScorer } from "../evals/discovery.ts";
 import { deadline, StageTimeoutError } from "./deadline.ts";
 import { scoreInWorker } from "./score-worker.ts";
+import { prepWorkspaceSource } from "./workspace-source.ts";
 import type { EvalResult, LoadedEval } from "../evals/types.ts";
 import type { AgentSpec, Experiment, LoadedExperiment, Runtime } from "../experiments/types.ts";
 import { canonicalJson } from "../identity-diff.ts";
@@ -70,7 +72,7 @@ import type { AttemptPlan } from "../plan.ts";
 import type { ProvisionedEnvironment, RuntimeProvisionContext } from "../runtime/types.ts";
 import { collectProviderKeys, hostSecretEnv, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
 import { ArtifactsStore } from "../store/artifacts.ts";
-import { activeAttempts, type NewAttempt, type ResultsStore, type RunConfig } from "../store/db.ts";
+import { activeAttempts, type ErrorKind, type NewAttempt, type ResultsStore, type RunConfig } from "../store/db.ts";
 import { acquireRunLock } from "./run-lock.ts";
 import { orderedPlan, schedule } from "./scheduler.ts";
 import { compareGroups } from "../experiments/groups.ts";
@@ -136,17 +138,46 @@ interface AttemptDisposition {
   status: "completed" | "incomplete" | "error";
   result?: EvalResult;
   error?: string;
+  /** Which stage failed; set on every `status: "error"` disposition. */
+  errorKind?: ErrorKind;
+}
+
+/**
+ * An error tagged with the attempt stage it was thrown from. Stages wrap
+ * their own boundary (`inStage`) so helpers stay unaware of the taxonomy;
+ * the message is the cause's, so recorded errors read exactly as before.
+ */
+export class StageFailure extends Error {
+  constructor(readonly kind: ErrorKind, cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "StageFailure";
+  }
+}
+
+/** The kind an error reaching a catch-all carries: its stage, else `harness`. */
+export function errorKindOf(err: unknown): ErrorKind {
+  return err instanceof StageFailure ? err.kind : "harness";
+}
+
+async function inStage<T>(kind: ErrorKind, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (err) {
+    throw err instanceof StageFailure ? err : new StageFailure(kind, err);
+  }
 }
 
 function defaultHostAdapters(): Record<string, AgentAdapter> {
   const echo = new EchoAdapter();
-  return { [echo.name]: echo };
+  const oracle = new OracleAdapter();
+  return { [echo.name]: echo, [oracle.name]: oracle };
 }
 
 function defaultContainerAdapters(): Record<string, (agent: AgentSpec) => ContainerAgentAdapter> {
   return {
     claude: (agent) => new ClaudeCodeAdapter("claude", { model: agent.model, reasoning: agent.reasoning }),
     codex: (agent) => new CodexAdapter("codex", { model: agent.model, reasoning: agent.reasoning }),
+    oracle: () => new OracleContainerAdapter(),
   };
 }
 
@@ -310,6 +341,12 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       );
     }
     if (experiment.runtime.kind === "container") {
+      if ((experiment.runtime.command ?? []).length > 0 && experiment.agent.adapter === "oracle") {
+        throw new Error(
+          `experiment "${experiment.id}" selects the oracle adapter but sets runtime.command, which bypasses it — ` +
+            `drop runtime.command so the reference solution is what gets scored`,
+        );
+      }
       if ((experiment.runtime.command ?? []).length === 0 && !containerAgents.has(experiment.id)) {
         const adapter = resolveContainerAdapter(experiment, containerAdapterFactories);
         // Provider keys are validated here — before any run row, sidecar, or
@@ -332,6 +369,26 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       tags.add(image);
       imageTagsByPair[key] = image;
     }
+  }
+
+  // Reference-solution preflight: an adapter that starts from the solution
+  // overlay (the oracle) cannot run an eval without solution/. Every
+  // offending pair is named at once, before any run row exists.
+  const missingSolutions: string[] = [];
+  for (const entry of plan) {
+    const experiment = experimentsById.get(entry.experimentId) as Experiment;
+    const startingState =
+      experiment.runtime.kind === "host"
+        ? hostAdapters[experiment.agent.adapter]?.startingState
+        : containerAgents.get(experiment.id)?.startingState;
+    if (startingState === "solution" && (evalsById.get(entry.evalId) as LoadedEval).solutionDir === null) {
+      missingSolutions.push(`${entry.experimentId} × ${entry.evalId}`);
+    }
+  }
+  if (missingSolutions.length > 0) {
+    throw new Error(
+      `the oracle adapter needs solution/ — add it or drop the eval from the run: ${[...new Set(missingSolutions)].join(", ")}`,
+    );
   }
 
   // Live key preflight: a key that is present but rejected by the provider
@@ -507,10 +564,14 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
         // An attempt failure never aborts the run: persist the error and move on.
         const message = err instanceof Error ? err.message : String(err);
         await artifacts.writeError(runId, attemptId, message);
-        disposition = { status: "error", error: message };
+        disposition = { status: "error", error: message, errorKind: errorKindOf(err) };
       }
 
       persisted.status = disposition.status;
+      persisted.errorKind = disposition.status === "error" ? (disposition.errorKind ?? "harness") : null;
+      // A limit hit means the workspace it left was graded; an unscored
+      // attempt (incomplete, or a later stage errored) carries none.
+      if (disposition.status !== "completed") persisted.limitHit = null;
       if (disposition.judgeRecords) persisted.judgeRecords = disposition.judgeRecords;
       if (disposition.result !== undefined) persisted.result = disposition.result;
       if (disposition.error !== undefined) persisted.error = disposition.error;
@@ -556,15 +617,6 @@ async function mustExec(
   return result;
 }
 
-/** Prepare the attempt's starting state: a copy of `local/`, or empty (tools-only evals). */
-async function prepWorkspaceSource(loadedEval: LoadedEval): Promise<string> {
-  const sourceDir = await mkdtemp(join(tmpdir(), "quickstudy-v3-source-"));
-  if (loadedEval.localDir !== null) {
-    await cp(loadedEval.localDir, sourceDir, { recursive: true });
-  }
-  return sourceDir;
-}
-
 interface AttemptArgs {
   runId: string;
   attemptId: string;
@@ -585,10 +637,11 @@ async function runHostAttemptV3(
   const { runId, attemptId, persisted } = args;
   const adapter = hostAdapters[experiment.agent.adapter] as AgentAdapter;
 
-  const sourceDir = await prepWorkspaceSource(loadedEval);
-  const scratchDir = await mkdtemp(join(tmpdir(), "quickstudy-v3-attempt-"));
+  const sourceDir = await inStage("environment", () => prepWorkspaceSource(loadedEval, adapter.startingState ?? "fixture"));
+  const scratchDir = await inStage("environment", () => mkdtemp(join(tmpdir(), "quickstudy-v3-attempt-")));
   try {
-    let outcome: AttemptOutcome;
+    let outcome: AttemptOutcome | undefined;
+    persisted.agentStartedAt = Date.now();
     try {
       outcome = await deadline("agent", args.attemptTimeoutMs, (signal) => adapter.runAttempt({
         signal,
@@ -600,9 +653,19 @@ async function runHostAttemptV3(
         trialIndex: entry.trialIndex,
       }));
     } catch (err) {
-      if (!(err instanceof StageTimeoutError)) throw err;
-      await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms`);
-      return { status: "incomplete", error: `attempt timed out after ${args.attemptTimeoutMs}ms` };
+      if (!(err instanceof StageTimeoutError)) throw new StageFailure("agent", err);
+      // Graded timeout: the adapter never returned (no transcript, diff, or
+      // metrics), but the scratch workspace it was writing into exists — the
+      // tree it left behind is exported and scored like any other.
+      await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms; workspace graded as left`);
+      persisted.limitHit = "timeout";
+    } finally {
+      persisted.agentFinishedAt = Date.now();
+    }
+
+    if (outcome === undefined) {
+      const workspaceDir = await inStage("environment", () => artifacts.exportWorkspace(runId, attemptId, scratchDir));
+      return await scoreAttempt(options, loadedEval, experiment, entry, { runId, attemptId, workspaceDir });
     }
 
     persisted.transcriptRef = await artifacts.writeTranscript(runId, attemptId, outcome.transcript);
@@ -614,7 +677,7 @@ async function runHostAttemptV3(
 
     // Export FIRST, then score against the export (no live sandbox exists on
     // the host path — exec runs in the exported workspace directory).
-    const workspaceDir = await artifacts.exportWorkspace(runId, attemptId, scratchDir);
+    const workspaceDir = await inStage("environment", () => artifacts.exportWorkspace(runId, attemptId, scratchDir));
     return await scoreAttempt(options, loadedEval, experiment, entry, { runId, attemptId, workspaceDir, agentOutput: { finalReport: outcome.transcript.filter((e) => e.role === "assistant").at(-1)?.content ?? null, transcript: JSON.stringify(outcome.transcript).slice(0, 131072), truncated: JSON.stringify(outcome.transcript).length > 131072 } });
   } finally {
     await rm(scratchDir, { recursive: true, force: true });
@@ -682,7 +745,7 @@ async function runContainerAttemptV3(
       const teardownFailure = await attemptRuntimeTeardown(runtime, undefined, provisionCtx, environment?.budgets.cleanupMs ?? options.budgets?.cleanupMs);
       const error = teardownFailure !== undefined ? `${message}; ${teardownFailure}` : message;
       await artifacts.writeError(runId, attemptId, error);
-      return { status: "error", error };
+      return { status: "error", error, errorKind: "environment" };
     }
   }
 
@@ -691,19 +754,22 @@ async function runContainerAttemptV3(
   let disposition: AttemptDisposition;
   try {
     disposition = await (async (): Promise<AttemptDisposition> => {
-      sourceDir = await prepWorkspaceSource(loadedEval);
+      sourceDir = await inStage("environment", () => prepWorkspaceSource(loadedEval, agentAdapter?.startingState ?? "fixture"));
       const resolvedImage = environment?.image;
       const image = resolvedImage && resolvedImage.id !== "unresolved" ? resolvedImage.id : resolvedImage?.tag ?? runtime.image ?? (runtime.containerImage?.(loadedEval.metadata) as string);
       if (environment?.egress.proxy) {
-        const networkName = await createRunNetwork(`${runId}-${attemptId}`);
-        try {
-          const sidecar = await startEgressSidecar({ runId, networkName, allowlist: environment.egress.allowlist, image: EGRESS_PROXY_IMAGE });
-          egress = { networkName, sidecar };
-        } catch (err) { await removeRunNetwork(networkName); throw err; }
-        if (treatments.mcp?.sidecar) {
-          mcpNetwork = networkName;
-          mcpIp = await connectContainerNetwork(treatments.mcp.sidecar.id, networkName);
-        }
+        const egressPolicy = environment.egress;
+        await inStage("environment", async () => {
+          const networkName = await createRunNetwork(`${runId}-${attemptId}`);
+          try {
+            const sidecar = await startEgressSidecar({ runId, networkName, allowlist: egressPolicy.allowlist, image: EGRESS_PROXY_IMAGE });
+            egress = { networkName, sidecar };
+          } catch (err) { await removeRunNetwork(networkName); throw err; }
+          if (treatments.mcp?.sidecar) {
+            mcpNetwork = networkName;
+            mcpIp = await connectContainerNetwork(treatments.mcp.sidecar.id, networkName);
+          }
+        });
       }
 
       // --- treatment env: everything rides the 0600 env-file, never argv ---
@@ -748,17 +814,18 @@ async function runContainerAttemptV3(
         Object.assign(env, proxyEnv);
       }
 
-      const paths = await artifacts.prepareAttempt(runId, attemptId);
-      const container = await createAttemptContainer({
+      const paths = await inStage("environment", () => artifacts.prepareAttempt(runId, attemptId));
+      const fixtureDir = sourceDir;
+      const container = await inStage("environment", () => createAttemptContainer({
         image,
         env,
         resultsDir: paths.attemptDir,
         attemptId,
-        fixtureDir: sourceDir,
+        fixtureDir,
         // Under the egress treatment the internal network replaces the
         // default bridge: the proxy sidecar is the only path to the world.
         ...(egress ? { network: egress.networkName } : {}),
-      });
+      }));
       try {
         let command: string[];
         let baselineSha: string | undefined;
@@ -768,15 +835,17 @@ async function runContainerAttemptV3(
           // final workspace against this exact commit. The SHA is recorded
           // (not just HEAD) so an agent that makes its own commits cannot
           // move the baseline out from under the diff.
-          const gitAvailable = (await container.execInWorkspace(["git", "--version"])).exitCode === 0;
+          const gitAvailable = await inStage("environment", async () => (await container.execInWorkspace(["git", "--version"])).exitCode === 0);
           if (gitAvailable) {
-            await mustExec(container, ["git", "init", "-q"]);
-            await mustExec(container, ["git", "add", "-A"]);
-            await mustExec(container, [
-              "git", "-c", "user.name=quickstudy", "-c", "user.email=quickstudy@localhost",
-              "commit", "-q", "--allow-empty", "-m", "quickstudy fixture baseline",
-            ]);
-            baselineSha = (await mustExec(container, ["git", "rev-parse", "HEAD"])).stdout.trim();
+            baselineSha = await inStage("environment", async () => {
+              await mustExec(container, ["git", "init", "-q"]);
+              await mustExec(container, ["git", "add", "-A"]);
+              await mustExec(container, [
+                "git", "-c", "user.name=quickstudy", "-c", "user.email=quickstudy@localhost",
+                "commit", "-q", "--allow-empty", "-m", "quickstudy fixture baseline",
+              ]);
+              return (await mustExec(container, ["git", "rev-parse", "HEAD"])).stdout.trim();
+            });
           } else {
             (options.log ?? console.log)(
               `attempt ${attemptId}: git is unavailable in image "${image}" — diff.patch will be empty ` +
@@ -794,15 +863,23 @@ async function runContainerAttemptV3(
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
           // The prompt itself is byte-identical across experiments.
-          for (const [path, content] of Object.entries(agentAdapter.setupFiles(promptCtx))) {
-            await container.writeFile(path, content);
-          }
+          await inStage("environment", async () => {
+            for (const [path, content] of Object.entries(agentAdapter.setupFiles(promptCtx))) {
+              await container.writeFile(path, content);
+            }
+          });
           command = agentAdapter.command(promptCtx);
         } else {
           command = runtime.command as string[];
         }
 
-        const agentResult = await container.execInWorkspace(command, { timeoutMs: args.attemptTimeoutMs });
+        persisted.agentStartedAt = Date.now();
+        let agentResult: Awaited<ReturnType<typeof container.execInWorkspace>>;
+        try {
+          agentResult = await inStage("agent", () => container.execInWorkspace(command, { timeoutMs: args.attemptTimeoutMs }));
+        } finally {
+          persisted.agentFinishedAt = Date.now();
+        }
         // The raw stream is the transcript artifact (redacted) — persisted
         // even when the agent timed out or failed, so there is always evidence.
         const redactedStream = redactSecrets(agentResult.stdout, secretEnv);
@@ -845,24 +922,34 @@ async function runContainerAttemptV3(
           }
         }
         if (agentResult.timedOut) {
-          await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms — container killed`);
-          return { status: "incomplete", error: `attempt timed out after ${args.attemptTimeoutMs}ms` };
-        }
-        if (agentResult.exitCode !== 0) {
+          // Graded timeout: runDocker restarted the killed container, so the
+          // tree the agent left behind is exported and scored below.
+          // captureDiff already ran above.
+          await artifacts.writeError(runId, attemptId, `attempt timed out after ${args.attemptTimeoutMs}ms — container killed; workspace graded as left`);
+          persisted.limitHit = "timeout";
+        } else if (agentResult.exitCode !== 0) {
           const message = `agent command exited ${agentResult.exitCode}\n--- stderr ---\n${agentResult.stderr}`;
           await artifacts.writeError(runId, attemptId, redactSecrets(message, secretEnv));
-          return { status: "error", error: `agent command exited ${agentResult.exitCode}` };
+          return { status: "error", error: `agent command exited ${agentResult.exitCode}`, errorKind: "agent" };
+        } else {
+          await inStage("environment", captureDiff);
         }
-
-        await captureDiff();
 
         // Export the workspace BEFORE scoring, with the container still alive:
         // file checks read the export, ctx.exec reaches into the live sandbox.
-        await deadline("export", environment?.budgets.exportMs ?? DEFAULT_BUDGETS.exportMs, async (signal) => {
-          const kill = () => { void container.teardown(); };
-          signal.addEventListener("abort", kill, { once: true });
-          try { await container.exportWorkspace(paths.workspace); } finally { signal.removeEventListener("abort", kill); }
-        });
+        try {
+          await inStage("environment", () => deadline("export", environment?.budgets.exportMs ?? DEFAULT_BUDGETS.exportMs, async (signal) => {
+            const kill = () => { void container.teardown(); };
+            signal.addEventListener("abort", kill, { once: true });
+            try { await container.exportWorkspace(paths.workspace); } finally { signal.removeEventListener("abort", kill); }
+          }));
+        } catch (err) {
+          if (persisted.limitHit !== "timeout") throw err;
+          // Nothing to score: `incomplete` keeps its meaning "no workspace".
+          const error = `attempt timed out after ${args.attemptTimeoutMs}ms; workspace could not be exported`;
+          await artifacts.writeError(runId, attemptId, `${error}: ${err instanceof Error ? err.message : String(err)}`);
+          return { status: "incomplete", error };
+        }
         return await scoreAttempt(options, loadedEval, experiment, entry, {
           runId,
           attemptId,
@@ -899,7 +986,7 @@ async function runContainerAttemptV3(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await artifacts.writeError(runId, attemptId, message);
-    disposition = { status: "error", error: message };
+    disposition = { status: "error", error: message, errorKind: errorKindOf(err) };
   } finally {
     if (mcpNetwork && treatments.mcp?.sidecar) {
       try { await disconnectContainerNetwork(treatments.mcp.sidecar.id, mcpNetwork); } catch { containerTeardownFailure = "MCP network disconnect failed"; }
@@ -983,7 +1070,7 @@ async function scoreAttempt(
     await options.artifacts.writeError(args.runId, args.attemptId, message);
     const judgments = (err as { judgments?: import("../evals/types.ts").JudgeRecord[] })?.judgments;
     const judgeRecords = judgments && validEvalResult({passed:false,checks:[],judgments}) ? judgments : undefined;
-    return { status: "error", error: message, ...(judgeRecords ? {judgeRecords} : {}) };
+    return { status: "error", error: message, errorKind: "scorer", ...(judgeRecords ? {judgeRecords} : {}) };
   }
 }
 

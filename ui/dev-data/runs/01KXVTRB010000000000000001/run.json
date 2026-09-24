@@ -8,14 +8,17 @@
     "eval_ids": [
       "auth-nextjs",
       "auth-rails",
-      "auth-django"
+      "auth-django",
+      "uniform-pass",
+      "uniform-fail"
     ],
     "experiment_ids": [
       "claude-docs",
       "claude-mcp"
     ],
     "manifest_hash": "0ba000db714e52a0f1848c3a62b7c4655fbe474b9618f106941b293b932f433b",
-    "attempts": 10
+    "attempts": 25,
+    "incomplete": true
   },
   "manifest": {
     "manifestVersion": "v3",
@@ -47,7 +50,8 @@
           "scorer": "4b87938f45e76254b766322d5c217ce42bb2a2b2563d6691c14c507a4f4f7771",
           "metadata": "736d3bc147093466a0adda35b9d924c1f61c1f0ebd6fe438c0c6dc2b3f75033d"
         },
-        "hash": "785d4f122b72a79d7e016e5fc367fdd0883c72436edddab7b6a429d235b71736"
+        "hash": "785d4f122b72a79d7e016e5fc367fdd0883c72436edddab7b6a429d235b71736",
+        "solution": null
       },
       "auth-rails": {
         "id": "auth-rails",
@@ -68,7 +72,8 @@
           "scorer": "57ad9c171ea2473013e4a8b1bedcf4f5127fd073401d9603e010d9da61cc9e95",
           "metadata": "a9870d9f4c1cee9351c3d39fb7e007c7449dc0c6e72a9be12a93fb097486e683"
         },
-        "hash": "82cdee985b54334e343ea46a7b38a87e86ace306423822c16b7af6cea41648be"
+        "hash": "82cdee985b54334e343ea46a7b38a87e86ace306423822c16b7af6cea41648be",
+        "solution": null
       },
       "auth-django": {
         "id": "auth-django",
@@ -89,7 +94,52 @@
           "scorer": "33cda9b6d6217cd0bd0cde245a98582626c29d5a98c2dddabdc5ef88cb2c0e4d",
           "metadata": "4a36e81fbbdb4c152d13a36dfbfc220c3487110e43c2d7af89f2d0dded425d08"
         },
-        "hash": "bb3febf57173a101e5398bf57a078fa14d22a247cd44072fa7713833b9c25a5c"
+        "hash": "bb3febf57173a101e5398bf57a078fa14d22a247cd44072fa7713833b9c25a5c",
+        "solution": null
+      },
+      "uniform-pass": {
+        "id": "uniform-pass",
+        "metadata": {
+          "id": "uniform-pass",
+          "suite": "benchmark",
+          "product": "identity",
+          "framework": "generic",
+          "topics": [
+            "auth",
+            "generic"
+          ]
+        },
+        "components": {
+          "promptSource": "a9e2e174e8a615c084e058004264478ebc73c5833ac5599ef4a7f54cdd7e7f44",
+          "effectivePrompt": "48f4e1f90afc73b86c7c181a08098162399b9ec77c7424d520355d393bacffc0",
+          "local": null,
+          "scorer": "1a26dce8b100e85268a7dc1a54429c4378bb2c46f241b485dc349a772f2c018b",
+          "metadata": "951ec5b21a919b8e86ec1abce6ef4060e4b70d8361a8b95cb9de54829d649bd3"
+        },
+        "hash": "2747c54774a39d6763996238ece1aa9162a90e2239af1d5d5a16c6dafdd57629",
+        "solution": null
+      },
+      "uniform-fail": {
+        "id": "uniform-fail",
+        "metadata": {
+          "id": "uniform-fail",
+          "suite": "benchmark",
+          "product": "identity",
+          "framework": "generic",
+          "topics": [
+            "auth",
+            "generic"
+          ]
+        },
+        "components": {
+          "promptSource": "5f938030eec1fddf9c0c21c75585c78cf41d8b3cf5ba5975ce089052de4a48e2",
+          "effectivePrompt": "e8532af8c651a4d068b61ad15b9ee3401306927a682053f26540647d0e05614b",
+          "local": null,
+          "scorer": "f8291e76b5b097b37aaf06d38ad15f11b36168241bceee1cb149bdcf3bfa375a",
+          "metadata": "4c95fab2fa36b03d983fbcac8ddd1f96506344bd9419db5ef378302900c3ecb9"
+        },
+        "hash": "08e4847c63f47a2957483a54e31ed07ca55473b415c1a69ca4ac659bdf5d352c",
+        "solution": null
       }
     },
     "experiments": {
@@ -175,6 +225,10 @@
       "started_at": "2026-07-19T00:01:00.000Z",
       "finished_at": "2026-07-19T00:02:00.050Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:01:05.000Z",
+      "agent_finished_at": "2026-07-19T00:01:57.050Z",
       "transcript": "attempts/01KXVTRB020000000000000002.transcript.txt",
       "diff": "attempts/01KXVTRB020000000000000002.diff.patch"
     },
@@ -207,6 +261,10 @@
       "started_at": "2026-07-19T00:02:00.000Z",
       "finished_at": "2026-07-19T00:03:00.100Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:02:05.000Z",
+      "agent_finished_at": "2026-07-19T00:02:57.100Z",
       "transcript": "attempts/01KXVTRB030000000000000003.transcript.txt",
       "diff": "attempts/01KXVTRB030000000000000003.diff.patch"
     },
@@ -239,6 +297,10 @@
       "started_at": "2026-07-19T00:03:00.000Z",
       "finished_at": "2026-07-19T00:04:00.150Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:03:05.000Z",
+      "agent_finished_at": "2026-07-19T00:03:57.150Z",
       "transcript": "attempts/01KXVTRB040000000000000004.transcript.txt",
       "diff": "attempts/01KXVTRB040000000000000004.diff.patch"
     },
@@ -271,6 +333,10 @@
       "started_at": "2026-07-19T00:04:00.000Z",
       "finished_at": "2026-07-19T00:05:00.200Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:04:05.000Z",
+      "agent_finished_at": "2026-07-19T00:04:57.200Z",
       "transcript": "attempts/01KXVTRB050000000000000005.transcript.txt",
       "diff": "attempts/01KXVTRB050000000000000005.diff.patch"
     },
@@ -303,6 +369,10 @@
       "started_at": "2026-07-19T00:05:00.000Z",
       "finished_at": "2026-07-19T00:06:00.250Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:05:05.000Z",
+      "agent_finished_at": "2026-07-19T00:05:57.250Z",
       "transcript": "attempts/01KXVTRB060000000000000006.transcript.txt",
       "diff": "attempts/01KXVTRB060000000000000006.diff.patch"
     },
@@ -335,6 +405,10 @@
       "started_at": "2026-07-19T00:06:00.000Z",
       "finished_at": "2026-07-19T00:07:00.300Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:06:05.000Z",
+      "agent_finished_at": "2026-07-19T00:06:57.300Z",
       "transcript": "attempts/01KXVTRB070000000000000007.transcript.txt",
       "diff": "attempts/01KXVTRB070000000000000007.diff.patch"
     },
@@ -367,6 +441,10 @@
       "started_at": "2026-07-19T00:07:00.000Z",
       "finished_at": "2026-07-19T00:08:00.350Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:07:05.000Z",
+      "agent_finished_at": "2026-07-19T00:07:57.350Z",
       "transcript": "attempts/01KXVTRB080000000000000008.transcript.txt",
       "diff": "attempts/01KXVTRB080000000000000008.diff.patch"
     },
@@ -399,6 +477,10 @@
       "started_at": "2026-07-19T00:08:00.000Z",
       "finished_at": "2026-07-19T00:09:00.400Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:08:05.000Z",
+      "agent_finished_at": "2026-07-19T00:08:57.400Z",
       "transcript": "attempts/01KXVTRB090000000000000009.transcript.txt",
       "diff": "attempts/01KXVTRB090000000000000009.diff.patch"
     },
@@ -431,6 +513,10 @@
       "started_at": "2026-07-19T00:09:00.000Z",
       "finished_at": "2026-07-19T00:10:00.450Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:09:05.000Z",
+      "agent_finished_at": "2026-07-19T00:09:57.450Z",
       "transcript": "attempts/01KXVTRB0A000000000000000A.transcript.txt",
       "diff": "attempts/01KXVTRB0A000000000000000A.diff.patch"
     },
@@ -463,8 +549,552 @@
       "started_at": "2026-07-19T00:10:00.000Z",
       "finished_at": "2026-07-19T00:11:00.500Z",
       "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:10:05.000Z",
+      "agent_finished_at": "2026-07-19T00:10:57.500Z",
       "transcript": "attempts/01KXVTRB0B000000000000000B.transcript.txt",
       "diff": "attempts/01KXVTRB0B000000000000000B.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0C000000000000000C",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 111,
+      "tokens_out": 911,
+      "cost_usd": 0.07,
+      "turns": 6,
+      "started_at": "2026-07-19T00:11:00.000Z",
+      "finished_at": "2026-07-19T00:12:00.550Z",
+      "error": null,
+      "limit": "timeout",
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:11:05.000Z",
+      "agent_finished_at": "2026-07-19T00:11:57.550Z",
+      "transcript": "attempts/01KXVTRB0C000000000000000C.transcript.txt",
+      "diff": "attempts/01KXVTRB0C000000000000000C.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0D000000000000000D",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 1,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 112,
+      "tokens_out": 912,
+      "cost_usd": 0.07,
+      "turns": 3,
+      "started_at": "2026-07-19T00:12:00.000Z",
+      "finished_at": "2026-07-19T00:13:00.600Z",
+      "error": null,
+      "limit": "timeout",
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:12:05.000Z",
+      "agent_finished_at": "2026-07-19T00:12:57.600Z",
+      "transcript": "attempts/01KXVTRB0D000000000000000D.transcript.txt",
+      "diff": "attempts/01KXVTRB0D000000000000000D.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0E000000000000000E",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "auth-rails",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 2,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": false
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 113,
+      "tokens_out": 913,
+      "cost_usd": 0.07,
+      "turns": 4,
+      "started_at": "2026-07-19T00:13:00.000Z",
+      "finished_at": "2026-07-19T00:14:00.650Z",
+      "error": null,
+      "limit": "timeout",
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:13:05.000Z",
+      "agent_finished_at": "2026-07-19T00:13:57.650Z",
+      "transcript": "attempts/01KXVTRB0E000000000000000E.transcript.txt",
+      "diff": "attempts/01KXVTRB0E000000000000000E.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0F000000000000000F",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 114,
+      "tokens_out": 914,
+      "cost_usd": 0.07,
+      "turns": 5,
+      "started_at": "2026-07-19T00:14:00.000Z",
+      "finished_at": "2026-07-19T00:15:00.700Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:14:05.000Z",
+      "agent_finished_at": "2026-07-19T00:14:57.700Z",
+      "transcript": "attempts/01KXVTRB0F000000000000000F.transcript.txt",
+      "diff": "attempts/01KXVTRB0F000000000000000F.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0G000000000000000G",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 1,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 115,
+      "tokens_out": 915,
+      "cost_usd": 0.07,
+      "turns": 6,
+      "started_at": "2026-07-19T00:15:00.000Z",
+      "finished_at": "2026-07-19T00:16:00.750Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:15:05.000Z",
+      "agent_finished_at": "2026-07-19T00:15:57.750Z",
+      "transcript": "attempts/01KXVTRB0G000000000000000G.transcript.txt",
+      "diff": "attempts/01KXVTRB0G000000000000000G.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0H000000000000000H",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 2,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 116,
+      "tokens_out": 916,
+      "cost_usd": 0.07,
+      "turns": 3,
+      "started_at": "2026-07-19T00:16:00.000Z",
+      "finished_at": "2026-07-19T00:17:00.800Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:16:05.000Z",
+      "agent_finished_at": "2026-07-19T00:16:57.800Z",
+      "transcript": "attempts/01KXVTRB0H000000000000000H.transcript.txt",
+      "diff": "attempts/01KXVTRB0H000000000000000H.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0J000000000000000J",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 117,
+      "tokens_out": 917,
+      "cost_usd": 0.07,
+      "turns": 4,
+      "started_at": "2026-07-19T00:17:00.000Z",
+      "finished_at": "2026-07-19T00:18:00.850Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:17:05.000Z",
+      "agent_finished_at": "2026-07-19T00:17:57.850Z",
+      "transcript": "attempts/01KXVTRB0J000000000000000J.transcript.txt",
+      "diff": "attempts/01KXVTRB0J000000000000000J.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0K000000000000000K",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 1,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 118,
+      "tokens_out": 918,
+      "cost_usd": 0.07,
+      "turns": 5,
+      "started_at": "2026-07-19T00:18:00.000Z",
+      "finished_at": "2026-07-19T00:19:00.900Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:18:05.000Z",
+      "agent_finished_at": "2026-07-19T00:18:57.900Z",
+      "transcript": "attempts/01KXVTRB0K000000000000000K.transcript.txt",
+      "diff": "attempts/01KXVTRB0K000000000000000K.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0M000000000000000M",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 2,
+      "status": "completed",
+      "passed": true,
+      "checks": [
+        {
+          "name": "flow-wired",
+          "passed": true
+        },
+        {
+          "name": "build-passes",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 119,
+      "tokens_out": 919,
+      "cost_usd": 0.07,
+      "turns": 6,
+      "started_at": "2026-07-19T00:19:00.000Z",
+      "finished_at": "2026-07-19T00:20:00.950Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:19:05.000Z",
+      "agent_finished_at": "2026-07-19T00:19:57.950Z",
+      "transcript": "attempts/01KXVTRB0M000000000000000M.transcript.txt",
+      "diff": "attempts/01KXVTRB0M000000000000000M.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0N000000000000000N",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": false
+        },
+        {
+          "name": "works-e2e",
+          "passed": true
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 120,
+      "tokens_out": 920,
+      "cost_usd": 0.07,
+      "turns": 3,
+      "started_at": "2026-07-19T00:20:00.000Z",
+      "finished_at": "2026-07-19T00:21:01.000Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:20:05.000Z",
+      "agent_finished_at": "2026-07-19T00:20:58.000Z",
+      "transcript": "attempts/01KXVTRB0N000000000000000N.transcript.txt",
+      "diff": "attempts/01KXVTRB0N000000000000000N.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0P000000000000000P",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 1,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": false
+        },
+        {
+          "name": "works-e2e",
+          "passed": true
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 121,
+      "tokens_out": 921,
+      "cost_usd": 0.07,
+      "turns": 4,
+      "started_at": "2026-07-19T00:21:00.000Z",
+      "finished_at": "2026-07-19T00:22:01.050Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:21:05.000Z",
+      "agent_finished_at": "2026-07-19T00:21:58.050Z",
+      "transcript": "attempts/01KXVTRB0P000000000000000P.transcript.txt",
+      "diff": "attempts/01KXVTRB0P000000000000000P.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0Q000000000000000Q",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "trial_index": 2,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": false
+        },
+        {
+          "name": "works-e2e",
+          "passed": true
+        }
+      ],
+      "treatment": "docs",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 122,
+      "tokens_out": 922,
+      "cost_usd": 0.07,
+      "turns": 5,
+      "started_at": "2026-07-19T00:22:00.000Z",
+      "finished_at": "2026-07-19T00:23:01.100Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:22:05.000Z",
+      "agent_finished_at": "2026-07-19T00:22:58.100Z",
+      "transcript": "attempts/01KXVTRB0Q000000000000000Q.transcript.txt",
+      "diff": "attempts/01KXVTRB0Q000000000000000Q.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0R000000000000000R",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 0,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": false
+        },
+        {
+          "name": "works-e2e",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 123,
+      "tokens_out": 923,
+      "cost_usd": 0.07,
+      "turns": 6,
+      "started_at": "2026-07-19T00:23:00.000Z",
+      "finished_at": "2026-07-19T00:24:01.150Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:23:05.000Z",
+      "agent_finished_at": "2026-07-19T00:23:58.150Z",
+      "transcript": "attempts/01KXVTRB0R000000000000000R.transcript.txt",
+      "diff": "attempts/01KXVTRB0R000000000000000R.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0S000000000000000S",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 1,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": false
+        },
+        {
+          "name": "works-e2e",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 124,
+      "tokens_out": 924,
+      "cost_usd": 0.07,
+      "turns": 3,
+      "started_at": "2026-07-19T00:24:00.000Z",
+      "finished_at": "2026-07-19T00:25:01.200Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:24:05.000Z",
+      "agent_finished_at": "2026-07-19T00:24:58.200Z",
+      "transcript": "attempts/01KXVTRB0S000000000000000S.transcript.txt",
+      "diff": "attempts/01KXVTRB0S000000000000000S.diff.patch"
+    },
+    {
+      "id": "01KXVTRB0T000000000000000T",
+      "run_id": "01KXVTRB010000000000000001",
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "trial_index": 2,
+      "status": "completed",
+      "passed": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": false
+        },
+        {
+          "name": "works-e2e",
+          "passed": true
+        }
+      ],
+      "treatment": "mcp",
+      "comparison_group": "claude",
+      "surface_usage": null,
+      "tokens_in": 125,
+      "tokens_out": 925,
+      "cost_usd": 0.07,
+      "turns": 4,
+      "started_at": "2026-07-19T00:25:00.000Z",
+      "finished_at": "2026-07-19T00:26:01.250Z",
+      "error": null,
+      "limit": null,
+      "error_kind": null,
+      "agent_started_at": "2026-07-19T00:25:05.000Z",
+      "agent_finished_at": "2026-07-19T00:25:58.250Z",
+      "transcript": "attempts/01KXVTRB0T000000000000000T.transcript.txt",
+      "diff": "attempts/01KXVTRB0T000000000000000T.diff.patch"
     }
   ]
 }

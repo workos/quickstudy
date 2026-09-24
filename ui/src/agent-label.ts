@@ -18,6 +18,12 @@ export function formatAgentLabel(model: string, reasoning: string): string | nul
   return reasoning === UNSPECIFIED ? model : `${model} (${reasoning})`;
 }
 
+/** "model · reasoning" from a report agent identity; "model unpinned" when no model was pinned. */
+export function modelLabel(agent: { model: string; reasoning: string }): string {
+  if (agent.model === UNSPECIFIED) return "model unpinned";
+  return agent.reasoning === UNSPECIFIED ? agent.model : `${agent.model} · ${agent.reasoning}`;
+}
+
 /** "model (reasoning)" for one experiment; null when no model was pinned. */
 export function agentLabelOf(run: DataRun, experimentId: string): string | null {
   const agent = run.manifest.experiments[experimentId]?.components.agent;

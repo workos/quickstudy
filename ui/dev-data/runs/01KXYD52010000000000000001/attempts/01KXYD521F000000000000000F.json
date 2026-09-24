@@ -19,6 +19,11 @@
     {
       "name": "build-passes",
       "passed": true
+    },
+    {
+      "name": "sdk-wired",
+      "passed": false,
+      "graded": false
     }
   ],
   "treatment": "docs",
@@ -46,6 +51,10 @@
   "started_at": "2026-07-20T00:46:00.000Z",
   "finished_at": "2026-07-20T00:47:34.600Z",
   "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-20T00:46:05.000Z",
+  "agent_finished_at": "2026-07-20T00:47:31.600Z",
   "transcript": "attempts/01KXYD521F000000000000000F.transcript.txt",
   "diff": "attempts/01KXYD521F000000000000000F.diff.patch"
 }

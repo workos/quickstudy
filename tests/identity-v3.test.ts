@@ -70,7 +70,7 @@ describe("v3 run manifest", () => {
     expect(manifest.manifestVersion).toBe(MANIFEST_VERSION);
 
     const evalIdentity = manifest.evals["hello"]!;
-    expect(Object.keys(evalIdentity).sort()).toEqual(["components", "hash", "id", "metadata"]);
+    expect(Object.keys(evalIdentity).sort()).toEqual(["components", "hash", "id", "metadata", "solution"]);
     expect(Object.keys(evalIdentity.components).sort()).toEqual([
       "effectivePrompt",
       "local",

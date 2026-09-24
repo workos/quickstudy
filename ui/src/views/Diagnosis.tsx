@@ -6,7 +6,12 @@
  * disclaimer and provenance (model, prompt version, generated_at, run id)
  * render prominently above the findings.
  *
- * Findings group by the generic target taxonomy; every evidence link is a
+ * Findings cluster by (eval, failing graded checks) — the check names come
+ * from the run's report.json, joined on (eval_id, experiment_id) — largest
+ * cluster first, then group by the generic target taxonomy inside each
+ * cluster (eval-defect leads when it is a quarter or more of all findings).
+ * Without a readable report, clusters fall back to one per eval. Every
+ * evidence link is a
  * harness-selected excerpt window deep-linking into the line-anchored
  * transcript/diff viewer. No diagnosis is a legitimate state (the artifact
  * is key-gated and never built at export time), so the empty state names the
@@ -14,12 +19,14 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { DIAGNOSIS_TARGETS, DIAGNOSIS_SCHEMA_VERSION, type DiagnosisEvidence, type DiagnosisFinding, type DiagnosisJson } from "../../../src/diagnose/types.ts";
+import { DIAGNOSIS_SCHEMA_VERSION, type DiagnosisEvidence, type DiagnosisFinding, type DiagnosisJson } from "../../../src/diagnose/types.ts";
 import type { DataMeta } from "../../../src/export-types.ts";
+import type { ReportPair } from "../../../src/report/report.ts";
 import { CopyButton } from "../components/CopyButton.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { StatBadge, type BadgeTone } from "../components/StatBadge.tsx";
-import { loadDiagnosis } from "../data.ts";
+import { loadDiagnosis, loadReport } from "../data.ts";
+import { clusterFindings, targetOrder, type FindingCluster } from "../diagnosis-clusters.ts";
 import { diagnosisMarkdown, findingMarkdown } from "../diagnosis-markdown.ts";
 import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
@@ -82,7 +89,23 @@ function FindingCard({ runId, finding }: { runId: string; finding: DiagnosisFind
   );
 }
 
-function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: DiagnosisJson }): ReactNode {
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+function clusterHeading(cluster: FindingCluster): string {
+  const findings = plural(cluster.findings.length, "finding");
+  if (cluster.failingChecks.length === 0) return `${cluster.evalId} · ${findings}`;
+  return `${cluster.evalId} · ${cluster.failingChecks.join(", ")} failed under ${plural(cluster.experiments.length, "arm")} · ${findings}`;
+}
+
+function DiagnosisBody({
+  runId,
+  diagnosis,
+  pairs,
+}: {
+  runId: string;
+  diagnosis: DiagnosisJson;
+  pairs: ReportPair[] | null;
+}): ReactNode {
   // null = every target. A 179-finding page is unreadable as one wall; the per-target
   // counts are the summary and the filter at once.
   const [target, setTarget] = useState<string | null>(null);
@@ -99,13 +122,15 @@ function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: Diagnos
     );
   }
 
-  // One section per target present, document order within a target.
+  // Per-target counts drive the filter; clusters render target sub-sections.
   const byTarget = new Map<string, DiagnosisFinding[]>();
   for (const finding of diagnosis.findings) {
     const bucket = byTarget.get(finding.target);
     if (bucket) bucket.push(finding);
     else byTarget.set(finding.target, [finding]);
   }
+  const order = targetOrder(diagnosis.findings);
+  const clusters = clusterFindings(diagnosis.findings, pairs);
 
   return (
     <>
@@ -157,7 +182,7 @@ function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: Diagnos
             <button type="button" className={target === null ? "active" : ""} aria-pressed={target === null} onClick={() => setTarget(null)}>
               all ({diagnosis.findings.length})
             </button>
-            {DIAGNOSIS_TARGETS.filter((candidate) => byTarget.has(candidate)).map((candidate) => (
+            {order.filter((candidate) => byTarget.has(candidate)).map((candidate) => (
               <button
                 key={candidate}
                 type="button"
@@ -172,20 +197,39 @@ function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: Diagnos
         </div>
       )}
 
-      {DIAGNOSIS_TARGETS.filter((candidate) => byTarget.has(candidate) && (target === null || target === candidate)).map((candidate) => (
-        <section key={candidate} data-testid={`diagnosis-target-${candidate}`}>
-          <h2>
-            <code>{candidate}</code> findings
-          </h2>
-          {(byTarget.get(candidate) ?? []).map((finding, index) => (
-            <FindingCard
-              key={`${finding.eval_id}|${finding.experiment_id}|${index}`}
-              runId={runId}
-              finding={finding}
-            />
-          ))}
-        </section>
-      ))}
+      {clusters.map((cluster) => {
+        // The target filter narrows within clusters; a cluster with nothing left hides.
+        const targets = order.filter(
+          (candidate) =>
+            (target === null || target === candidate) && cluster.findings.some((finding) => finding.target === candidate),
+        );
+        if (targets.length === 0) return null;
+        return (
+          <section
+            key={`${cluster.evalId}|${cluster.failingChecks.join(",")}`}
+            className="cluster"
+            data-testid="diagnosis-cluster"
+          >
+            <h2>{clusterHeading(cluster)}</h2>
+            {targets.map((candidate) => (
+              <section key={candidate} data-testid={`diagnosis-target-${candidate}`}>
+                <h3>
+                  <code>{candidate}</code> findings
+                </h3>
+                {cluster.findings
+                  .filter((finding) => finding.target === candidate)
+                  .map((finding, index) => (
+                    <FindingCard
+                      key={`${finding.eval_id}|${finding.experiment_id}|${index}`}
+                      runId={runId}
+                      finding={finding}
+                    />
+                  ))}
+              </section>
+            ))}
+          </section>
+        );
+      })}
 
       {diagnosis.errors.length > 0 && (
         <div className="card" data-testid="diagnosis-errors">
@@ -225,9 +269,20 @@ function DiagnosisBody({ runId, diagnosis }: { runId: string; diagnosis: Diagnos
 
 export function Diagnosis({ meta, runId }: DiagnosisProps): ReactNode {
   const state = useAsync(() => loadDiagnosis(runId), [runId]);
+  // The report only supplies check names for clustering: any load failure
+  // (missing, invalid, offline) degrades to per-eval clusters, never an error.
+  const report = useAsync(
+    () =>
+      loadReport(runId).then(
+        (value): ReportPair[] | null => value.pairs ?? null,
+        () => null,
+      ),
+    [runId],
+  );
 
   if (state.status === "error") return <ErrorPanel error={state.error} />;
-  if (state.status === "loading") return <div className="loading">Loading diagnosis…</div>;
+  if (state.status === "loading" || report.status === "loading") return <div className="loading">Loading diagnosis…</div>;
+  const pairs = report.status === "ready" ? report.value : null;
   const diagnosis = state.value;
 
   return (
@@ -273,7 +328,7 @@ export function Diagnosis({ meta, runId }: DiagnosisProps): ReactNode {
           </pre>
         </div>
       ) : (
-        <DiagnosisBody runId={runId} diagnosis={diagnosis} />
+        <DiagnosisBody runId={runId} diagnosis={diagnosis} pairs={pairs} />
       )}
     </div>
   );

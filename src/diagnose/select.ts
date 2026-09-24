@@ -100,7 +100,7 @@ export function selectDiagnosablePairs(attempts: AttemptRecord[]): PairSelection
       experimentId: report.experiment_id,
       tallies: report,
       flaky: report.flaky,
-      failedChecks: report.checks.filter((check) => check.passed < check.total).map((check) => check.name),
+      failedChecks: report.checks.filter((check) => check.graded !== false && check.passed < check.total).map((check) => check.name),
       bundle,
     });
   }

@@ -4,18 +4,26 @@
  * of run identity); columns are experiments, grouped by comparison group —
  * the columns ARE the treatment arms, so there is no surface toggle. Clicking
  * a cell opens a URL-addressable slide-over drill-down with per-trial checks,
- * telemetry, surface usage, and transcript/diff links.
+ * telemetry, surface usage, and transcript/diff links. When the run's report
+ * carries eval bands, rows split into discriminating / solved-by-all /
+ * failed-by-all sections (uniform bands collapsed) under a scorer-health
+ * banner; older reports or a failed report load render one unbanded grid.
+ * Above the matrix, a per-experiment leaderboard renders from the same report
+ * (a stale-report note when it predates the aggregate; nothing when the load failed).
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
+import type { EvalBand, ReportJson } from "../../../src/report/report.ts";
 import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
+import { countGradedChecks, isGraded, UNGRADED_TITLE } from "../checks.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
+import { Leaderboard } from "../components/Leaderboard.tsx";
 import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } from "../components/Heatmap.tsx";
-import { StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
+import { OutcomeBadges, StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
 import { AttemptSurfaceUsage } from "../components/SurfaceUsage.tsx";
-import { loadRun } from "../data.ts";
+import { loadReport, loadRun } from "../data.ts";
 import { fmtTokens, incompleteReason } from "../format.ts";
 import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
@@ -79,7 +87,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
     const passed = completed.filter((attempt) => attempt.passed === true).length;
     const scored = completed.length;
     const outcomes = new Set(completed.map((attempt) => attempt.passed === true));
-    const checks = completed.flatMap((attempt) => attempt.checks ?? []);
+    const checks = countGradedChecks(completed.flatMap((attempt) => attempt.checks ?? []));
     cells.push({
       evalId: first.eval_id,
       experimentId: first.experiment_id,
@@ -89,7 +97,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
       flaky: outcomes.size > 1,
       incomplete: group.length < expectedTrials || group.some((attempt) => attempt.status === "incomplete"),
       errors: group.filter((attempt) => attempt.status === "error").length,
-      checks: checks.length > 0 ? { passed: checks.filter((check) => check.passed).length, total: checks.length } : null,
+      checks: checks.total > 0 ? checks : null,
     });
   }
   return cells;
@@ -108,6 +116,11 @@ const TURN_UNIT: Record<string, { label: string; title: string }> = {
   codex: { label: "thread turns", title: "codex exec reports one thread turn per prompt, not per agent step — not comparable to Claude's turn count" },
 };
 
+/** A timeout recorded before graded timeouts existed: incomplete, never scored. */
+function isUnscoredTimeout(attempt: DataAttempt): boolean {
+  return attempt.status === "incomplete" && attempt.error?.startsWith("attempt timed out") === true;
+}
+
 function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: string; adapter: string | null }): ReactNode {
   const status = displayStatus(attempt);
   const turnUnit = (adapter !== null && TURN_UNIT[adapter]) || { label: "turns", title: "agent turns, as counted by the adapter" };
@@ -116,6 +129,7 @@ function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: 
       <div className="attempt-line">
         <span className="kpi-meta">trial {attempt.trial_index + 1}</span>
         <StatBadge tone={statusTone(status)}>{status}</StatBadge>
+        <OutcomeBadges attempt={attempt} />
         <span className="spacer" />
         {attempt.transcript !== null && <a href={links.attempt(runId, attempt.id, "transcript")}>transcript</a>}
         {attempt.diff !== null && <a href={links.attempt(runId, attempt.id, "diff")}>diff</a>}
@@ -125,6 +139,11 @@ function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: 
           {attempt.checks.map((check) => (
             <span key={check.name} className={check.passed ? "crit pass" : "crit fail"} title={check.notes ?? check.name}>
               {check.passed ? "✓" : "✗"} {check.name}
+              {!isGraded(check) && (
+                <span className="tag" data-testid="ungraded-tag" title={UNGRADED_TITLE}>
+                  recorded
+                </span>
+              )}
             </span>
           ))}
         </div>
@@ -297,8 +316,20 @@ function FilterControl({
   );
 }
 
+const plural = (count: number): string => (count === 1 ? "" : "s");
+
 export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
   const run = useAsync(() => loadRun(runId), [runId]);
+  // Bands and scorer health are optional: any report load failure (missing,
+  // invalid, offline) degrades to the unbanded matrix, never an error.
+  const report = useAsync(
+    () =>
+      loadReport(runId).then(
+        (value): ReportJson | null => value,
+        () => null,
+      ),
+    [runId],
+  );
 
   // Regression evals never blend into the benchmark grid — the toggle only
   // renders when the run has more than one suite.
@@ -337,7 +368,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
   }, [run, suite, filters]);
 
   if (run.status === "error") return <ErrorPanel error={run.error} />;
-  if (run.status === "loading" || grid === null) return <div className="loading">Loading run…</div>;
+  if (run.status === "loading" || report.status === "loading" || grid === null) return <div className="loading">Loading run…</div>;
 
   const value = run.value;
   const summary = value.run;
@@ -351,10 +382,33 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
     passed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed === true).length,
     failed: value.attempts.filter((attempt) => attempt.status === "completed" && attempt.passed !== true).length,
     incomplete: value.attempts.filter((attempt) => attempt.status === "incomplete").length,
-    timedOut: value.attempts.filter((attempt) => attempt.status === "incomplete" && attempt.error?.startsWith("attempt timed out")).length,
+    // Graded timeouts (completed, limit "timeout") plus legacy unscored ones.
+    timedOut: value.attempts.filter((attempt) => (attempt.status === "completed" && attempt.limit === "timeout") || isUnscoredTimeout(attempt)).length,
+    // Only unscored timeouts explain an incomplete run; graded ones are complete.
+    unscoredTimedOut: value.attempts.filter(isUnscoredTimeout).length,
     errors: value.attempts.filter((attempt) => attempt.status === "error").length,
   };
   const scored = totals.passed + totals.failed;
+
+  // Bands come from the whole run's report; section membership and counts
+  // come from the filtered rows. An eval absent from the report (publication
+  // omitted) is unbanded, like a single-arm eval. Schema < 8 reports carry no
+  // band at all → the unbanded grid.
+  const reportValue = report.status === "ready" ? report.value : null;
+  const reportPairs = Array.isArray(reportValue?.pairs) ? reportValue.pairs : [];
+  const banded = reportPairs.some((pair) => pair.band !== undefined);
+  const bandOf = new Map<string, EvalBand | null>(reportPairs.map((pair) => [pair.eval_id, pair.band ?? null]));
+  const rowsIn = (band: EvalBand | null) => grid.rows.filter((row) => (bandOf.get(row.evalId) ?? null) === band);
+  const discriminatingRows = grid.rows.filter((row) => {
+    const band = bandOf.get(row.evalId) ?? null;
+    return band === null || band === "discriminating";
+  });
+  const unbandedCount = rowsIn(null).length;
+  const solvedRows = rowsIn("solved-by-all");
+  const failedRows = rowsIn("failed-by-all");
+  const suspects = reportValue?.scorer_health?.suspects ?? [];
+  const openCell = (clicked: HeatCell): void =>
+    navigate(links.cell(runId, { evalId: clicked.evalId, experimentId: clicked.experimentId }));
 
   const selectSuite = (next: string): void => {
     setSuite(next);
@@ -421,7 +475,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
       {(summary.finished_at === null || summary.incomplete) && (
         <div className="notice" data-testid="incomplete-banner">
-          Incomplete run — {incompleteReason({ unfinished: summary.finished_at === null, ...totals })}. Numbers are partial.
+          Incomplete run — {incompleteReason({ unfinished: summary.finished_at === null, incomplete: totals.incomplete, errors: totals.errors, timedOut: totals.unscoredTimedOut })}. Numbers are partial.
         </div>
       )}
 
@@ -432,6 +486,7 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
           <div className="kpi-meta">
             <StatBadge tone="green">{totals.passed} passed</StatBadge> <StatBadge tone="red">{totals.failed} failed</StatBadge>{" "}
             <StatBadge tone="gray">{totals.incomplete} incomplete</StatBadge> <StatBadge tone="amber">{totals.errors} errored</StatBadge>
+            {totals.timedOut > 0 && <> <StatBadge tone="gray">{totals.timedOut} timed out</StatBadge></>}
           </div>
         </div>
         <div className="kpi">
@@ -448,6 +503,8 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
         </div>
       </div>
 
+      {reportValue !== null && <Leaderboard report={reportValue} runId={runId} />}
+
       <div className="card">
         <div className="head">
           <h3>
@@ -463,12 +520,51 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
           </h3>
           <HeatmapLegend />
         </div>
-        <Heatmap
-          cells={grid.cells}
-          rows={grid.rows}
-          columns={grid.columns}
-          onCellClick={(clicked) => navigate(links.cell(runId, { evalId: clicked.evalId, experimentId: clicked.experimentId }))}
-        />
+        {suspects.length > 0 && reportValue?.scorer_health && (
+          <div className="notice band-notice" data-testid="scorer-health-banner">
+            {reportValue.scorer_health.summary}
+            <ul>
+              {suspects.map((suspect) => (
+                <li key={`${suspect.eval_id}|${suspect.check}`}>
+                  <code>{suspect.eval_id}</code> · <code>{suspect.check}</code> failed in {suspect.attempts} attempts under{" "}
+                  {suspect.experiments.length} arms · passing: {suspect.passing_checks.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {!banded ? (
+          <Heatmap cells={grid.cells} rows={grid.rows} columns={grid.columns} onCellClick={openCell} />
+        ) : (
+          <>
+            {discriminatingRows.length > 0 && (
+              <section className="band" data-testid="matrix-band-discriminating">
+                <h4>
+                  Discriminating ({discriminatingRows.length} eval{plural(discriminatingRows.length)}) — arms disagree
+                  {unbandedCount > 0 && ` (${unbandedCount} eval${plural(unbandedCount)} with one scored arm)`}
+                </h4>
+                <Heatmap cells={grid.cells} rows={discriminatingRows} columns={grid.columns} onCellClick={openCell} band="discriminating" />
+              </section>
+            )}
+            {/* Uncontrolled <details>: the reader's toggle survives re-renders. */}
+            {solvedRows.length > 0 && (
+              <details className="band" data-testid="matrix-band-solved">
+                <summary>
+                  Solved by every arm ({solvedRows.length} eval{plural(solvedRows.length)})
+                </summary>
+                <Heatmap cells={grid.cells} rows={solvedRows} columns={grid.columns} onCellClick={openCell} band="solved by every arm" />
+              </details>
+            )}
+            {failedRows.length > 0 && (
+              <details className="band" data-testid="matrix-band-failed">
+                <summary>
+                  Failed by every arm ({failedRows.length} eval{plural(failedRows.length)}) — suspect the eval
+                </summary>
+                <Heatmap cells={grid.cells} rows={failedRows} columns={grid.columns} onCellClick={openCell} band="failed by every arm" />
+              </details>
+            )}
+          </>
+        )}
       </div>
 
       {/* The cell key (evalId × experimentId) is unambiguous across suites, so

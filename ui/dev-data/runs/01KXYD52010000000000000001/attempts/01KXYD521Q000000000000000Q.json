@@ -18,6 +18,10 @@
   "started_at": "2026-07-20T00:54:00.000Z",
   "finished_at": "2026-07-20T00:55:35.400Z",
   "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": null,
+  "agent_finished_at": null,
   "transcript": "attempts/01KXYD521Q000000000000000Q.transcript.txt",
   "diff": null
 }

@@ -1,9 +1,10 @@
 /**
  * UI smoke suite (v3 shapes):
- *   - served mode: matrix / compare / report render with data
+ *   - served mode: matrix / compare / report render with data; the leaderboard
+ *     ranks experiments above the matrix
  *   - offline mode: file:// load with every network scheme aborted → the
  *     heatmap still renders (inline data index)
- *   - the four heatmap cell states render distinctly and drill down correctly
+ *   - the heatmap cell states (incl. graded timeouts) render distinctly and drill down correctly
  *   - attempt deep links land on a highlighted transcript/diff range
  *   - diagnosis: findings grouped by target with evidence deep links into the
  *     line-anchored viewers; a diagnosis-less run renders the command-hint
@@ -44,10 +45,11 @@ function fixtureRun(runId: string): FixtureRun {
   return JSON.parse(readFileSync(join(SITE_DIR, "data", "runs", runId, "run.json"), "utf8")) as FixtureRun;
 }
 
-/** meta lists newest first: [full sweep, cell-states]. */
-function runIds(): { sweep: string; cellStates: string } {
+/** meta lists newest first: [full sweep, cell-states, trials-1]. */
+function runIds(): { sweep: string; cellStates: string; n1: string } {
   const runs = fixtureMeta().runs;
-  return { sweep: runs[0]!.id, cellStates: runs[1]!.id };
+  expect(runs).toHaveLength(3);
+  return { sweep: runs[0]!.id, cellStates: runs[1]!.id, n1: runs[2]!.id };
 }
 
 /** The seeded 600-turn transcript lives on claude-mcp × auth-nextjs trial 0. */
@@ -74,6 +76,29 @@ test.describe("served mode: three routes render with data", () => {
     // defaults to benchmark.
     await expect(page.getByTestId("suite-benchmark")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("suite-regression")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("leaderboard ranks experiments by discriminating pass rate above the matrix", async ({ page }) => {
+    await page.goto("/site/index.html#/");
+    const board = page.getByTestId("leaderboard");
+    await expect(board).toBeVisible();
+    await expect(page.getByTestId("leaderboard-stale")).toHaveCount(0);
+    const rows = board.locator("tbody tr");
+    await expect(rows).toHaveCount(6);
+    const order = await rows.evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+    expect(order).toEqual([
+      "leaderboard-row-claude-docs",
+      "leaderboard-row-codex-cli",
+      "leaderboard-row-claude-cli",
+      "leaderboard-row-codex-docs",
+      "leaderboard-row-codex-mcp",
+      "leaderboard-row-claude-mcp",
+    ]);
+    const first = page.getByTestId("leaderboard-row-claude-docs");
+    await expect(first).toContainText("model-a-1");
+    await expect(first.getByTestId("leaderboard-pass")).toHaveText("9/9 · 9/9");
+    await expect(first.getByTestId("leaderboard-cost")).toContainText("9/9 reported");
+    await expect(page.getByTestId("leaderboard-row-codex-cli").getByTestId("leaderboard-cost")).toContainText("8/9 reported");
   });
 
   test("metadata filters narrow the eval rows without touching run identity", async ({ page }) => {
@@ -103,6 +128,21 @@ test.describe("served mode: three routes render with data", () => {
     await expect(page.getByTestId("group-withheld-codex")).toBeVisible();
     await expect(page.getByTestId("group-diff-codex")).toContainText("model");
     await expect(page.getByTestId("group-table-codex")).toHaveCount(0);
+
+    // Three trials per pair and every listed arm scored: no not-comparable notice.
+    await expect(page.getByTestId("compare-n-notice")).toHaveCount(0);
+  });
+
+  test("compare states counts are not comparable on a trials-1 run", async ({ page }) => {
+    const { n1 } = runIds();
+    await page.goto(`/site/index.html#/compare/${n1}`);
+    await expect(page.getByTestId("group-table-claude")).toBeVisible();
+    const notice = page.getByTestId("compare-n-notice");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("this run: 1");
+    await expect(notice).toContainText("not comparable");
+    // Counts stay listed.
+    await expect(page.getByTestId("arm-auth-nextjs-claude-docs")).toContainText("1/1");
   });
 
   test("report renders totals, per-pair rates, groups, and methodology", async ({ page }) => {
@@ -116,17 +156,43 @@ test.describe("served mode: three routes render with data", () => {
     await expect(page.getByTestId("report-group-codex")).toContainText("withheld");
     await expect(page.getByTestId("usage-summary")).toBeVisible();
     await expect(page.getByTestId("methodology")).toContainText("raw counts are the honest statement");
+    await expect(page.getByTestId("sdk-recall")).toContainText("SDK recall 0/");
+    await expect(page.getByTestId("pairs-table").getByTestId("ungraded-tag").first()).toBeVisible();
   });
 });
 
 test.describe("matrix cell states + drill-down", () => {
-  test("0%, 100%, flaky and incomplete cells render distinctly", async ({ page }) => {
+  test("0%, 100%, flaky, incomplete and timeout cells render distinctly", async ({ page }) => {
     const { cellStates } = runIds();
     await page.goto(`/site/index.html#/run/${cellStates}`);
     await expect(page.getByTestId("cell-auth-nextjs-claude-docs")).toHaveAttribute("data-rate", "0");
     await expect(page.getByTestId("cell-auth-rails-claude-docs")).toHaveAttribute("data-rate", "100");
     await expect(page.getByTestId("cell-auth-django-claude-docs")).toHaveAttribute("data-flaky", "true");
     await expect(page.getByTestId("cell-auth-nextjs-claude-mcp")).toHaveAttribute("data-incomplete", "true");
+    // Graded timeouts are completed attempts: a scored 0% cell, not an incomplete one.
+    await expect(page.getByTestId("cell-auth-rails-claude-mcp")).toHaveAttribute("data-rate", "0");
+    await expect(page.getByTestId("cell-auth-rails-claude-mcp")).not.toHaveAttribute("data-incomplete", "true");
+  });
+
+  test("the timeout cell's drill-down shows the limit badge; a plain completed attempt shows none", async ({ page }) => {
+    const { cellStates } = runIds();
+    await page.goto(`/site/index.html#/run/${cellStates}/cell/auth-rails/claude-mcp`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    expect(await page.getByTestId("drill-attempt").count()).toBe(3);
+    await expect(page.getByTestId("drill-attempt").first()).toContainText("failed");
+    await expect(page.getByTestId("drill-attempt").first().getByTestId("limit-badge")).toHaveText("timeout");
+    await expect(page.getByTestId("drill-down").getByTestId("error-kind-badge")).toHaveCount(0);
+
+    await page.goto(`/site/index.html#/run/${cellStates}/cell/auth-rails/claude-docs`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    await expect(page.getByTestId("drill-down").getByTestId("limit-badge")).toHaveCount(0);
+  });
+
+  test("the seeded error attempt shows its error-kind badge", async ({ page }) => {
+    const { sweep } = runIds();
+    await page.goto(`/site/index.html#/run/${sweep}/cell/auth-django/codex-mcp`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    await expect(page.getByTestId("drill-down").getByTestId("error-kind-badge")).toHaveText("agent");
   });
 
   test("clicking a cell opens the URL-addressable drill-down with attempt detail", async ({ page }) => {
@@ -185,8 +251,51 @@ test.describe("matrix cell states + drill-down", () => {
     const { cellStates } = runIds();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/site/index.html#/run/${cellStates}`);
-    await expect(page.locator(".scroll-hint")).toBeVisible();
+    // One hint per band's heatmap; the discriminating band's leads.
+    await expect(page.locator(".scroll-hint").first()).toBeVisible();
     await expect(page.getByTestId("run-select")).toBeVisible();
+  });
+
+  test("matrix bands: discriminating open, uniform bands collapsed, scorer-health banner names the suspect", async ({ page }) => {
+    const { cellStates } = runIds();
+    await page.goto(`/site/index.html#/run/${cellStates}`);
+    const discriminating = page.getByTestId("matrix-band-discriminating");
+    await expect(discriminating).toBeVisible();
+    await expect(discriminating).toContainText("(1 eval with one scored arm)");
+    await expect(discriminating.getByTestId("cell-auth-django-claude-docs")).toBeVisible();
+
+    const solved = page.getByTestId("matrix-band-solved");
+    const failed = page.getByTestId("matrix-band-failed");
+    await expect(solved).toBeAttached();
+    await expect(failed).toBeAttached();
+    await expect(solved).not.toHaveAttribute("open");
+    await expect(failed).not.toHaveAttribute("open");
+    // Collapsed cells stay in the DOM, attached but hidden.
+    await expect(page.getByTestId("cell-uniform-pass-claude-docs")).toBeAttached();
+    await expect(page.getByTestId("cell-uniform-pass-claude-docs")).not.toBeVisible();
+    await expect(page.getByTestId("cell-uniform-fail-claude-mcp")).toBeAttached();
+    await expect(page.getByTestId("cell-uniform-fail-claude-mcp")).not.toBeVisible();
+
+    const banner = page.getByTestId("scorer-health-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("uniform-fail");
+    await expect(banner).toContainText("shape-check");
+    await expect(banner).toContainText("passing: works-e2e");
+
+    // Keyboard expands a collapsed band.
+    await failed.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(failed).toHaveAttribute("open", "");
+    await expect(page.getByTestId("cell-uniform-fail-claude-mcp")).toBeVisible();
+  });
+
+  test("matrix bands: the all-discriminating sweep shows no collapsed band and no banner", async ({ page }) => {
+    const { sweep } = runIds();
+    await page.goto(`/site/index.html#/run/${sweep}`);
+    await expect(page.getByTestId("matrix-band-discriminating")).toBeVisible();
+    await expect(page.getByTestId("matrix-band-solved")).toHaveCount(0);
+    await expect(page.getByTestId("matrix-band-failed")).toHaveCount(0);
+    await expect(page.getByTestId("scorer-health-banner")).toHaveCount(0);
   });
 
   test("deep-linking the drill-down URL opens the panel directly", async ({ page }) => {
@@ -194,6 +303,20 @@ test.describe("matrix cell states + drill-down", () => {
     await page.goto(`/site/index.html#/run/${cellStates}/cell/auth-rails/claude-docs`);
     await expect(page.getByTestId("drill-down")).toBeVisible();
     await expect(page.getByTestId("drill-attempt").first()).toContainText("passed");
+  });
+
+  test("drill-down tags the ungraded check and the cell counts graded checks only", async ({ page }) => {
+    const { sweep } = runIds();
+    // claude-docs passes all 3 trials but never wires the SDK: an ungraded miss.
+    await page.goto(`/site/index.html#/run/${sweep}`);
+    // 3 trials × 3 graded checks; the ungraded sdk-wired check is excluded (else 9/12).
+    await expect(page.getByTestId("cell-auth-nextjs-claude-docs").locator(".cell-sub")).toContainText("9/9 checks");
+    await page.goto(`/site/index.html#/run/${sweep}/cell/auth-nextjs/claude-docs`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    const first = page.getByTestId("drill-attempt").first();
+    await expect(first).toContainText("passed");
+    await expect(first.getByTestId("ungraded-tag")).toBeVisible();
+    await expect(first.locator(".crit.fail")).toContainText("sdk-wired");
   });
 
   test("the drill-down shows the offered≠used surface case", async ({ page }) => {
@@ -257,6 +380,14 @@ test.describe("diagnosis view", () => {
     await expect(page.getByTestId("diagnosis-disclaimer")).toContainText("hypotheses, not verdicts");
     await expect(page.getByTestId("diagnosis-provenance")).toContainText("model-a-analyst");
 
+    // Findings cluster by (eval, failing graded checks) from the report,
+    // largest first; the ungraded sdk-wired miss never enters a heading.
+    const clusters = page.getByTestId("diagnosis-cluster");
+    await expect(clusters).toHaveCount(3);
+    await expect(clusters.filter({ hasText: "auth-nextjs · flow-wired failed under 1 arm · 1 finding" })).toHaveCount(1);
+    await expect(clusters.filter({ hasText: "auth-nextjs · build-passes failed under 1 arm" })).toHaveCount(1);
+    await expect(clusters.filter({ hasText: "sdk-wired" })).toHaveCount(0);
+
     // The seeded fixture spans three targets; each renders its own section.
     await expect(page.getByTestId("diagnosis-target-mcp")).toBeVisible();
     await expect(page.getByTestId("diagnosis-target-cli")).toBeVisible();
@@ -266,6 +397,14 @@ test.describe("diagnosis view", () => {
 
     // The unanalyzable pair is recorded, never silently dropped.
     await expect(page.getByTestId("diagnosis-errors")).toContainText("codex-mcp");
+
+    // Target filter buttons still narrow within clusters.
+    await page.getByTestId("diagnosis-target-filter").getByRole("button", { name: "mcp (1)" }).click();
+    await expect(page.getByTestId("diagnosis-finding")).toHaveCount(1);
+    await expect(clusters).toHaveCount(1);
+    await expect(page.getByTestId("diagnosis-target-cli")).toHaveCount(0);
+    await page.getByTestId("diagnosis-target-filter").getByRole("button", { name: "all (3)" }).click();
+    await expect(page.getByTestId("diagnosis-finding")).toHaveCount(3);
   });
 
   test("an evidence link deep-links to the highlighted line window in the transcript", async ({ page }) => {

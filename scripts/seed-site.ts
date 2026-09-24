@@ -12,7 +12,9 @@
  *     evidence deep links, one unanalyzable pair).
  *   - run B ("cell states"): a run crafted so the matrix shows a 0% cell,
  *     a 100% cell, a flaky cell, and an incomplete cell — the four states
- *     the heatmap must render distinctly. Run B stays diagnosis-LESS, so
+ *     the heatmap must render distinctly, plus a solved-by-all and a
+ *     failed-by-all eval (both collapsed bands and one scorer-health
+ *     suspect). Run B stays diagnosis-LESS, so
  *     dev data and e2e exercise the Diagnosis view's empty state too.
  *
  * Used by `bun run ui:dev-data` (committed ui/dev-data) and the Playwright
@@ -40,6 +42,7 @@ import {
   SEED_GENERATED_AT,
   seededIds,
   seedRun,
+  type SeedEvalSpec,
   type SeedExperimentSpec,
 } from "./seed-run.ts";
 
@@ -91,18 +94,46 @@ const CELL_STATE_EXPERIMENTS: readonly SeedExperimentSpec[] = SEED_EXPERIMENTS.f
   (spec) => spec.group === "claude" && spec.treatment !== "cli",
 );
 
+/**
+ * Run B's evals: the sweep's three plus two banded ones — `uniform-pass`
+ * (solved by every arm) and `uniform-fail` (failed by every arm, with one
+ * check passing everywhere → the one scorer-health suspect).
+ */
+const CELL_STATE_EVALS: readonly SeedEvalSpec[] = [
+  ...SEED_EVALS,
+  { id: "uniform-pass", framework: "generic", suite: "benchmark" },
+  { id: "uniform-fail", framework: "generic", suite: "benchmark" },
+];
+
 interface CellStateSpec {
   evalId: string;
   experimentId: string;
   passes: boolean[];
+  /** Every trial hit its time limit; the tree each left was graded. */
+  limitHit?: "timeout";
+  /** Per-trial checks; defaults to `cellStateChecks`. */
+  checks?: (passed: boolean) => CheckResult[];
 }
 
-/** The four heatmap states, unambiguous. */
+/** The work demonstrably done (e2e passes) while one check never passes — an instrument suspect. */
+function uniformFailChecks(): CheckResult[] {
+  return [
+    { name: "shape-check", passed: false },
+    { name: "works-e2e", passed: true },
+  ];
+}
+
+/** The heatmap states, unambiguous. */
 const CELL_STATES: readonly CellStateSpec[] = [
   { evalId: "auth-nextjs", experimentId: "claude-docs", passes: [false, false, false] }, // 0%
   { evalId: "auth-rails", experimentId: "claude-docs", passes: [true, true, true] }, // 100%
   { evalId: "auth-django", experimentId: "claude-docs", passes: [true, false, true] }, // flaky
   { evalId: "auth-nextjs", experimentId: "claude-mcp", passes: [true] }, // incomplete (1/3)
+  { evalId: "auth-rails", experimentId: "claude-mcp", passes: [false, false, false], limitHit: "timeout" }, // graded timeouts
+  { evalId: "uniform-pass", experimentId: "claude-docs", passes: [true, true, true] }, // solved by all
+  { evalId: "uniform-pass", experimentId: "claude-mcp", passes: [true, true, true] },
+  { evalId: "uniform-fail", experimentId: "claude-docs", passes: [false, false, false], checks: uniformFailChecks }, // failed by all
+  { evalId: "uniform-fail", experimentId: "claude-mcp", passes: [false, false, false], checks: uniformFailChecks },
 ];
 
 /**
@@ -184,14 +215,14 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
   const startedAtMs = Date.parse(startedAt);
   const nextId = seededIds(startedAtMs);
   const runId = nextId();
-  const manifest = buildSeedManifest(SEED_EVALS, CELL_STATE_EXPERIMENTS, "seed-site-cell-states");
+  const manifest = buildSeedManifest(CELL_STATE_EVALS, CELL_STATE_EXPERIMENTS, "seed-site-cell-states");
   store.insertRun({
     id: runId,
     startedAt: startedAtMs,
     manifest,
     config: {
       trials: 3,
-      evalIds: SEED_EVALS.map((spec) => spec.id),
+      evalIds: CELL_STATE_EVALS.map((spec) => spec.id),
       experimentIds: CELL_STATE_EXPERIMENTS.map((spec) => spec.id),
       egress: { proxy: false, allowlist: [] },
       groups: buildSeedGroups(CELL_STATE_EXPERIMENTS, manifest),
@@ -217,6 +248,7 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
 
       const status: AttemptStatus = "completed";
       const attemptStartedAt = startedAtMs + sequence * 60_000;
+      const attemptFinishedAt = attemptStartedAt + 60_000 + sequence * 50;
       store.insertAttempt({
         id: attemptId,
         runId,
@@ -228,7 +260,7 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
           ["seed-site-attempt", manifest.evals[spec.evalId]?.hash ?? "", manifest.experiments[spec.experimentId]?.hash ?? ""].join("|"),
         ),
         status,
-        result: { passed, checks: cellStateChecks(passed) },
+        result: { passed, checks: (spec.checks ?? cellStateChecks)(passed) },
         surfaceUsage: null,
         transcriptRef: transcriptPath,
         diffRef: diffPath,
@@ -237,7 +269,10 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
         tokensOut: 900 + sequence,
         turns: 3 + (sequence % 4),
         startedAt: attemptStartedAt,
-        finishedAt: attemptStartedAt + 60_000 + sequence * 50,
+        finishedAt: attemptFinishedAt,
+        agentStartedAt: attemptStartedAt + 5_000,
+        agentFinishedAt: attemptFinishedAt - 3_000,
+        ...(spec.limitHit !== undefined ? { limitHit: spec.limitHit } : {}),
       });
     });
   }
@@ -245,11 +280,17 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
   return runId;
 }
 
+/** The trials-1 run's start: older than the cell-states run (2026-07-19). */
+const N1_STARTED_AT = "2026-07-18T00:00:00.000Z";
+
 export interface SeedSiteResult {
   dbPath: string;
   resultsDir: string;
-  /** [full sweep run, cell-states run] — meta lists the sweep first (newest). */
-  runIds: [string, string];
+  /**
+   * [full sweep run, cell-states run, trials-1 run] — meta lists them in
+   * that order (newest first), so the sweep stays the default run.
+   */
+  runIds: [string, string, string];
   /** The 600-turn transcript's attempt (transcript deep-link target). */
   longTranscriptAttemptId: string;
   /** An attempt with a diff artifact (diff deep-link target). */
@@ -263,6 +304,10 @@ export function seedSite(root: string): SeedSiteResult {
   // Regression suite included: the dev/e2e data must exercise the suite
   // toggle and the tagged pair rows.
   const seeded = seedRun({ dbPath, resultsDir, withRegression: true });
+  // A one-trial run (each pair's first outcome) so Compare's not-comparable
+  // notice ships in dev data and e2e. Started before the cell-states run so
+  // it sorts oldest and never becomes the default run.
+  const n1 = seedRun({ dbPath, resultsDir, trials: 1, idSalt: "n1", startedAt: N1_STARTED_AT });
 
   const store = new ResultsStore(dbPath);
   try {
@@ -298,6 +343,7 @@ export function seedSite(root: string): SeedSiteResult {
     // writes.
     writeReportJson(buildReport({ store, runId: seeded.runId, resultsDir, generatedAt: SEED_GENERATED_AT }), resultsDir);
     writeReportJson(buildReport({ store, runId: cellStatesRunId, resultsDir, generatedAt: SEED_GENERATED_AT }), resultsDir);
+    writeReportJson(buildReport({ store, runId: n1.runId, resultsDir, generatedAt: SEED_GENERATED_AT }), resultsDir);
 
     // Diagnosis fixture on the sweep run ONLY — the cell-states run stays
     // diagnosis-less so both view states ship in dev data and e2e.
@@ -314,7 +360,7 @@ export function seedSite(root: string): SeedSiteResult {
     return {
       dbPath,
       resultsDir,
-      runIds: [seeded.runId, cellStatesRunId],
+      runIds: [seeded.runId, cellStatesRunId, n1.runId],
       longTranscriptAttemptId: longAttempt.id,
       diffAttemptId: diffAttempt.id,
     };

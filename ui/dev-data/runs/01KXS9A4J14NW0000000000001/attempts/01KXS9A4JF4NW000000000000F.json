@@ -1,0 +1,60 @@
+{
+  "id": "01KXS9A4JF4NW000000000000F",
+  "run_id": "01KXS9A4J14NW0000000000001",
+  "eval_id": "auth-django",
+  "experiment_id": "claude-mcp",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    },
+    {
+      "name": "sdk-wired",
+      "passed": true,
+      "graded": false
+    }
+  ],
+  "treatment": "mcp",
+  "comparison_group": "claude",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 2,
+      "tools": [
+        "acme__list_orgs"
+      ]
+    },
+    "cli": {
+      "count": 0,
+      "commands": []
+    }
+  },
+  "tokens_in": 214,
+  "tokens_out": 1214,
+  "cost_usd": 0.11,
+  "turns": 8,
+  "started_at": "2026-07-18T00:14:00.000Z",
+  "finished_at": "2026-07-18T00:15:31.400Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-18T00:14:05.000Z",
+  "agent_finished_at": "2026-07-18T00:15:28.400Z",
+  "transcript": "attempts/01KXS9A4JF4NW000000000000F.transcript.txt",
+  "diff": "attempts/01KXS9A4JF4NW000000000000F.diff.patch"
+}

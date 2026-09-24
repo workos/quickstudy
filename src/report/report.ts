@@ -32,6 +32,12 @@ import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord }
 import type { SurfaceUsage } from "../surface-usage.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts";
+import { collectBands, collectScorerHealth, type EvalBand, type ScorerHealth } from "./scorer-health.ts";
+import { collectExperimentAggregate, compareLeaderboard, type ExperimentAggregate } from "./aggregate.ts";
+
+export type { EvalBand, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
+export type { ExperimentAggregate } from "./aggregate.ts";
+export { compareLeaderboard } from "./aggregate.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing report.json, ...). */
 export class ReportError extends Error {
@@ -41,7 +47,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 6;
+export const REPORT_SCHEMA_VERSION = 9;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -68,7 +74,12 @@ export function methodologyNote(trials: number): string {
     `same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at ` +
     `least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from ` +
     `those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface ` +
-    `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did.`
+    `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. ` +
+    `SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that ` +
+    `recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded ` +
+    `checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every ` +
+    `scored attempt of an eval under every arm while another check in the same attempts passed: a statement ` +
+    `about the instrument, not about any treatment.`
   );
 }
 
@@ -83,17 +94,46 @@ export interface ReportAgentIdentity {
   cli_version: string;
 }
 
+/**
+ * SDK recall for one experiment, derived from `graded: false` checks. Only
+ * scored (completed) attempts count; graded timeouts are completed.
+ */
+export interface ReportRecall {
+  /** Scored attempts of this experiment whose checks include at least one graded:false check. */
+  attempts: number;
+  /** Of those, attempts where every graded:false check passed. */
+  recalled: number;
+  /** recalled / attempts; null when attempts = 0. */
+  rate: number | null;
+}
+
 /** One experiment's identity card: what exactly ran under this id. */
 export interface ReportExperiment {
   experiment_id: string;
   treatment: string | null;
   agent: ReportAgentIdentity;
+  /**
+   * Optional on the wire: absent in schema_version < 7 artifacts, which the
+   * export may still carry — readers must tolerate absence.
+   */
+  sdk_recall?: ReportRecall;
+  /**
+   * Leaderboard row over benchmark-suite attempts. Optional on the wire:
+   * absent in schema_version < 9 artifacts; readers must tolerate absence.
+   */
+  aggregate?: ExperimentAggregate;
 }
 
 export interface ReportCheck {
   name: string;
   passed: number;
   total: number;
+  /**
+   * false when any attempt recorded this check with `graded: false` (a scorer
+   * that flips the flag mid-run marks the whole tally ungraded). Absent in
+   * schema_version < 7 artifacts; readers treat absence as graded.
+   */
+  graded: boolean;
 }
 
 /** One eval × experiment aggregation. Pairs with zero attempts are ABSENT, never 0%. */
@@ -120,6 +160,12 @@ export interface ReportPair {
   /** Completed trials disagreed on the outcome. */
   flaky: boolean;
   checks: ReportCheck[];
+  /**
+   * The eval's band, denormalised onto each of its pairs: decided over the
+   * eval's pairs with scored > 0; null when fewer than 2 arms scored. Absent
+   * in schema_version < 8 artifacts; readers treat absence as unbanded.
+   */
+  band: EvalBand | null;
 }
 
 export interface ReportGroupArmCount {
@@ -229,6 +275,12 @@ export interface ReportJson {
    */
   experiments?: ReportExperiment[];
   pairs: ReportPair[];
+  /**
+   * Checks that failed under every arm while another graded check passed in
+   * the same attempts. Absent in schema_version < 8 artifacts; readers must
+   * tolerate absence.
+   */
+  scorer_health?: ScorerHealth;
   groups: ReportGroup[];
   usage: ReportExperimentUsage[];
   egress_denials: EgressDenialSummary[];
@@ -244,7 +296,7 @@ export interface ReportJson {
 const USAGE_VALUE_CAP = 20;
 
 export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
-  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number }>; outcomes: Set<boolean> }>();
+  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number; graded: boolean }>; outcomes: Set<boolean> }>();
   for (const attempt of attempts) {
     const key = `${attempt.evalId}|${attempt.experimentId}`;
     let entry = pairs.get(key);
@@ -263,6 +315,7 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
           pass_rate: null,
           flaky: false,
           checks: [],
+          band: null,
         },
         checks: new Map(),
         outcomes: new Set(),
@@ -280,9 +333,10 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
       entry.outcomes.add(false);
     }
     for (const check of attempt.result?.checks ?? []) {
-      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0 };
+      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0, graded: true };
       tally.total += 1;
       if (check.passed) tally.passed += 1;
+      if (check.graded === false) tally.graded = false;
       entry.checks.set(check.name, tally);
     }
   }
@@ -294,7 +348,7 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
     pair.pass_at_k = collectPassAtK(pair.passed, pair.scored);
     pair.flaky = outcomes.size > 1;
     pair.checks = [...checks.entries()]
-      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total }))
+      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total, graded: tally.graded }))
       .sort((a, b) => a.name.localeCompare(b.name));
     result.push(pair);
   }
@@ -340,7 +394,30 @@ function treatmentOf(run: RunRecord, experimentId: string): string | null {
  * experiment; "unspecified" is its own explicit missing-value sentinel, so
  * this never invents a value the run did not pin.
  */
-function collectExperiments(run: RunRecord): ReportExperiment[] {
+/**
+ * SDK recall over one experiment's scored attempts: the denominator is every
+ * completed attempt that recorded at least one `graded: false` check; an
+ * attempt is recalled when all of those checks passed. Null rate at zero.
+ */
+export function collectRecall(attempts: AttemptRecord[], experimentId: string): ReportRecall {
+  let total = 0;
+  let recalled = 0;
+  for (const attempt of attempts) {
+    if (attempt.experimentId !== experimentId || attempt.status !== "completed") continue;
+    const ungraded = (attempt.result?.checks ?? []).filter((check) => check.graded === false);
+    if (ungraded.length === 0) continue;
+    total += 1;
+    if (ungraded.every((check) => check.passed)) recalled += 1;
+  }
+  return { attempts: total, recalled, rate: total > 0 ? recalled / total : null };
+}
+
+function collectExperiments(
+  run: RunRecord,
+  attempts: AttemptRecord[],
+  pairs: ReportPair[],
+  costEstimate: RunCostEstimate | undefined,
+): ReportExperiment[] {
   return [...run.config.experimentIds]
     .sort((a, b) => a.localeCompare(b))
     .map((experimentId) => {
@@ -355,6 +432,8 @@ function collectExperiments(run: RunRecord): ReportExperiment[] {
           reasoning: agent?.reasoning ?? "unspecified",
           cli_version: agent?.cliVersion ?? "unspecified",
         },
+        sdk_recall: collectRecall(attempts, experimentId),
+        aggregate: collectExperimentAggregate(attempts, pairs, experimentId, costEstimate),
       };
     });
 }
@@ -520,6 +599,9 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   if (publication && publication.eligible.length === 0) throw new ReportError(`no eligible complete samples for run ${runId}: ${publication.omitted.map((p) => `${p.eval_id} × ${p.experiment_id}: ${p.reasons.join("; ")}`).join(" | ")}`);
   const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
   const pairs = collectPairs(attempts);
+  const bands = collectBands(pairs);
+  for (const pair of pairs) pair.band = bands.get(pair.eval_id) ?? null;
+  const scorerHealth = collectScorerHealth(attempts, pairs);
   const costEstimate = options.pricing === undefined ? undefined : estimateRunCosts(run, attempts, options.resultsDir, options.pricing);
 
   const methodology = methodologyNote(run.config.trials) + (costEstimate === undefined ? "" :
@@ -527,6 +609,10 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   const banned = findBannedLanguage(methodology);
   if (banned.length > 0) {
     throw new ReportError(`report methodology violates the language guard: ${banned.join(", ")}`);
+  }
+  const bannedSummary = findBannedLanguage(scorerHealth.summary);
+  if (bannedSummary.length > 0) {
+    throw new ReportError(`report scorer-health summary violates the language guard: ${bannedSummary.join(", ")}`);
   }
 
   return {
@@ -550,8 +636,9 @@ export function buildReport(options: BuildReportOptions): ReportJson {
     telemetry: collectTelemetry(attempts),
     ...(costEstimate === undefined ? {} : { cost_estimate: costEstimate }),
     judge_telemetry: collectJudgeTelemetry(attempts),
-    experiments: collectExperiments(run),
+    experiments: collectExperiments(run, attempts, pairs, costEstimate),
     pairs,
+    scorer_health: scorerHealth,
     groups: collectGroups(run, pairs),
     usage: collectUsage(run, attempts),
     egress_denials: collectEgressDenials(options.resultsDir, runId, attempts),
@@ -569,6 +656,29 @@ export function buildReport(options: BuildReportOptions): ReportJson {
 
 function pct(rate: number | null): string {
   return rate === null ? "n/a" : `${Math.round(rate * 100)}%`;
+}
+
+function renderLeaderboard(experiments: ReportExperiment[]): string[] {
+  const header = ["experiment", "model", "pass (all/disc)", "agent median", "tokens in", "cost", "recall"];
+  const rows = [...experiments].sort(compareLeaderboard).map((experiment) => {
+    const agg = experiment.aggregate;
+    const model = experiment.agent.model === "unspecified" ? "unpinned" : experiment.agent.model;
+    const reasoning = experiment.agent.reasoning === "unspecified" ? "" : ` · ${experiment.agent.reasoning}`;
+    if (!agg) return [experiment.experiment_id, `${model}${reasoning}`, "n/a", "n/a", "n/a", "n/a", "n/a"];
+    const all = agg.pass_rate_all === null ? "n/a" : `${agg.passed}/${agg.passed + agg.failed}`;
+    const disc = agg.pass_rate_discriminating === null ? "n/a" : `${agg.discriminating_passed}/${agg.discriminating_scored}`;
+    const time = agg.median_agent_ms === null ? "n/a" : `${(agg.median_agent_ms / 1000).toFixed(1)}s (${agg.agent_time_attempts})`;
+    const tokens = agg.mean_tokens_in === null ? "n/a" : `${Math.round(agg.mean_tokens_in)}`;
+    const cost =
+      (agg.cost_usd === null ? `not reported (0/${agg.attempts})` : `$${agg.cost_usd.toFixed(4)} ${agg.cost_attempts}/${agg.attempts} reported`) +
+      (typeof agg.estimated_cost_usd === "number" ? ` +$${agg.estimated_cost_usd.toFixed(4)} est.` : "");
+    const recall = experiment.sdk_recall;
+    const recallText = recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts}` : "n/a";
+    return [experiment.experiment_id, `${model}${reasoning}`, `${all} · ${disc}`, time, tokens, cost, recallText];
+  });
+  const widths = header.map((title, i) => Math.max(title.length, ...rows.map((row) => row[i]!.length)));
+  const format = (cells: string[]): string => `  ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join("  ").trimEnd()}`;
+  return ["leaderboard (benchmark suite, sorted by discriminating pass rate):", format(header), ...rows.map(format)];
 }
 
 /** Render the report as plain text. Renders FROM the JSON, never the store. */
@@ -598,8 +708,13 @@ export function renderReportText(report: ReportJson): string {
         `  ${experiment.experiment_id}${experiment.treatment !== null ? ` [${experiment.treatment}]` : ""}: ` +
           `${model}${reasoning} (adapter ${agent.adapter}, provider ${agent.provider}, cli ${agent.cli_version})`,
       );
+      const recall = experiment.sdk_recall;
+      lines.push(`    sdk recall: ${recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts} (${pct(recall.rate)})` : "n/a"}`);
     }
     lines.push("");
+    if (experiments.some((experiment) => experiment.aggregate !== undefined)) {
+      lines.push(...renderLeaderboard(experiments), "");
+    }
   }
 
   if (report.retry_history?.length) lines.push(`prior retry history: ${report.retry_history.length} unsuccessful executions retained in the source artifacts`);
@@ -650,6 +765,21 @@ export function renderReportText(report: ReportJson): string {
     for (const check of pair.checks) {
       lines.push(`    ${check.passed === check.total ? "PASS" : "FAIL"} ${check.name} (${check.passed}/${check.total})`);
     }
+  }
+
+  // Bands and suspects are absent on schema_version < 8 reports — skip them there.
+  if (report.pairs.some((pair) => pair.band !== undefined)) {
+    const bands = new Map(report.pairs.map((pair) => [pair.eval_id, pair.band]));
+    const count = (band: EvalBand): number => [...bands.values()].filter((value) => value === band).length;
+    lines.push(
+      `bands: discriminating ${count("discriminating")} · solved by all ${count("solved-by-all")} · failed by all ${count("failed-by-all")}`,
+    );
+  }
+  for (const suspect of report.scorer_health?.suspects ?? []) {
+    lines.push(
+      `suspect: ${suspect.eval_id} · ${suspect.check} failed in ${suspect.attempts} attempts under ` +
+        `${suspect.experiments.length} arms; passing: ${suspect.passing_checks.join(", ")}`,
+    );
   }
 
   if (report.groups.length > 0) {

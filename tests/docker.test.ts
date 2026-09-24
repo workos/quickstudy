@@ -374,7 +374,7 @@ describeDocker("docker isolation", () => {
   );
 
   test(
-    "timeout: agent killed AND container removed, status 'incomplete', partial evidence kept",
+    "timeout: agent killed AND container removed, workspace graded (completed, limit timeout), partial evidence kept",
     async () => {
       process.env["FAKE_PROVIDER_KEY"] = FAKE_PROVIDER_KEY;
       const before = new Set(await listAttemptContainers());
@@ -386,11 +386,14 @@ describeDocker("docker isolation", () => {
           artifacts,
           attemptTimeoutMs: 2_000,
         });
-        expect(summary.incomplete).toBe(1);
+        expect(summary.incomplete).toBe(0);
 
         const attempt = store.listAttempts(summary.runId)[0]!;
-        expect(attempt.status).toBe("incomplete");
-        expect(attempt.error).toContain("timed out");
+        expect(attempt.status).toBe("completed");
+        expect(attempt.limitHit).toBe("timeout");
+        expect(attempt.result).not.toBeNull();
+        expect(attempt.agentStartedAt).not.toBeNull();
+        expect(attempt.agentFinishedAt!).toBeGreaterThanOrEqual(attempt.agentStartedAt!);
         const errorText = readFileSync(join(artifacts.paths(summary.runId, attempt.id).error), "utf8");
         expect(errorText).toContain("timed out");
         // Evidence captured before the kill is preserved.
@@ -443,16 +446,16 @@ describeGit("failure-path diff capture (git-enabled image)", () => {
   }
 
   test(
-    "a timed-out attempt stays 'incomplete' and keeps the diff of what it got done",
+    "a timed-out attempt is graded (completed, limit timeout) and keeps the diff of what it got done",
     async () => {
       process.env["FAKE_PROVIDER_KEY"] = FAKE_PROVIDER_KEY;
       const { store, artifacts } = makeStores();
       try {
         const summary = await runFakeAttempt({ script: `${EDIT} && sleep 60`, store, artifacts, attemptTimeoutMs: 2_000, image: GIT_IMAGE });
-        expect(summary.incomplete).toBe(1);
+        expect(summary.incomplete).toBe(0);
         const attempt = store.listAttempts(summary.runId)[0]!;
-        expect(attempt.status).toBe("incomplete");
-        expect(attempt.error).toContain("timed out");
+        expect(attempt.status).toBe("completed");
+        expect(attempt.limitHit).toBe("timeout");
         await expectDiffPersisted(attempt);
       } finally {
         store.close();
@@ -532,7 +535,7 @@ describe("container agent preflight (no daemon required)", () => {
           artifacts,
           log: silent,
         }),
-      ).rejects.toThrow(/no container agent adapter named "fake" \(available: claude, codex\)/);
+      ).rejects.toThrow(/no container agent adapter named "fake" \(available: claude, codex, oracle\)/);
     } finally {
       store.close();
     }

@@ -18,6 +18,10 @@
   "started_at": "2026-07-20T00:51:00.000Z",
   "finished_at": "2026-07-20T00:52:35.100Z",
   "error": "attempt timed out after 1500000ms",
+  "limit": null,
+  "error_kind": "agent",
+  "agent_started_at": null,
+  "agent_finished_at": null,
   "transcript": "attempts/01KXYD521M000000000000000M.transcript.txt",
   "diff": null
 }

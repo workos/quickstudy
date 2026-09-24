@@ -11,6 +11,7 @@ function makeEval(id: string, metadata: Partial<LoadedEval["metadata"]> = {}): L
     promptBody: "do the thing",
     scorerPath: `/evals/${id}/EVAL.ts`,
     localDir: null,
+    solutionDir: null,
   };
 }
 

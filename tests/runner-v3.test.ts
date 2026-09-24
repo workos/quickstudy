@@ -136,7 +136,7 @@ describe("v3 runner (host path)", () => {
     store.close();
   });
 
-  test("an adapter that outlives its timeout records status=incomplete", async () => {
+  test("an adapter that outlives its timeout is graded on the tree it left (completed, limit timeout)", async () => {
     const evalsRoot = mkdtempSync(join(tmpdir(), "qs-evals-stall-"));
     writeTmpEval(evalsRoot, "stalled", `export default async () => ({ passed: true, checks: [] });\n`);
     const evals = discoverEvals(evalsRoot);
@@ -154,10 +154,11 @@ describe("v3 runner (host path)", () => {
       attemptTimeoutMs: 50,
       log: silent,
     });
-    expect(summary).toMatchObject({ total: 1, incomplete: 1, passed: 0, errors: 0 });
+    expect(summary).toMatchObject({ total: 1, incomplete: 0, passed: 1, errors: 0 });
     const attempt = store.listAttempts(summary.runId)[0]!;
-    expect(attempt.status).toBe("incomplete");
-    expect(attempt.error).toContain("timed out");
+    expect(attempt.status).toBe("completed");
+    expect(attempt.limitHit).toBe("timeout");
+    expect(attempt.error).toBeNull();
     store.close();
   });
 
@@ -304,7 +305,8 @@ test("host adapter receives cancellation when the agent budget expires", async (
   const { store, artifacts } = makeStores();
   try {
     const summary = await executeRunV3({ evals, experiments, plan: planRun(evals, experiments.map((e) => e.experiment), 1), store, artifacts, hostAdapters: { hung: adapter }, attemptTimeoutMs: 20, log: silent });
-    expect(summary.incomplete).toBe(1);
+    // Graded timeout: hello-local's NOTES.md check fails on the untouched tree.
+    expect(summary).toMatchObject({ failed: 1, incomplete: 0 });
     expect(aborted).toBe(true);
   } finally { store.close(); }
 });
@@ -341,20 +343,20 @@ test("seeded bounded scheduling resumes missing trials, keeps failures, and refu
   } finally { store.close(); }
 });
 
-test("only explicit retry reruns an incomplete trial; its evidence remains in history", async () => {
+test("only explicit retry reruns an unfinished trial; its evidence remains in history", async () => {
   const root = mkdtempSync(join(tmpdir(), "qs-retry-"));
   writeTmpEval(root, "retry", 'export default async () => ({ passed: false, checks: [] });');
   const evals = discoverEvals(root); const experiments = [hostExperiment("retry", "retry")];
-  const { store, artifacts } = makeStores(); let hung = true; let calls = 0;
+  const { store, artifacts } = makeStores(); let broken = true; let calls = 0;
   const adapter: AgentAdapter = { name: "retry", runAttempt: async () => {
-    calls++; if (hung) return new Promise(() => {});
+    calls++; if (broken) throw new Error("agent crashed");
     return { transcript: [], diff: "", metrics: { tokensIn: null, tokensOut: null, turns: 0 } };
   } };
   const options = { evals, experiments, plan: planRun(evals, experiments.map((e) => e.experiment), 1), store, artifacts, hostAdapters: { retry: adapter }, attemptTimeoutMs: 20, log: silent };
   try {
-    const first = await executeRunV3(options); hung = false;
+    const first = await executeRunV3(options); broken = false;
     const skipped = await executeRunV3({ ...options, resumeRunId: first.runId });
-    expect(skipped.incomplete).toBe(1); expect(calls).toBe(1);
+    expect(skipped.errors).toBe(1); expect(calls).toBe(1);
     const retry = await executeRunV3({ ...options, resumeRunId: first.runId, retryUnfinished: true });
     expect(retry.failed).toBe(1); expect(calls).toBe(2);
     const rows = store.listAttempts(first.runId); expect(rows).toHaveLength(2);

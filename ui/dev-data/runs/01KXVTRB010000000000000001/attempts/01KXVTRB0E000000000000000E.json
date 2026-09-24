@@ -1,0 +1,36 @@
+{
+  "id": "01KXVTRB0E000000000000000E",
+  "run_id": "01KXVTRB010000000000000001",
+  "eval_id": "auth-rails",
+  "experiment_id": "claude-mcp",
+  "suite": "benchmark",
+  "trial_index": 2,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": false
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "mcp",
+  "comparison_group": "claude",
+  "surface_usage": null,
+  "tokens_in": 113,
+  "tokens_out": 913,
+  "cost_usd": 0.07,
+  "turns": 4,
+  "started_at": "2026-07-19T00:13:00.000Z",
+  "finished_at": "2026-07-19T00:14:00.650Z",
+  "error": null,
+  "limit": "timeout",
+  "error_kind": null,
+  "agent_started_at": "2026-07-19T00:13:05.000Z",
+  "agent_finished_at": "2026-07-19T00:13:57.650Z",
+  "transcript": "attempts/01KXVTRB0E000000000000000E.transcript.txt",
+  "diff": "attempts/01KXVTRB0E000000000000000E.diff.patch"
+}

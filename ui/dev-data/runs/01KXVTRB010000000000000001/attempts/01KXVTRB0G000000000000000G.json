@@ -1,0 +1,36 @@
+{
+  "id": "01KXVTRB0G000000000000000G",
+  "run_id": "01KXVTRB010000000000000001",
+  "eval_id": "uniform-pass",
+  "experiment_id": "claude-docs",
+  "suite": "benchmark",
+  "trial_index": 1,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "claude",
+  "surface_usage": null,
+  "tokens_in": 115,
+  "tokens_out": 915,
+  "cost_usd": 0.07,
+  "turns": 6,
+  "started_at": "2026-07-19T00:15:00.000Z",
+  "finished_at": "2026-07-19T00:16:00.750Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-19T00:15:05.000Z",
+  "agent_finished_at": "2026-07-19T00:15:57.750Z",
+  "transcript": "attempts/01KXVTRB0G000000000000000G.transcript.txt",
+  "diff": "attempts/01KXVTRB0G000000000000000G.diff.patch"
+}

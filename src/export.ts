@@ -33,7 +33,7 @@ import {
 } from "./export-types.ts";
 import { trialCoverage } from "./completeness.ts";
 import { hashString } from "./hash.ts";
-import { buildReport, renderReportText, type ReportJson } from "./report/report.ts";
+import { buildReport, REPORT_SCHEMA_VERSION, renderReportText, type ReportJson } from "./report/report.ts";
 import { parsePricing, type Pricing } from "./report/costs.ts";
 import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord } from "./store/db.ts";
 
@@ -162,6 +162,10 @@ function toDataAttempt(
     started_at: iso(attempt.startedAt),
     finished_at: iso(attempt.finishedAt),
     error: attempt.error,
+    limit: attempt.limitHit ?? null,
+    error_kind: attempt.errorKind ?? null,
+    agent_started_at: iso(attempt.agentStartedAt ?? null),
+    agent_finished_at: iso(attempt.agentFinishedAt ?? null),
     transcript,
     diff,
   };
@@ -184,11 +188,18 @@ function resolveReport(
   const path = join(resultsDir, runId, "report.json");
   if (existsSync(path)) {
     try {
-      // Export is an artifact copier, not report validation. Preserve the
-      // stored JSON byte-for-byte in meaning, including forward-compatible
-      // fields a newer report producer may add.
+      // Export is an artifact copier, not report validation. A current-schema
+      // report is preserved byte-for-byte in meaning; any other schema is
+      // rebuilt from the store so the bundled UI reads the shape it knows.
       const stored = JSON.parse(readFileSync(path, "utf8")) as ReportJson;
       const run = store.getRun(runId)!;
+      // A report written under another schema is rebuilt so every schema bump
+      // reaches the exported site; a stored pricing snapshot is reused.
+      if (stored.schema_version !== REPORT_SCHEMA_VERSION) {
+        log(`stored report.json for ${runId} is schema ${stored.schema_version ?? "unversioned"} — rebuilding at ${REPORT_SCHEMA_VERSION}`);
+        return buildReport({ store, runId, resultsDir, generatedAt: generatedAt ?? iso(run.finishedAt) ?? iso(run.startedAt)!,
+          ...(stored.cost_estimate ? { pricing: parsePricing(stored.cost_estimate.pricing) } : {}) });
+      }
       // Historical reports retain their methodology. New reports are reused
       // only when the entire source record still matches (including retries).
       if (run.manifest.manifestVersion === "v3" && stored.cost_estimate === undefined) return stored;

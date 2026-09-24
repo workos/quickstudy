@@ -123,6 +123,10 @@ solver — it copies the starting state and writes NOTES.md, so this toy check
 passes; against real evals every check fails, which is exactly what a
 negative control should do. (Failed attempts are results: the run exits `0`
 unless an attempt _errors_.)
+The positive control is `quickstudy validate --oracle`: it scores each eval's
+`solution/` reference solution and expects 1.0, and the built-in `oracle`
+agent replays those solutions under a real runtime
+([details](./writing-an-eval.md#prove-the-scorer-with-a-reference-solution)).
 
 ```bash
 quickstudy report <run-id>

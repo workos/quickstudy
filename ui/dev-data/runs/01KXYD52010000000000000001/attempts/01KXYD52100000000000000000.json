@@ -19,6 +19,11 @@
     {
       "name": "build-passes",
       "passed": true
+    },
+    {
+      "name": "sdk-wired",
+      "passed": true,
+      "graded": false
     }
   ],
   "treatment": "mcp",
@@ -46,6 +51,10 @@
   "started_at": "2026-07-20T00:31:00.000Z",
   "finished_at": "2026-07-20T00:32:33.100Z",
   "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-20T00:31:05.000Z",
+  "agent_finished_at": "2026-07-20T00:32:30.100Z",
   "transcript": "attempts/01KXYD52100000000000000000.transcript.txt",
   "diff": "attempts/01KXYD52100000000000000000.diff.patch"
 }

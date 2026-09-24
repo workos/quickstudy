@@ -1,0 +1,36 @@
+{
+  "id": "01KXVTRB0R000000000000000R",
+  "run_id": "01KXVTRB010000000000000001",
+  "eval_id": "uniform-fail",
+  "experiment_id": "claude-mcp",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "shape-check",
+      "passed": false
+    },
+    {
+      "name": "works-e2e",
+      "passed": true
+    }
+  ],
+  "treatment": "mcp",
+  "comparison_group": "claude",
+  "surface_usage": null,
+  "tokens_in": 123,
+  "tokens_out": 923,
+  "cost_usd": 0.07,
+  "turns": 6,
+  "started_at": "2026-07-19T00:23:00.000Z",
+  "finished_at": "2026-07-19T00:24:01.150Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-19T00:23:05.000Z",
+  "agent_finished_at": "2026-07-19T00:23:58.150Z",
+  "transcript": "attempts/01KXVTRB0R000000000000000R.transcript.txt",
+  "diff": "attempts/01KXVTRB0R000000000000000R.diff.patch"
+}

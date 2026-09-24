@@ -1,0 +1,4 @@
+# hello-local starting state
+
+This file proves the eval's `local/` directory is copied into the attempt
+workspace before the agent runs.

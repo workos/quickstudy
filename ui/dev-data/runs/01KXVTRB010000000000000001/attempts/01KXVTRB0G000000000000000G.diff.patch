@@ -1,0 +1,4 @@
+--- a/src/auth.ts
++++ b/src/auth.ts
+@@ -0,0 +1,1 @@
++// uniform-pass claude-docs trial 1

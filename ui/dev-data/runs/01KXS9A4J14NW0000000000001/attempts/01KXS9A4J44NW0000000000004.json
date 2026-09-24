@@ -1,0 +1,60 @@
+{
+  "id": "01KXS9A4J44NW0000000000004",
+  "run_id": "01KXS9A4J14NW0000000000001",
+  "eval_id": "auth-nextjs",
+  "experiment_id": "claude-cli",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": true,
+  "checks": [
+    {
+      "name": "flow-wired",
+      "passed": true
+    },
+    {
+      "name": "no-secrets-in-client",
+      "passed": true
+    },
+    {
+      "name": "build-passes",
+      "passed": true
+    },
+    {
+      "name": "sdk-wired",
+      "passed": false,
+      "graded": false
+    }
+  ],
+  "treatment": "cli",
+  "comparison_group": "claude",
+  "surface_usage": {
+    "docs": {
+      "count": 0,
+      "urls": []
+    },
+    "mcp": {
+      "count": 0,
+      "tools": []
+    },
+    "cli": {
+      "count": 2,
+      "commands": [
+        "acme auth"
+      ]
+    }
+  },
+  "tokens_in": 203,
+  "tokens_out": 1203,
+  "cost_usd": 0.11,
+  "turns": 7,
+  "started_at": "2026-07-18T00:03:00.000Z",
+  "finished_at": "2026-07-18T00:04:30.300Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-18T00:03:05.000Z",
+  "agent_finished_at": "2026-07-18T00:04:27.300Z",
+  "transcript": "attempts/01KXS9A4J44NW0000000000004.transcript.txt",
+  "diff": "attempts/01KXS9A4J44NW0000000000004.diff.patch"
+}

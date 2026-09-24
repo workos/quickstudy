@@ -18,6 +18,20 @@ import { SCHEMA_SQL } from "./schema.ts";
 
 export type AttemptStatus = "completed" | "incomplete" | "error";
 
+/** Which stage failed when an attempt's status is "error". */
+export const ERROR_KINDS = ["environment", "agent", "scorer", "harness"] as const;
+export type ErrorKind = (typeof ERROR_KINDS)[number];
+/** Which limit an attempt hit; the tree it left behind was still graded. */
+export type LimitKind = "timeout";
+
+function toErrorKind(value: string | null): ErrorKind | null {
+  return value !== null && (ERROR_KINDS as readonly string[]).includes(value) ? (value as ErrorKind) : null;
+}
+
+function toLimitKind(value: string | null): LimitKind | null {
+  return value === "timeout" ? value : null;
+}
+
 /** The run-level configuration recorded in `runs.config_json`. */
 export interface RunConfig {
   scheduler?: { concurrency: number; seed: string; policy: "seeded-hash-v1"; order: import("../plan.ts").AttemptPlan[] };
@@ -82,6 +96,13 @@ export interface NewAttempt {
   startedAt?: number | null;
   finishedAt?: number | null;
   error?: string | null;
+  /** "timeout" = the agent hit its wall-clock limit and the tree it left was graded (column limit_hit). */
+  limitHit?: LimitKind | null;
+  /** Which stage failed; set only when status = "error". */
+  errorKind?: ErrorKind | null;
+  /** Agent phase only, epoch ms; null = not recorded. */
+  agentStartedAt?: number | null;
+  agentFinishedAt?: number | null;
 }
 
 export interface AttemptRecord {
@@ -106,6 +127,13 @@ export interface AttemptRecord {
   startedAt: number | null;
   finishedAt: number | null;
   error: string | null;
+  /** "timeout" = the agent hit its wall-clock limit and the tree it left was graded (column limit_hit). */
+  limitHit?: LimitKind | null;
+  /** Which stage failed; set only when status = "error". */
+  errorKind?: ErrorKind | null;
+  /** Agent phase only, epoch ms; null = not recorded. */
+  agentStartedAt?: number | null;
+  agentFinishedAt?: number | null;
 }
 
 interface RunRow {
@@ -139,6 +167,10 @@ interface AttemptRow {
   started_at: number | null;
   finished_at: number | null;
   error: string | null;
+  limit_hit: string | null;
+  error_kind: string | null;
+  agent_started_at: number | null;
+  agent_finished_at: number | null;
 }
 
 function toRunRecord(row: RunRow): RunRecord {
@@ -175,6 +207,10 @@ function toAttemptRecord(row: AttemptRow): AttemptRecord {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     error: row.error,
+    limitHit: toLimitKind(row.limit_hit ?? null),
+    errorKind: toErrorKind(row.error_kind ?? null),
+    agentStartedAt: row.agent_started_at ?? null,
+    agentFinishedAt: row.agent_finished_at ?? null,
   };
 }
 
@@ -226,6 +262,21 @@ export class ResultsStore {
     }
     if (!attemptColumns.includes("judge_usage_json")) this.db.exec("ALTER TABLE attempts ADD COLUMN judge_usage_json TEXT;");
     if (!attemptColumns.includes("retry_of")) this.db.exec("ALTER TABLE attempts ADD COLUMN retry_of TEXT;");
+    // Outcome taxonomy + agent-phase timing (nullable; NULL = unavailable).
+    for (const [name, type] of [
+      ["limit_hit", "TEXT"],
+      ["error_kind", "TEXT"],
+      ["agent_started_at", "INTEGER"],
+      ["agent_finished_at", "INTEGER"],
+    ] as const) {
+      if (attemptColumns.includes(name)) continue;
+      try {
+        this.db.exec(`ALTER TABLE attempts ADD COLUMN ${name} ${type};`);
+      } catch (err) {
+        // A concurrent opener may have added it between the read and the ALTER.
+        if (!/duplicate column/i.test(err instanceof Error ? err.message : String(err))) throw err;
+      }
+    }
     this.db.exec("PRAGMA user_version = 3;");
   }
 
@@ -264,8 +315,9 @@ export class ResultsStore {
         `INSERT INTO attempts (
            id, run_id, eval_id, experiment_id, suite, trial_index, attempt_identity_hash, status,
            result_json, surface_usage_json, transcript_ref, diff_ref, cost_usd, tokens_in, tokens_out,
-           turns, started_at, finished_at, error, retry_of, judge_usage_json
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           turns, started_at, finished_at, error, retry_of, judge_usage_json,
+           limit_hit, error_kind, agent_started_at, agent_finished_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         attempt.id,
@@ -289,6 +341,10 @@ export class ResultsStore {
         attempt.error ?? null,
         attempt.retryOf ?? null,
         attempt.judgeRecords ? JSON.stringify(attempt.judgeRecords) : null,
+        attempt.limitHit ?? null,
+        attempt.errorKind ?? null,
+        attempt.agentStartedAt ?? null,
+        attempt.agentFinishedAt ?? null,
       );
   }
 
