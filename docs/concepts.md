@@ -192,6 +192,31 @@ The report embeds a generated methodology note, and its language is
 deliberately conservative: raw counts, no intervals, no attribution.
 `--strict` makes an incomplete or error-bearing run exit non-zero for CI.
 
+### Bands and scorer health
+
+Each eval gets a **band**, decided over the experiments that scored at least
+one attempt on it (an arm whose attempts all errored is ignored):
+
+- `discriminating` — the arms disagree; this is where comparisons live.
+- `solved-by-all` — every arm passed every scored attempt.
+- `failed-by-all` — every arm failed every scored attempt.
+- no band (`null`) — fewer than two arms scored, so "every arm" means nothing.
+
+The band is copied onto each of the eval's pairs (`pairs[].band`). The
+matrix view splits rows by band: discriminating evals (plus the unbanded
+ones, noted in the header) stay open, while the two uniform bands are
+collapsed so they never crowd out the rows that separate the arms.
+
+**Scorer health** (`scorer_health` in `report.json`) lists suspects: a graded
+check that failed in every scored attempt of a `failed-by-all` eval, under
+every arm, while another graded check passed in every one of those attempts.
+That pattern (the work demonstrably happened, one check never passed) points
+at the instrument, not at any treatment, so treat that eval's pass rates as
+unverified until its scorer is reviewed. Ungraded checks never count on
+either side. The summary sentence is a fixed template that never includes
+eval or check names; the names are in the structured `suspects` list, which
+the matrix banner and the text report's `suspect:` lines display.
+
 For missing Codex dollar telemetry, `report --pricing <file>` can calculate
 [retrospective token-cost estimates](./cost-estimates.md) from saved transcripts
 and a runtime rate snapshot. These supplement reported cost rather than replacing

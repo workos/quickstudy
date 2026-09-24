@@ -12,7 +12,9 @@
  *     evidence deep links, one unanalyzable pair).
  *   - run B ("cell states"): a run crafted so the matrix shows a 0% cell,
  *     a 100% cell, a flaky cell, and an incomplete cell — the four states
- *     the heatmap must render distinctly. Run B stays diagnosis-LESS, so
+ *     the heatmap must render distinctly, plus a solved-by-all and a
+ *     failed-by-all eval (both collapsed bands and one scorer-health
+ *     suspect). Run B stays diagnosis-LESS, so
  *     dev data and e2e exercise the Diagnosis view's empty state too.
  *
  * Used by `bun run ui:dev-data` (committed ui/dev-data) and the Playwright
@@ -40,6 +42,7 @@ import {
   SEED_GENERATED_AT,
   seededIds,
   seedRun,
+  type SeedEvalSpec,
   type SeedExperimentSpec,
 } from "./seed-run.ts";
 
@@ -91,12 +94,33 @@ const CELL_STATE_EXPERIMENTS: readonly SeedExperimentSpec[] = SEED_EXPERIMENTS.f
   (spec) => spec.group === "claude" && spec.treatment !== "cli",
 );
 
+/**
+ * Run B's evals: the sweep's three plus two banded ones — `uniform-pass`
+ * (solved by every arm) and `uniform-fail` (failed by every arm, with one
+ * check passing everywhere → the one scorer-health suspect).
+ */
+const CELL_STATE_EVALS: readonly SeedEvalSpec[] = [
+  ...SEED_EVALS,
+  { id: "uniform-pass", framework: "generic", suite: "benchmark" },
+  { id: "uniform-fail", framework: "generic", suite: "benchmark" },
+];
+
 interface CellStateSpec {
   evalId: string;
   experimentId: string;
   passes: boolean[];
   /** Every trial hit its time limit; the tree each left was graded. */
   limitHit?: "timeout";
+  /** Per-trial checks; defaults to `cellStateChecks`. */
+  checks?: (passed: boolean) => CheckResult[];
+}
+
+/** The work demonstrably done (e2e passes) while one check never passes — an instrument suspect. */
+function uniformFailChecks(): CheckResult[] {
+  return [
+    { name: "shape-check", passed: false },
+    { name: "works-e2e", passed: true },
+  ];
 }
 
 /** The heatmap states, unambiguous. */
@@ -106,6 +130,10 @@ const CELL_STATES: readonly CellStateSpec[] = [
   { evalId: "auth-django", experimentId: "claude-docs", passes: [true, false, true] }, // flaky
   { evalId: "auth-nextjs", experimentId: "claude-mcp", passes: [true] }, // incomplete (1/3)
   { evalId: "auth-rails", experimentId: "claude-mcp", passes: [false, false, false], limitHit: "timeout" }, // graded timeouts
+  { evalId: "uniform-pass", experimentId: "claude-docs", passes: [true, true, true] }, // solved by all
+  { evalId: "uniform-pass", experimentId: "claude-mcp", passes: [true, true, true] },
+  { evalId: "uniform-fail", experimentId: "claude-docs", passes: [false, false, false], checks: uniformFailChecks }, // failed by all
+  { evalId: "uniform-fail", experimentId: "claude-mcp", passes: [false, false, false], checks: uniformFailChecks },
 ];
 
 /**
@@ -187,14 +215,14 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
   const startedAtMs = Date.parse(startedAt);
   const nextId = seededIds(startedAtMs);
   const runId = nextId();
-  const manifest = buildSeedManifest(SEED_EVALS, CELL_STATE_EXPERIMENTS, "seed-site-cell-states");
+  const manifest = buildSeedManifest(CELL_STATE_EVALS, CELL_STATE_EXPERIMENTS, "seed-site-cell-states");
   store.insertRun({
     id: runId,
     startedAt: startedAtMs,
     manifest,
     config: {
       trials: 3,
-      evalIds: SEED_EVALS.map((spec) => spec.id),
+      evalIds: CELL_STATE_EVALS.map((spec) => spec.id),
       experimentIds: CELL_STATE_EXPERIMENTS.map((spec) => spec.id),
       egress: { proxy: false, allowlist: [] },
       groups: buildSeedGroups(CELL_STATE_EXPERIMENTS, manifest),
@@ -232,7 +260,7 @@ function seedCellStatesRun(store: ResultsStore, resultsDir: string): string {
           ["seed-site-attempt", manifest.evals[spec.evalId]?.hash ?? "", manifest.experiments[spec.experimentId]?.hash ?? ""].join("|"),
         ),
         status,
-        result: { passed, checks: cellStateChecks(passed) },
+        result: { passed, checks: (spec.checks ?? cellStateChecks)(passed) },
         surfaceUsage: null,
         transcriptRef: transcriptPath,
         diffRef: diffPath,

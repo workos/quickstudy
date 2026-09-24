@@ -78,6 +78,8 @@ export interface HeatmapProps {
   rows: Array<{ evalId: string; framework?: string }>;
   columns: HeatColumn[];
   onCellClick: (cell: HeatCell) => void;
+  /** Band label naming this matrix region when the rows are one band's slice. */
+  band?: string;
 }
 
 /**
@@ -109,13 +111,13 @@ function groupSpans(
   });
 }
 
-export function Heatmap({ cells, rows, columns, onCellClick }: HeatmapProps): ReactNode {
+export function Heatmap({ cells, rows, columns, onCellClick, band }: HeatmapProps): ReactNode {
   const byKey = new Map(cells.map((cell) => [`${cell.evalId}|${cell.experimentId}`, cell]));
   const hasGroups = columns.some((column) => column.group !== null || column.agentLabel !== null);
   return (
     <div className="matrix-region">
       <div className="scroll-hint" aria-hidden="true">Scroll horizontally to see every experiment →</div>
-      <div className="matrix-scroll" role="region" aria-label="Pass-rate matrix" tabIndex={0}>
+      <div className="matrix-scroll" role="region" aria-label={band === undefined ? "Pass-rate matrix" : `Pass-rate matrix — ${band}`} tabIndex={0}>
       <table className="matrix">
         <thead>
           {hasGroups && (

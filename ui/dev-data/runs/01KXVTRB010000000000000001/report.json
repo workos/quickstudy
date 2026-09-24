@@ -1,5 +1,5 @@
 {
-  "schema_version": 7,
+  "schema_version": 8,
   "generated_at": "2026-07-20T02:00:00.000Z",
   "run": {
     "id": "01KXVTRB010000000000000001",
@@ -9,7 +9,9 @@
     "eval_ids": [
       "auth-nextjs",
       "auth-rails",
-      "auth-django"
+      "auth-django",
+      "uniform-pass",
+      "uniform-fail"
     ],
     "experiment_ids": [
       "claude-docs",
@@ -18,7 +20,7 @@
     "manifest_hash": "0ba000db714e52a0f1848c3a62b7c4655fbe474b9618f106941b293b932f433b"
   },
   "incomplete": true,
-  "source_fingerprint": "3b672890297ecc9588f771d4c43308210de9cbc12ccb11ea5357f786a2b2a6de",
+  "source_fingerprint": "50730eab3e30421a28a7c92a672b37d8a174d1522d9d818e6a3c76064fbbfbff",
   "coverage": [
     {
       "eval_id": "auth-nextjs",
@@ -68,22 +70,50 @@
         "missing trial 1",
         "missing trial 2"
       ]
+    },
+    {
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-docs",
+      "expected_trials": 3,
+      "complete": true,
+      "reasons": []
+    },
+    {
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-mcp",
+      "expected_trials": 3,
+      "complete": true,
+      "reasons": []
+    },
+    {
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-docs",
+      "expected_trials": 3,
+      "complete": true,
+      "reasons": []
+    },
+    {
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-mcp",
+      "expected_trials": 3,
+      "complete": true,
+      "reasons": []
     }
   ],
   "retry_history": [],
   "totals": {
-    "attempts": 13,
-    "passed": 6,
-    "failed": 7,
+    "attempts": 25,
+    "passed": 12,
+    "failed": 13,
     "incomplete": 0,
     "errors": 0
   },
   "telemetry": {
-    "cost_usd": 0.9100000000000004,
-    "cost_attempts": 13,
-    "tokens_in": 1391,
-    "tokens_out": 11791,
-    "token_attempts": 13
+    "cost_usd": 1.750000000000001,
+    "cost_attempts": 25,
+    "tokens_in": 2825,
+    "tokens_out": 22825,
+    "token_attempts": 25
   },
   "judge_telemetry": {
     "provenance": "semantic-judge",
@@ -153,6 +183,7 @@
           "graded": true
         }
       ],
+      "band": null,
       "pass_at_k": [
         {
           "k": 1,
@@ -197,6 +228,7 @@
           "graded": true
         }
       ],
+      "band": "discriminating",
       "pass_at_k": [
         {
           "k": 1,
@@ -241,6 +273,7 @@
           "graded": true
         }
       ],
+      "band": "discriminating",
       "pass_at_k": [
         {
           "k": 1,
@@ -275,6 +308,7 @@
           "graded": true
         }
       ],
+      "band": "discriminating",
       "pass_at_k": [
         {
           "k": 1,
@@ -319,6 +353,7 @@
           "graded": true
         }
       ],
+      "band": "discriminating",
       "pass_at_k": [
         {
           "k": 1,
@@ -336,8 +371,205 @@
           "pass_to_the_k": 0
         }
       ]
+    },
+    {
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 0,
+      "failed": 3,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": 0,
+          "total": 3,
+          "graded": true
+        },
+        {
+          "name": "works-e2e",
+          "passed": 3,
+          "total": 3,
+          "graded": true
+        }
+      ],
+      "band": "failed-by-all",
+      "pass_at_k": [
+        {
+          "k": 1,
+          "pass_at_k": 0,
+          "pass_to_the_k": 0
+        },
+        {
+          "k": 2,
+          "pass_at_k": 0,
+          "pass_to_the_k": 0
+        },
+        {
+          "k": 3,
+          "pass_at_k": 0,
+          "pass_to_the_k": 0
+        }
+      ]
+    },
+    {
+      "eval_id": "uniform-fail",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 0,
+      "failed": 3,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 0,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "shape-check",
+          "passed": 0,
+          "total": 3,
+          "graded": true
+        },
+        {
+          "name": "works-e2e",
+          "passed": 3,
+          "total": 3,
+          "graded": true
+        }
+      ],
+      "band": "failed-by-all",
+      "pass_at_k": [
+        {
+          "k": 1,
+          "pass_at_k": 0,
+          "pass_to_the_k": 0
+        },
+        {
+          "k": 2,
+          "pass_at_k": 0,
+          "pass_to_the_k": 0
+        },
+        {
+          "k": 3,
+          "pass_at_k": 0,
+          "pass_to_the_k": 0
+        }
+      ]
+    },
+    {
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-docs",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 1,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3,
+          "graded": true
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3,
+          "graded": true
+        }
+      ],
+      "band": "solved-by-all",
+      "pass_at_k": [
+        {
+          "k": 1,
+          "pass_at_k": 1,
+          "pass_to_the_k": 1
+        },
+        {
+          "k": 2,
+          "pass_at_k": 1,
+          "pass_to_the_k": 1
+        },
+        {
+          "k": 3,
+          "pass_at_k": 1,
+          "pass_to_the_k": 1
+        }
+      ]
+    },
+    {
+      "eval_id": "uniform-pass",
+      "experiment_id": "claude-mcp",
+      "suite": "benchmark",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "errors": 0,
+      "scored": 3,
+      "pass_rate": 1,
+      "flaky": false,
+      "checks": [
+        {
+          "name": "build-passes",
+          "passed": 3,
+          "total": 3,
+          "graded": true
+        },
+        {
+          "name": "flow-wired",
+          "passed": 3,
+          "total": 3,
+          "graded": true
+        }
+      ],
+      "band": "solved-by-all",
+      "pass_at_k": [
+        {
+          "k": 1,
+          "pass_at_k": 1,
+          "pass_to_the_k": 1
+        },
+        {
+          "k": 2,
+          "pass_at_k": 1,
+          "pass_to_the_k": 1
+        },
+        {
+          "k": 3,
+          "pass_at_k": 1,
+          "pass_to_the_k": 1
+        }
+      ]
     }
   ],
+  "scorer_health": {
+    "suspects": [
+      {
+        "eval_id": "uniform-fail",
+        "check": "shape-check",
+        "experiments": [
+          "claude-docs",
+          "claude-mcp"
+        ],
+        "attempts": 6,
+        "passing_checks": [
+          "works-e2e"
+        ]
+      }
+    ],
+    "summary": "1 check failed in every scored attempt of 1 eval under every arm while another check passed in those attempts. Treat those evals' pass rates as unverified until the scorer is reviewed."
+  },
   "groups": [
     {
       "group": "claude",
@@ -369,6 +601,18 @@
               "passed": 3,
               "scored": 3,
               "display": "3/3"
+            },
+            {
+              "eval_id": "uniform-fail",
+              "passed": 0,
+              "scored": 3,
+              "display": "0/3"
+            },
+            {
+              "eval_id": "uniform-pass",
+              "passed": 3,
+              "scored": 3,
+              "display": "3/3"
             }
           ]
         },
@@ -387,6 +631,18 @@
               "passed": 0,
               "scored": 3,
               "display": "0/3"
+            },
+            {
+              "eval_id": "uniform-fail",
+              "passed": 0,
+              "scored": 3,
+              "display": "0/3"
+            },
+            {
+              "eval_id": "uniform-pass",
+              "passed": 3,
+              "scored": 3,
+              "display": "3/3"
             }
           ]
         }
@@ -398,7 +654,7 @@
       "experiment_id": "claude-docs",
       "treatment": "docs",
       "telemetry_available": 0,
-      "telemetry_unavailable": 9,
+      "telemetry_unavailable": 15,
       "channels": {
         "docs": {
           "attempts": 0,
@@ -421,7 +677,7 @@
       "experiment_id": "claude-mcp",
       "treatment": "mcp",
       "telemetry_available": 0,
-      "telemetry_unavailable": 4,
+      "telemetry_unavailable": 10,
       "channels": {
         "docs": {
           "attempts": 0,
@@ -457,8 +713,20 @@
       "01KXVTRB0B000000000000000B",
       "01KXVTRB0C000000000000000C",
       "01KXVTRB0D000000000000000D",
-      "01KXVTRB0E000000000000000E"
+      "01KXVTRB0E000000000000000E",
+      "01KXVTRB0F000000000000000F",
+      "01KXVTRB0G000000000000000G",
+      "01KXVTRB0H000000000000000H",
+      "01KXVTRB0J000000000000000J",
+      "01KXVTRB0K000000000000000K",
+      "01KXVTRB0M000000000000000M",
+      "01KXVTRB0N000000000000000N",
+      "01KXVTRB0P000000000000000P",
+      "01KXVTRB0Q000000000000000Q",
+      "01KXVTRB0R000000000000000R",
+      "01KXVTRB0S000000000000000S",
+      "01KXVTRB0T000000000000000T"
     ]
   },
-  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 3 planned trials — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded checks are recorded and tallied but never enter pass/fail."
+  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 3 planned trials — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every scored attempt of an eval under every arm while another check in the same attempts passed: a statement about the instrument, not about any treatment."
 }

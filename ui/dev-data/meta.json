@@ -33,14 +33,16 @@
       "eval_ids": [
         "auth-nextjs",
         "auth-rails",
-        "auth-django"
+        "auth-django",
+        "uniform-pass",
+        "uniform-fail"
       ],
       "experiment_ids": [
         "claude-docs",
         "claude-mcp"
       ],
       "manifest_hash": "0ba000db714e52a0f1848c3a62b7c4655fbe474b9618f106941b293b932f433b",
-      "attempts": 13,
+      "attempts": 25,
       "incomplete": true
     },
     {
@@ -67,8 +69,8 @@
     }
   ],
   "run_paths": {
-    "01KXYD52010000000000000001": "runs/01KXYD52010000000000000001/snapshots/ab146821d91d0b1d256a4192",
-    "01KXVTRB010000000000000001": "runs/01KXVTRB010000000000000001/snapshots/8834e337b1af31965e782b02",
-    "01KXS9A4J14NW0000000000001": "runs/01KXS9A4J14NW0000000000001/snapshots/8579a689a5af0435c8e7a2d4"
+    "01KXYD52010000000000000001": "runs/01KXYD52010000000000000001/snapshots/9cddeb0c2562b11a90c5e0ba",
+    "01KXVTRB010000000000000001": "runs/01KXVTRB010000000000000001/snapshots/fa9fdb00a2213052c281fb3a",
+    "01KXS9A4J14NW0000000000001": "runs/01KXS9A4J14NW0000000000001/snapshots/13a645518601506750760dac"
   }
 }

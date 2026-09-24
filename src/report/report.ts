@@ -32,6 +32,9 @@ import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord }
 import type { SurfaceUsage } from "../surface-usage.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts";
+import { collectBands, collectScorerHealth, type EvalBand, type ScorerHealth } from "./scorer-health.ts";
+
+export type { EvalBand, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing report.json, ...). */
 export class ReportError extends Error {
@@ -41,7 +44,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 7;
+export const REPORT_SCHEMA_VERSION = 8;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -71,7 +74,9 @@ export function methodologyNote(trials: number): string {
     `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. ` +
     `SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that ` +
     `recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded ` +
-    `checks are recorded and tallied but never enter pass/fail.`
+    `checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every ` +
+    `scored attempt of an eval under every arm while another check in the same attempts passed: a statement ` +
+    `about the instrument, not about any treatment.`
   );
 }
 
@@ -147,6 +152,12 @@ export interface ReportPair {
   /** Completed trials disagreed on the outcome. */
   flaky: boolean;
   checks: ReportCheck[];
+  /**
+   * The eval's band, denormalised onto each of its pairs: decided over the
+   * eval's pairs with scored > 0; null when fewer than 2 arms scored. Absent
+   * in schema_version < 8 artifacts; readers treat absence as unbanded.
+   */
+  band: EvalBand | null;
 }
 
 export interface ReportGroupArmCount {
@@ -256,6 +267,12 @@ export interface ReportJson {
    */
   experiments?: ReportExperiment[];
   pairs: ReportPair[];
+  /**
+   * Checks that failed under every arm while another graded check passed in
+   * the same attempts. Absent in schema_version < 8 artifacts; readers must
+   * tolerate absence.
+   */
+  scorer_health?: ScorerHealth;
   groups: ReportGroup[];
   usage: ReportExperimentUsage[];
   egress_denials: EgressDenialSummary[];
@@ -290,6 +307,7 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
           pass_rate: null,
           flaky: false,
           checks: [],
+          band: null,
         },
         checks: new Map(),
         outcomes: new Set(),
@@ -567,6 +585,9 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   if (publication && publication.eligible.length === 0) throw new ReportError(`no eligible complete samples for run ${runId}: ${publication.omitted.map((p) => `${p.eval_id} × ${p.experiment_id}: ${p.reasons.join("; ")}`).join(" | ")}`);
   const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
   const pairs = collectPairs(attempts);
+  const bands = collectBands(pairs);
+  for (const pair of pairs) pair.band = bands.get(pair.eval_id) ?? null;
+  const scorerHealth = collectScorerHealth(attempts, pairs);
   const costEstimate = options.pricing === undefined ? undefined : estimateRunCosts(run, attempts, options.resultsDir, options.pricing);
 
   const methodology = methodologyNote(run.config.trials) + (costEstimate === undefined ? "" :
@@ -574,6 +595,10 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   const banned = findBannedLanguage(methodology);
   if (banned.length > 0) {
     throw new ReportError(`report methodology violates the language guard: ${banned.join(", ")}`);
+  }
+  const bannedSummary = findBannedLanguage(scorerHealth.summary);
+  if (bannedSummary.length > 0) {
+    throw new ReportError(`report scorer-health summary violates the language guard: ${bannedSummary.join(", ")}`);
   }
 
   return {
@@ -599,6 +624,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
     judge_telemetry: collectJudgeTelemetry(attempts),
     experiments: collectExperiments(run, attempts),
     pairs,
+    scorer_health: scorerHealth,
     groups: collectGroups(run, pairs),
     usage: collectUsage(run, attempts),
     egress_denials: collectEgressDenials(options.resultsDir, runId, attempts),
@@ -699,6 +725,21 @@ export function renderReportText(report: ReportJson): string {
     for (const check of pair.checks) {
       lines.push(`    ${check.passed === check.total ? "PASS" : "FAIL"} ${check.name} (${check.passed}/${check.total})`);
     }
+  }
+
+  // Bands and suspects are absent on schema_version < 8 reports — skip them there.
+  if (report.pairs.some((pair) => pair.band !== undefined)) {
+    const bands = new Map(report.pairs.map((pair) => [pair.eval_id, pair.band]));
+    const count = (band: EvalBand): number => [...bands.values()].filter((value) => value === band).length;
+    lines.push(
+      `bands: discriminating ${count("discriminating")} · solved by all ${count("solved-by-all")} · failed by all ${count("failed-by-all")}`,
+    );
+  }
+  for (const suspect of report.scorer_health?.suspects ?? []) {
+    lines.push(
+      `suspect: ${suspect.eval_id} · ${suspect.check} failed in ${suspect.attempts} attempts under ` +
+        `${suspect.experiments.length} arms; passing: ${suspect.passing_checks.join(", ")}`,
+    );
   }
 
   if (report.groups.length > 0) {

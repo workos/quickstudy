@@ -227,8 +227,51 @@ test.describe("matrix cell states + drill-down", () => {
     const { cellStates } = runIds();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/site/index.html#/run/${cellStates}`);
-    await expect(page.locator(".scroll-hint")).toBeVisible();
+    // One hint per band's heatmap; the discriminating band's leads.
+    await expect(page.locator(".scroll-hint").first()).toBeVisible();
     await expect(page.getByTestId("run-select")).toBeVisible();
+  });
+
+  test("matrix bands: discriminating open, uniform bands collapsed, scorer-health banner names the suspect", async ({ page }) => {
+    const { cellStates } = runIds();
+    await page.goto(`/site/index.html#/run/${cellStates}`);
+    const discriminating = page.getByTestId("matrix-band-discriminating");
+    await expect(discriminating).toBeVisible();
+    await expect(discriminating).toContainText("(1 eval with one scored arm)");
+    await expect(discriminating.getByTestId("cell-auth-django-claude-docs")).toBeVisible();
+
+    const solved = page.getByTestId("matrix-band-solved");
+    const failed = page.getByTestId("matrix-band-failed");
+    await expect(solved).toBeAttached();
+    await expect(failed).toBeAttached();
+    await expect(solved).not.toHaveAttribute("open");
+    await expect(failed).not.toHaveAttribute("open");
+    // Collapsed cells stay in the DOM, attached but hidden.
+    await expect(page.getByTestId("cell-uniform-pass-claude-docs")).toBeAttached();
+    await expect(page.getByTestId("cell-uniform-pass-claude-docs")).not.toBeVisible();
+    await expect(page.getByTestId("cell-uniform-fail-claude-mcp")).toBeAttached();
+    await expect(page.getByTestId("cell-uniform-fail-claude-mcp")).not.toBeVisible();
+
+    const banner = page.getByTestId("scorer-health-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("uniform-fail");
+    await expect(banner).toContainText("shape-check");
+    await expect(banner).toContainText("passing: works-e2e");
+
+    // Keyboard expands a collapsed band.
+    await failed.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(failed).toHaveAttribute("open", "");
+    await expect(page.getByTestId("cell-uniform-fail-claude-mcp")).toBeVisible();
+  });
+
+  test("matrix bands: the all-discriminating sweep shows no collapsed band and no banner", async ({ page }) => {
+    const { sweep } = runIds();
+    await page.goto(`/site/index.html#/run/${sweep}`);
+    await expect(page.getByTestId("matrix-band-discriminating")).toBeVisible();
+    await expect(page.getByTestId("matrix-band-solved")).toHaveCount(0);
+    await expect(page.getByTestId("matrix-band-failed")).toHaveCount(0);
+    await expect(page.getByTestId("scorer-health-banner")).toHaveCount(0);
   });
 
   test("deep-linking the drill-down URL opens the panel directly", async ({ page }) => {

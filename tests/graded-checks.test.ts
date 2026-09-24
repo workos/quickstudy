@@ -132,7 +132,7 @@ describe("report", () => {
   test("seeded run: mcp recalls every attempt, docs recalls none, text renders the line", () => {
     const { store, resultsDir, runId } = seeded();
     const report = buildReport({ store, runId, resultsDir });
-    expect(report.schema_version).toBe(7);
+    expect(report.schema_version).toBe(REPORT_SCHEMA_VERSION);
     const recallOf = (id: string) => report.experiments!.find((e) => e.experiment_id === id)!.sdk_recall!;
     expect(recallOf("claude-mcp").rate).toBe(1);
     expect(recallOf("claude-mcp").attempts).toBeGreaterThan(0);

@@ -1,0 +1,36 @@
+{
+  "id": "01KXVTRB0N000000000000000N",
+  "run_id": "01KXVTRB010000000000000001",
+  "eval_id": "uniform-fail",
+  "experiment_id": "claude-docs",
+  "suite": "benchmark",
+  "trial_index": 0,
+  "status": "completed",
+  "passed": false,
+  "checks": [
+    {
+      "name": "shape-check",
+      "passed": false
+    },
+    {
+      "name": "works-e2e",
+      "passed": true
+    }
+  ],
+  "treatment": "docs",
+  "comparison_group": "claude",
+  "surface_usage": null,
+  "tokens_in": 120,
+  "tokens_out": 920,
+  "cost_usd": 0.07,
+  "turns": 3,
+  "started_at": "2026-07-19T00:20:00.000Z",
+  "finished_at": "2026-07-19T00:21:01.000Z",
+  "error": null,
+  "limit": null,
+  "error_kind": null,
+  "agent_started_at": "2026-07-19T00:20:05.000Z",
+  "agent_finished_at": "2026-07-19T00:20:58.000Z",
+  "transcript": "attempts/01KXVTRB0N000000000000000N.transcript.txt",
+  "diff": "attempts/01KXVTRB0N000000000000000N.diff.patch"
+}
