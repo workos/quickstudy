@@ -535,7 +535,7 @@ describe("container agent preflight (no daemon required)", () => {
           artifacts,
           log: silent,
         }),
-      ).rejects.toThrow(/no container agent adapter named "fake" \(available: claude, codex\)/);
+      ).rejects.toThrow(/no container agent adapter named "fake" \(available: claude, codex, oracle\)/);
     } finally {
       store.close();
     }

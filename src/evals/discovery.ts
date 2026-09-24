@@ -1,6 +1,7 @@
 /**
  * Eval discovery: scan each `<root>/<dir>/PROMPT.md`, pair it with its EVAL.ts, and
- * detect the optional `local/` starting-state directory. Discovery is dumb on
+ * detect the optional `local/` starting-state and `solution/` reference-solution
+ * directories. Discovery is dumb on
  * purpose — one visible expansion (a `frameworks:` frontmatter list yields
  * one eval per framework, id `<dirname>-<framework>`), no placeholders, no
  * binding — and loud: the first error aborts the scan.
@@ -53,8 +54,18 @@ export function discoverEvals(root: string): LoadedEval[] {
     if (frameworks === undefined) {
       const localDir = join(dir, "local");
       const hasLocal = existsSync(localDir) && statSync(localDir).isDirectory();
+      const solutionDir = join(dir, "solution");
+      const hasSolution = existsSync(solutionDir) && statSync(solutionDir).isDirectory();
       collected.push({
-        loaded: { metadata, dir, promptPath, promptBody, scorerPath, localDir: hasLocal ? localDir : null },
+        loaded: {
+          metadata,
+          dir,
+          promptPath,
+          promptBody,
+          scorerPath,
+          localDir: hasLocal ? localDir : null,
+          solutionDir: hasSolution ? solutionDir : null,
+        },
       });
       continue;
     }
@@ -85,6 +96,11 @@ export function discoverEvals(root: string): LoadedEval[] {
         );
       }
     }
+    // Reference solutions always live under the eval's own solution/ (no
+    // shared-path form). When solution/ exists it must cover every listed
+    // framework; when absent every variant has no solution.
+    const solutionBase = join(dir, "solution");
+    const hasSolutionBase = existsSync(solutionBase) && statSync(solutionBase).isDirectory();
     // No starting state at all (no local/ and no `local:`) is valid — every
     // variant starts from an empty workspace, like a tools-only eval.
     for (const framework of frameworks) {
@@ -101,6 +117,19 @@ export function discoverEvals(root: string): LoadedEval[] {
         }
         localDir = frameworkDir;
       }
+      let solutionDir: string | null = null;
+      if (hasSolutionBase) {
+        const frameworkSolution = join(solutionBase, framework);
+        if (!existsSync(frameworkSolution) || !statSync(frameworkSolution).isDirectory()) {
+          throw new EvalLoadError(
+            promptPath,
+            1,
+            `eval "${metadata.id}" has solution/ but no solution for framework "${framework}" ` +
+              `(expected ${frameworkSolution})`,
+          );
+        }
+        solutionDir = frameworkSolution;
+      }
       collected.push({
         loaded: {
           metadata: { ...metadata, id: `${metadata.id}-${framework}`, framework },
@@ -109,6 +138,7 @@ export function discoverEvals(root: string): LoadedEval[] {
           promptBody,
           scorerPath,
           localDir,
+          solutionDir,
         },
         framework,
       });

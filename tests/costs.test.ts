@@ -31,7 +31,7 @@ beforeEach(() => {
     manifestVersion: "v4", hash: "manifest",
     harness: { version: "test", revision: "test", dirty: false, source: { sha256: "source" } },
     evals: { eval: { id: "eval", hash: "eval", metadata: { id: "eval", suite: "benchmark" },
-      components: { promptSource: "prompt", effectivePrompt: "prompt", local: null, scorer: "scorer", metadata: "metadata" } } },
+      components: { promptSource: "prompt", effectivePrompt: "prompt", local: null, scorer: "scorer", metadata: "metadata" }, solution: null } },
     images: {}, experiments: {
       codex: { id: "codex", hash: "experiment", components: {
         source: "source", runtime: "runtime", image: null, treatment: null, harness: "source",

@@ -32,6 +32,13 @@ export interface LoadedEval {
   scorerPath: string;
   /** Absolute path of the optional `local/` starting-state directory, or null. */
   localDir: string | null;
+  /**
+   * Absolute path of the optional `solution/` reference solution (or
+   * `solution/<framework>/` for a framework-expanded eval), or null. Overlaid
+   * on the starting state only for adapters with `startingState: "solution"`
+   * (the built-in oracle) and by `validate --oracle`; agents never see it.
+   */
+  solutionDir: string | null;
 }
 
 /** A pointer at evidence backing a check verdict (workspace-relative path). */

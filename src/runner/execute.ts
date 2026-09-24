@@ -21,7 +21,7 @@
  * and never allowed to mask the attempt's result.
  */
 
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -33,10 +33,12 @@ import type {
 import { ClaudeCodeAdapter } from "../adapters/claude.ts";
 import { CodexAdapter } from "../adapters/codex.ts";
 import { EchoAdapter } from "../adapters/echo.ts";
+import { OracleAdapter, OracleContainerAdapter } from "../adapters/oracle.ts";
 import { validEvalResult } from "../evals/result.ts";
 import { importEvalScorer } from "../evals/discovery.ts";
 import { deadline, StageTimeoutError } from "./deadline.ts";
 import { scoreInWorker } from "./score-worker.ts";
+import { prepWorkspaceSource } from "./workspace-source.ts";
 import type { EvalResult, LoadedEval } from "../evals/types.ts";
 import type { AgentSpec, Experiment, LoadedExperiment, Runtime } from "../experiments/types.ts";
 import { canonicalJson } from "../identity-diff.ts";
@@ -167,13 +169,15 @@ async function inStage<T>(kind: ErrorKind, work: () => Promise<T>): Promise<T> {
 
 function defaultHostAdapters(): Record<string, AgentAdapter> {
   const echo = new EchoAdapter();
-  return { [echo.name]: echo };
+  const oracle = new OracleAdapter();
+  return { [echo.name]: echo, [oracle.name]: oracle };
 }
 
 function defaultContainerAdapters(): Record<string, (agent: AgentSpec) => ContainerAgentAdapter> {
   return {
     claude: (agent) => new ClaudeCodeAdapter("claude", { model: agent.model, reasoning: agent.reasoning }),
     codex: (agent) => new CodexAdapter("codex", { model: agent.model, reasoning: agent.reasoning }),
+    oracle: () => new OracleContainerAdapter(),
   };
 }
 
@@ -359,6 +363,26 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       tags.add(image);
       imageTagsByPair[key] = image;
     }
+  }
+
+  // Reference-solution preflight: an adapter that starts from the solution
+  // overlay (the oracle) cannot run an eval without solution/. Every
+  // offending pair is named at once, before any run row exists.
+  const missingSolutions: string[] = [];
+  for (const entry of plan) {
+    const experiment = experimentsById.get(entry.experimentId) as Experiment;
+    const startingState =
+      experiment.runtime.kind === "host"
+        ? hostAdapters[experiment.agent.adapter]?.startingState
+        : containerAgents.get(experiment.id)?.startingState;
+    if (startingState === "solution" && (evalsById.get(entry.evalId) as LoadedEval).solutionDir === null) {
+      missingSolutions.push(`${entry.experimentId} × ${entry.evalId}`);
+    }
+  }
+  if (missingSolutions.length > 0) {
+    throw new Error(
+      `the oracle adapter needs solution/ — add it or drop the eval from the run: ${[...new Set(missingSolutions)].join(", ")}`,
+    );
   }
 
   // Live key preflight: a key that is present but rejected by the provider
@@ -584,15 +608,6 @@ async function mustExec(
   return result;
 }
 
-/** Prepare the attempt's starting state: a copy of `local/`, or empty (tools-only evals). */
-async function prepWorkspaceSource(loadedEval: LoadedEval): Promise<string> {
-  const sourceDir = await mkdtemp(join(tmpdir(), "quickstudy-v3-source-"));
-  if (loadedEval.localDir !== null) {
-    await cp(loadedEval.localDir, sourceDir, { recursive: true });
-  }
-  return sourceDir;
-}
-
 interface AttemptArgs {
   runId: string;
   attemptId: string;
@@ -613,7 +628,7 @@ async function runHostAttemptV3(
   const { runId, attemptId, persisted } = args;
   const adapter = hostAdapters[experiment.agent.adapter] as AgentAdapter;
 
-  const sourceDir = await inStage("environment", () => prepWorkspaceSource(loadedEval));
+  const sourceDir = await inStage("environment", () => prepWorkspaceSource(loadedEval, adapter.startingState ?? "fixture"));
   const scratchDir = await inStage("environment", () => mkdtemp(join(tmpdir(), "quickstudy-v3-attempt-")));
   try {
     let outcome: AttemptOutcome | undefined;
@@ -730,7 +745,7 @@ async function runContainerAttemptV3(
   let disposition: AttemptDisposition;
   try {
     disposition = await (async (): Promise<AttemptDisposition> => {
-      sourceDir = await inStage("environment", () => prepWorkspaceSource(loadedEval));
+      sourceDir = await inStage("environment", () => prepWorkspaceSource(loadedEval, agentAdapter?.startingState ?? "fixture"));
       const resolvedImage = environment?.image;
       const image = resolvedImage && resolvedImage.id !== "unresolved" ? resolvedImage.id : resolvedImage?.tag ?? runtime.image ?? (runtime.containerImage?.(loadedEval.metadata) as string);
       if (environment?.egress.proxy) {

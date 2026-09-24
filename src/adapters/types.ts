@@ -73,10 +73,21 @@ export interface AttemptOutcome {
   metrics: AttemptMetrics;
 }
 
+/**
+ * Which tree the runner prepares as the attempt's starting workspace:
+ * `"fixture"` (the default) copies the eval's `local/`; `"solution"` copies
+ * `local/` and then overlays the eval's `solution/` reference solution (the
+ * built-in oracle adapter). A plan pairing a `"solution"` adapter with an
+ * eval that has no `solution/` is refused at preflight.
+ */
+export type StartingState = "fixture" | "solution";
+
 export interface AgentAdapter {
   /** The adapter name experiments select via `agent.adapter` (e.g. "echo"). */
   name: string;
   identity?: AdapterIdentityConfig;
+  /** Starting workspace the runner prepares for this adapter (default "fixture"). */
+  startingState?: StartingState;
   runAttempt(ctx: AttemptContext): Promise<AttemptOutcome>;
 }
 
@@ -115,6 +126,8 @@ export interface ContainerAgentAdapter {
   /** The adapter name experiments select via `agent.adapter` (e.g. "claude", "codex"). */
   name: string;
   identity?: AdapterIdentityConfig;
+  /** Starting workspace the runner prepares for this adapter (default "fixture"). */
+  startingState?: StartingState;
   /** Command used during preflight to record the executable's exact version. */
   versionCommand?: readonly string[];
   /**

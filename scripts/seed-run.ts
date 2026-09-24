@@ -39,18 +39,23 @@ const FIXTURES_DIR = join(import.meta.dir, "../tests/__fixtures__/transcripts");
 export const SEED_GENERATED_AT = "2026-07-20T02:00:00.000Z";
 export const SEED_STARTED_AT = "2026-07-20T00:00:00.000Z";
 export const SEED_FINISHED_AT = "2026-07-20T01:00:00.000Z";
+const SEED_RUN_DURATION_MS = Date.parse(SEED_FINISHED_AT) - Date.parse(SEED_STARTED_AT);
 
 /**
  * Deterministic ulid stream for seeded fixtures: the time part advances a
  * fixed base by an incrementing counter and the entropy bytes encode the
  * counter, so regenerating committed dev data only diffs when the seed
- * content (or export shape) actually changes.
+ * content (or export shape) actually changes. An optional `salt` fills the
+ * leading entropy bytes (a pure hash, so still deterministic) — the counter
+ * lives in the trailing bytes, so salted and unsalted streams never collide.
  */
-export function seededIds(baseTimeMs: number): () => string {
+export function seededIds(baseTimeMs: number, salt?: string): () => string {
   let counter = 0;
+  const saltHash = salt === undefined ? 0 : fnv1a32(salt);
   return () => {
     counter += 1;
     const bytes = new Uint8Array(16);
+    for (let i = 0; i < 4; i += 1) bytes[i] = (saltHash >>> (24 - i * 8)) & 0xff;
     let value = counter;
     for (let i = 15; i >= 0 && value > 0; i -= 1) {
       bytes[i] = value % 256;
@@ -58,6 +63,16 @@ export function seededIds(baseTimeMs: number): () => string {
     }
     return ulid(baseTimeMs + counter, bytes);
   };
+}
+
+/** 32-bit FNV-1a — a pure, dependency-free string hash for id salts. */
+function fnv1a32(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
 }
 
 /**
@@ -168,6 +183,7 @@ export function buildSeedManifest(
         metadata: h(["metadata", spec.id]),
       },
       hash: h(["eval", spec.id]),
+      solution: null,
     };
   }
 
@@ -321,6 +337,17 @@ export interface SeedOptions {
    * 18-pair counts hold in tests that expect them.
    */
   withRegression?: boolean;
+  /**
+   * Mixed into the id stream's entropy bytes so a second seeded run in one
+   * database is distinct by construction (the per-db invocation stride
+   * already separates streams; the salt makes the intent explicit).
+   */
+  idSalt?: string;
+  /**
+   * Run start (ISO, default {@link SEED_STARTED_AT}); the run finishes one
+   * hour later. Lets a fixture run sort older than the canonical sweep.
+   */
+  startedAt?: string;
 }
 
 export interface SeedResult {
@@ -338,8 +365,9 @@ export function seedRun(options: SeedOptions): SeedResult {
     if (!Number.isInteger(trials) || trials < 1) {
       throw new Error(`seed trials must be an integer >= 1, got ${trials}`);
     }
-    const startedAtMs = Date.parse(SEED_STARTED_AT);
-    const nextId = seededIds(seedIdBase(options.dbPath, startedAtMs));
+    const startedAtMs = Date.parse(options.startedAt ?? SEED_STARTED_AT);
+    if (Number.isNaN(startedAtMs)) throw new Error(`seed startedAt must be an ISO timestamp, got ${options.startedAt}`);
+    const nextId = seededIds(seedIdBase(options.dbPath, startedAtMs), options.idSalt);
     const runId = nextId();
 
     const evals: SeedEvalSpec[] = [...SEED_EVALS, ...(options.withRegression ? [SEED_REGRESSION_EVAL] : [])];
@@ -445,7 +473,9 @@ export function seedRun(options: SeedOptions): SeedResult {
     }
 
     if (!options.unfinished) {
-      store.finishRun(runId, Date.parse(SEED_FINISHED_AT));
+      const finishedAtMs =
+        options.startedAt === undefined ? Date.parse(SEED_FINISHED_AT) : startedAtMs + SEED_RUN_DURATION_MS;
+      store.finishRun(runId, finishedAtMs);
     }
     return { runId, dbPath: options.dbPath, resultsDir: options.resultsDir, attempts: kept.length };
   } finally {

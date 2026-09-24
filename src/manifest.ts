@@ -57,6 +57,11 @@ export interface EvalIdentity {
   metadata: EvalMetadata;
   components: EvalIdentityComponents;
   hash: string;
+  /**
+   * Tree hash of `solution/` (the reference solution) when present; null
+   * otherwise. Recorded, never hashed into `hash` — agents never see it.
+   */
+  solution: string | null;
 }
 
 /** Per-experiment identity components — phase 2's comparison-group diff reads these. */
@@ -167,6 +172,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
       metadata: loaded.metadata,
       components,
       hash: contentHash(components),
+      solution: loaded.solutionDir === null ? null : hashTree(loaded.solutionDir).sha256,
     };
   }
 

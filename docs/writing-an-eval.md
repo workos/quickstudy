@@ -362,6 +362,72 @@ Run them the same way as everything else, from the benchmark repository:
 bun test evals/ scorers/
 ```
 
+## Prove the scorer with a reference solution
+
+A scorer that fails a correct solution is as broken as one that passes a
+wrong one, and a paid run cannot tell the two apart. Give each eval a
+`solution/` directory holding a reference solution, laid out like `local/`
+(`solution/<framework>/` for a `frameworks:` eval; when `solution/` exists it
+must cover every listed framework):
+
+```text
+acme-nextjs/
+  PROMPT.md
+  EVAL.ts
+  local/            starting state the agent sees
+  solution/         reference solution, overlaid on local/ — agents never see it
+```
+
+The solution is an **overlay**: `local/` is copied first, then `solution/` on
+top, so solution files win. It cannot delete a starting-state file. Its tree
+hash is recorded in the run manifest as the eval identity's `solution` field,
+outside the eval hash.
+
+`quickstudy validate --oracle` scores every eval's overlaid solution on the
+host, with no agent and no runtime, and prints one line per eval:
+
+```text
+  oracle:
+    - acme-nextjs-alpha: 1.0
+    - acme-nextjs-beta: deferred (scorer needs exec — run the oracle experiment under the real runtime)
+    - acme-express: FAILED (callback-route)
+    - acme-django: MISSING (no solution/)
+```
+
+- **`1.0`**: the scorer passed and every graded check passed. Failing
+  ungraded checks are listed after it for information.
+- **`deferred`**: the scorer called `exec`, `query` or `getClient`. These
+  need a runtime, so under validate each one is recorded and throws. Prove
+  the eval by running the oracle experiment (below) under the real runtime.
+- **`FAILED`**: named graded checks failed, or the scorer threw without
+  asking for a runtime capability.
+- **`MISSING`**: there is no `solution/`.
+
+The command exits 1 on any `FAILED` or `MISSING`. A semantic scorer has no
+agent output under validate, so it reports `FAILED`; prove those evals with
+the oracle experiment.
+
+The oracle experiment runs the built-in `oracle` agent. It applies the
+solution and does nothing else, with no model and no spend:
+
+```ts
+import { defineExperiment } from "quickstudy";
+import { harborRuntime } from "../runtime.ts";
+
+export default defineExperiment({
+  id: "oracle",
+  agent: { adapter: "oracle", provider: "local", model: "oracle-v1", reasoning: "none" },
+  runtime: harborRuntime(false),
+});
+```
+
+`run` refuses to start an oracle experiment paired with an eval that has no
+`solution/` and names every such pair. Container runtimes used with the
+oracle must not set `runtime.command`.
+
+When an idiomatic solution fails, **fix the scorer, not the solution**. The
+scorer is what the benchmark is measuring agents against.
+
 ## Adding an experiment
 
 An eval says WHAT; an **experiment** says HOW — which agent, with what model
@@ -411,6 +477,9 @@ quickstudy run --eval acme-nextjs --experiment claude-docs --trials 1
 ## Checklist before a paid run
 
 - [ ] `quickstudy validate` passes on both roots.
+- [ ] `quickstudy validate --oracle` shows `1.0` or `deferred` for every
+      eval, and the oracle experiment scores the deferred ones under the
+      real runtime.
 - [ ] The colocated `EVAL.test.ts` pins the check names and fails the bare
       starting state.
 - [ ] Shared helpers have adversarial mutation coverage at the family level.
