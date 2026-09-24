@@ -8,6 +8,7 @@
  */
 
 import type { ReactNode } from "react";
+import { isGraded, UNGRADED_TITLE } from "../checks.ts";
 import { DiffViewer } from "../components/DiffViewer.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { OutcomeBadges, StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
@@ -81,6 +82,11 @@ export function AttemptView({ runId, attemptId, artifact, lines }: AttemptViewPr
           {attempt.checks.map((check) => (
             <span key={check.name} className={check.passed ? "crit pass" : "crit fail"} title={check.notes ?? check.name}>
               {check.passed ? "✓" : "✗"} {check.name}
+              {!isGraded(check) && (
+                <span className="tag" data-testid="ungraded-tag" title={UNGRADED_TITLE}>
+                  recorded
+                </span>
+              )}
             </span>
           ))}
         </div>

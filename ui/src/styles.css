@@ -637,6 +637,14 @@ table.matrix td.cell:focus-within {
   color: var(--red);
 }
 
+.tag {
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--gray-bg);
+  color: var(--muted);
+}
+
 .telemetry {
   display: flex;
   gap: 12px;

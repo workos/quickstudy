@@ -102,7 +102,7 @@ describe("exportSite data directory", () => {
 
     // Attempt rows carry the queryable facts the drill-down renders.
     const passing = runJson.attempts.find((attempt) => attempt.passed === true);
-    expect(passing?.checks?.map((check) => check.name)).toEqual(["flow-wired", "no-secrets-in-client", "build-passes"]);
+    expect(passing?.checks?.map((check) => check.name)).toEqual(["flow-wired", "no-secrets-in-client", "build-passes", "sdk-wired"]);
     expect(passing?.treatment).not.toBeNull();
     expect(passing?.comparison_group).toMatch(/^(claude|codex)$/);
     const errored = runJson.attempts.find((attempt) => attempt.status === "error");
@@ -178,7 +178,7 @@ describe("exportSite data directory", () => {
     const { store, resultsDir, runId, root } = seeded();
     const marker = { verbatim_marker: "phase-7-artifact", pairs: [] };
     mkdirSync(join(resultsDir, runId), { recursive: true });
-    writeFileSync(join(resultsDir, runId, "report.json"), JSON.stringify({ run: { id: runId }, ...marker }), "utf8");
+    writeFileSync(join(resultsDir, runId, "report.json"), JSON.stringify({ schema_version: REPORT_SCHEMA_VERSION, run: { id: runId }, ...marker }), "utf8");
 
     const outDir = join(root, "site");
     await exportSite({ store, resultsDir, runIds: [runId], outDir, log: silent });

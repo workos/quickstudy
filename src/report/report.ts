@@ -41,7 +41,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 6;
+export const REPORT_SCHEMA_VERSION = 7;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -68,7 +68,10 @@ export function methodologyNote(trials: number): string {
     `same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at ` +
     `least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from ` +
     `those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface ` +
-    `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did.`
+    `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. ` +
+    `SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that ` +
+    `recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded ` +
+    `checks are recorded and tallied but never enter pass/fail.`
   );
 }
 
@@ -83,17 +86,41 @@ export interface ReportAgentIdentity {
   cli_version: string;
 }
 
+/**
+ * SDK recall for one experiment, derived from `graded: false` checks. Only
+ * scored (completed) attempts count; graded timeouts are completed.
+ */
+export interface ReportRecall {
+  /** Scored attempts of this experiment whose checks include at least one graded:false check. */
+  attempts: number;
+  /** Of those, attempts where every graded:false check passed. */
+  recalled: number;
+  /** recalled / attempts; null when attempts = 0. */
+  rate: number | null;
+}
+
 /** One experiment's identity card: what exactly ran under this id. */
 export interface ReportExperiment {
   experiment_id: string;
   treatment: string | null;
   agent: ReportAgentIdentity;
+  /**
+   * Optional on the wire: absent in schema_version < 7 artifacts, which the
+   * export may still carry — readers must tolerate absence.
+   */
+  sdk_recall?: ReportRecall;
 }
 
 export interface ReportCheck {
   name: string;
   passed: number;
   total: number;
+  /**
+   * false when any attempt recorded this check with `graded: false` (a scorer
+   * that flips the flag mid-run marks the whole tally ungraded). Absent in
+   * schema_version < 7 artifacts; readers treat absence as graded.
+   */
+  graded: boolean;
 }
 
 /** One eval × experiment aggregation. Pairs with zero attempts are ABSENT, never 0%. */
@@ -244,7 +271,7 @@ export interface ReportJson {
 const USAGE_VALUE_CAP = 20;
 
 export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
-  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number }>; outcomes: Set<boolean> }>();
+  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number; graded: boolean }>; outcomes: Set<boolean> }>();
   for (const attempt of attempts) {
     const key = `${attempt.evalId}|${attempt.experimentId}`;
     let entry = pairs.get(key);
@@ -280,9 +307,10 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
       entry.outcomes.add(false);
     }
     for (const check of attempt.result?.checks ?? []) {
-      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0 };
+      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0, graded: true };
       tally.total += 1;
       if (check.passed) tally.passed += 1;
+      if (check.graded === false) tally.graded = false;
       entry.checks.set(check.name, tally);
     }
   }
@@ -294,7 +322,7 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
     pair.pass_at_k = collectPassAtK(pair.passed, pair.scored);
     pair.flaky = outcomes.size > 1;
     pair.checks = [...checks.entries()]
-      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total }))
+      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total, graded: tally.graded }))
       .sort((a, b) => a.name.localeCompare(b.name));
     result.push(pair);
   }
@@ -340,7 +368,25 @@ function treatmentOf(run: RunRecord, experimentId: string): string | null {
  * experiment; "unspecified" is its own explicit missing-value sentinel, so
  * this never invents a value the run did not pin.
  */
-function collectExperiments(run: RunRecord): ReportExperiment[] {
+/**
+ * SDK recall over one experiment's scored attempts: the denominator is every
+ * completed attempt that recorded at least one `graded: false` check; an
+ * attempt is recalled when all of those checks passed. Null rate at zero.
+ */
+export function collectRecall(attempts: AttemptRecord[], experimentId: string): ReportRecall {
+  let total = 0;
+  let recalled = 0;
+  for (const attempt of attempts) {
+    if (attempt.experimentId !== experimentId || attempt.status !== "completed") continue;
+    const ungraded = (attempt.result?.checks ?? []).filter((check) => check.graded === false);
+    if (ungraded.length === 0) continue;
+    total += 1;
+    if (ungraded.every((check) => check.passed)) recalled += 1;
+  }
+  return { attempts: total, recalled, rate: total > 0 ? recalled / total : null };
+}
+
+function collectExperiments(run: RunRecord, attempts: AttemptRecord[]): ReportExperiment[] {
   return [...run.config.experimentIds]
     .sort((a, b) => a.localeCompare(b))
     .map((experimentId) => {
@@ -355,6 +401,7 @@ function collectExperiments(run: RunRecord): ReportExperiment[] {
           reasoning: agent?.reasoning ?? "unspecified",
           cli_version: agent?.cliVersion ?? "unspecified",
         },
+        sdk_recall: collectRecall(attempts, experimentId),
       };
     });
 }
@@ -550,7 +597,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
     telemetry: collectTelemetry(attempts),
     ...(costEstimate === undefined ? {} : { cost_estimate: costEstimate }),
     judge_telemetry: collectJudgeTelemetry(attempts),
-    experiments: collectExperiments(run),
+    experiments: collectExperiments(run, attempts),
     pairs,
     groups: collectGroups(run, pairs),
     usage: collectUsage(run, attempts),
@@ -598,6 +645,8 @@ export function renderReportText(report: ReportJson): string {
         `  ${experiment.experiment_id}${experiment.treatment !== null ? ` [${experiment.treatment}]` : ""}: ` +
           `${model}${reasoning} (adapter ${agent.adapter}, provider ${agent.provider}, cli ${agent.cli_version})`,
       );
+      const recall = experiment.sdk_recall;
+      lines.push(`    sdk recall: ${recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts} (${pct(recall.rate)})` : "n/a"}`);
     }
     lines.push("");
   }

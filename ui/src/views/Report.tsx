@@ -12,6 +12,7 @@ import type { DataMeta } from "../../../src/export-types.ts";
 import { displayPassAtK } from "../../../src/report/pass-at-k.ts";
 import type { ReportGroup, ReportJson, ReportPair } from "../../../src/report/report.ts";
 import { formatAgentLabel } from "../agent-label.ts";
+import { isGraded, UNGRADED_TITLE } from "../checks.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { CostEstimate } from "../components/CostEstimate.tsx";
@@ -53,6 +54,11 @@ function ChecksCell({ pair }: { pair: ReportPair }): ReactNode {
       {pair.checks.map((check) => (
         <span key={check.name} className={check.passed === check.total ? "crit pass" : "crit fail"} title={check.name}>
           {check.passed === check.total ? "✓" : "✗"} {check.name} ({check.passed}/{check.total})
+          {!isGraded(check) && (
+            <span className="tag" data-testid="ungraded-tag" title={UNGRADED_TITLE}>
+              recorded
+            </span>
+          )}
         </span>
       ))}
     </div>
@@ -304,6 +310,34 @@ export function Report({ meta, runId }: ReportProps): ReactNode {
             <GroupSection key={group.group} group={group} labelOf={labelOf} />
           ))}
         </section>
+      )}
+
+      {(value.experiments ?? []).length > 0 && (
+        <div className="card">
+          <div className="head">
+            <h3>SDK recall</h3>
+            <span className="kpi-meta">scored attempts whose ungraded checks all passed</span>
+          </div>
+          <div className="body" data-testid="sdk-recall">
+            {(value.experiments ?? []).map((experiment) => {
+              // Absent in schema_version < 7 artifacts; null rate when nothing recorded an ungraded check.
+              const recall = experiment.sdk_recall;
+              return (
+                <div key={experiment.experiment_id} className="attribution-arm">
+                  <div className="attribution-arm-head">
+                    <strong>
+                      <code>{experiment.experiment_id}</code>
+                    </strong>
+                    {experiment.treatment !== null && <StatBadge tone="blue">{experiment.treatment}</StatBadge>}
+                    <span>
+                      SDK recall {recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts}` : "n/a"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {value.usage.length > 0 && (

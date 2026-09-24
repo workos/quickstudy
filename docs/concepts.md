@@ -170,7 +170,11 @@ manifest is stored with the run, and comparison groups are diffed against it.
    that is unavailable is shown as unavailable, never as zero).
 2. **Pairs** — one row per eval × experiment: pass rate, scored counts, and
    per-check pass counts (`build_passes 10/10`, `login_flow_e2e 1/10`, …),
-   with a `trials disagreed` flag when trials split.
+   with a `trials disagreed` flag when trials split. Each experiment also
+   reports **SDK recall** — `recalled / attempts`, where attempts are the
+   scored attempts that recorded at least one ungraded (`graded: false`)
+   check and recalled are those whose ungraded checks all passed (`n/a` when
+   none recorded one). Ungraded checks are tallied but never enter pass/fail.
 3. **Comparison groups** — raw per-arm counts for groups whose members agree
    beyond their declared treatment; a component diff for withheld groups.
 4. **Surface usage** — offered-versus-used telemetry per experiment: observed
@@ -228,6 +232,8 @@ exactly what a negative control should do.
 | **comparisonGroup** | Experiments claiming to differ only by treatment; agreement is checked, never assumed.       |
 | **scorer**          | `EVAL.ts`'s default export: returns named pass/fail checks for one attempt.                  |
 | **check**           | One named verdict inside a scorer result (`build_passes`, `no_secrets_in_client`, …).        |
+| **ungraded check**  | A check marked `graded: false`: recorded and tallied, never part of pass/fail.              |
+| **SDK recall**      | Per experiment: scored attempts whose ungraded checks all passed / those that recorded one. |
 | **attempt**         | One agent × eval × experiment execution, run once, in isolation.                             |
 | **trial**           | A repeat of the same pair (default 3).                                                       |
 | **pair**            | One eval × experiment combination — the report's row unit (a *cell* in the UI).              |

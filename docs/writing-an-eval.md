@@ -163,7 +163,35 @@ And the result shape (`EvalResult`):
 - `checks` — named `CheckResult`s: `{ name, passed, notes?, evidence? }`.
   Check names are the report's per-check vocabulary (`build_passes 10/10`),
   so keep them stable snake_case. `notes` explains a failure; `evidence`
-  points at workspace-relative files backing the verdict.
+  points at workspace-relative files backing the verdict. `graded: false`
+  records a check without grading it (next section).
+
+### Record a check without grading it
+
+Some facts are worth recording but are not the task's pass/fail bar — for
+example, whether the agent wired up the product SDK rather than hand-rolling
+HTTP calls. Mark such a check `graded: false`:
+
+```ts
+const checks: CheckResult[] = [
+  { name: "flow_wired", passed: flowOk },
+  { name: "sdk_wired", passed: await ctx.fileExists("lib/sdk-client.ts"), graded: false },
+];
+const graded = checks.filter((c) => c.graded !== false);
+return { passed: graded.every((c) => c.passed), checks };
+```
+
+`passed` stays the scorer's call, so the scorer must leave ungraded checks out
+of it — the two lines above are the whole convention. An absent `graded` means
+`true`; any non-boolean value makes the result invalid (the attempt becomes an
+`error`).
+
+An ungraded check is stored, exported and tallied like any other (the report
+and the UI tag it as recorded, and the matrix's "x/y checks" counts graded
+checks only). The report derives **SDK recall** from ungraded checks: per
+experiment, the scored attempts that recorded at least one ungraded check, and
+of those, the ones whose ungraded checks all passed. If a check name is graded
+in one attempt and ungraded in another, the report tallies it as ungraded.
 
 Two rules of thumb keep scorers honest:
 

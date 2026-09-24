@@ -116,6 +116,8 @@ test.describe("served mode: three routes render with data", () => {
     await expect(page.getByTestId("report-group-codex")).toContainText("withheld");
     await expect(page.getByTestId("usage-summary")).toBeVisible();
     await expect(page.getByTestId("methodology")).toContainText("raw counts are the honest statement");
+    await expect(page.getByTestId("sdk-recall")).toContainText("SDK recall 0/");
+    await expect(page.getByTestId("pairs-table").getByTestId("ungraded-tag").first()).toBeVisible();
   });
 });
 
@@ -218,6 +220,20 @@ test.describe("matrix cell states + drill-down", () => {
     await page.goto(`/site/index.html#/run/${cellStates}/cell/auth-rails/claude-docs`);
     await expect(page.getByTestId("drill-down")).toBeVisible();
     await expect(page.getByTestId("drill-attempt").first()).toContainText("passed");
+  });
+
+  test("drill-down tags the ungraded check and the cell counts graded checks only", async ({ page }) => {
+    const { sweep } = runIds();
+    // claude-docs passes all 3 trials but never wires the SDK: an ungraded miss.
+    await page.goto(`/site/index.html#/run/${sweep}`);
+    // 3 trials × 3 graded checks; the ungraded sdk-wired check is excluded (else 9/12).
+    await expect(page.getByTestId("cell-auth-nextjs-claude-docs").locator(".cell-sub")).toContainText("9/9 checks");
+    await page.goto(`/site/index.html#/run/${sweep}/cell/auth-nextjs/claude-docs`);
+    await expect(page.getByTestId("drill-down")).toBeVisible();
+    const first = page.getByTestId("drill-attempt").first();
+    await expect(first).toContainText("passed");
+    await expect(first.getByTestId("ungraded-tag")).toBeVisible();
+    await expect(first.locator(".crit.fail")).toContainText("sdk-wired");
   });
 
   test("the drill-down shows the offered≠used surface case", async ({ page }) => {

@@ -224,7 +224,12 @@ function pairOutcomes(experimentId: string, framework: string): SeedOutcome[] {
   return framework === "django" ? ["pass", "pass", "incomplete"] : ["pass", "pass", "fail"];
 }
 
-/** Named check results: mcp failures cluster on flow-wired, cli on build-passes. */
+/**
+ * Named check results: mcp failures cluster on flow-wired, cli on build-passes.
+ * Every completed attempt also records an ungraded `sdk-wired` check that only
+ * the mcp treatment passes — so docs/cli passes are SDK recall misses whose
+ * pass/fail outcome is untouched.
+ */
 function seedChecks(outcome: SeedOutcome, treatment: string): CheckResult[] | undefined {
   if (outcome === "error" || outcome === "incomplete") return undefined;
   if (outcome === "pass") {
@@ -232,12 +237,14 @@ function seedChecks(outcome: SeedOutcome, treatment: string): CheckResult[] | un
       { name: "flow-wired", passed: true },
       { name: "no-secrets-in-client", passed: true },
       { name: "build-passes", passed: true },
+      { name: "sdk-wired", passed: treatment === "mcp", graded: false },
     ];
   }
   return [
     { name: "flow-wired", passed: treatment !== "cli" ? false : true },
     { name: "no-secrets-in-client", passed: true },
     { name: "build-passes", passed: treatment === "cli" ? false : true },
+    { name: "sdk-wired", passed: treatment === "mcp", graded: false },
   ];
 }
 

@@ -286,6 +286,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -341,6 +346,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -396,6 +406,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -451,6 +466,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -506,6 +526,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -561,6 +586,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -616,6 +646,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -671,6 +706,11 @@
         {
           "name": "build-passes",
           "passed": false
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -726,6 +766,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -781,6 +826,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -836,6 +886,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -891,6 +946,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -931,6 +991,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -986,6 +1051,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -1041,6 +1111,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -1096,6 +1171,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -1151,6 +1231,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -1206,6 +1291,11 @@
         {
           "name": "build-passes",
           "passed": false
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -1261,6 +1351,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -1316,6 +1411,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -1371,6 +1471,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -1426,6 +1531,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -1481,6 +1591,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -1536,6 +1651,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -1591,6 +1711,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -1646,6 +1771,11 @@
         {
           "name": "build-passes",
           "passed": false
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -1701,6 +1831,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -1756,6 +1891,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -1811,6 +1951,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -1866,6 +2011,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -1906,6 +2056,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -1961,6 +2116,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -2016,6 +2176,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -2071,6 +2236,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -2126,6 +2296,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -2181,6 +2356,11 @@
         {
           "name": "build-passes",
           "passed": false
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -2236,6 +2416,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -2291,6 +2476,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -2346,6 +2536,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -2401,6 +2596,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -2456,6 +2656,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -2511,6 +2716,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -2566,6 +2776,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -2621,6 +2836,11 @@
         {
           "name": "build-passes",
           "passed": false
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -2676,6 +2896,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -2731,6 +2956,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -2786,6 +3016,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -2841,6 +3076,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -2881,6 +3121,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -2936,6 +3181,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": true,
+          "graded": false
         }
       ],
       "treatment": "mcp",
@@ -3018,6 +3268,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -3073,6 +3328,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "cli",
@@ -3155,6 +3415,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -3210,6 +3475,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -3265,6 +3535,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -3320,6 +3595,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -3375,6 +3655,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",
@@ -3415,6 +3700,11 @@
         {
           "name": "build-passes",
           "passed": true
+        },
+        {
+          "name": "sdk-wired",
+          "passed": false,
+          "graded": false
         }
       ],
       "treatment": "docs",

@@ -44,6 +44,11 @@ export interface EvidenceReference {
 export interface CheckResult {
   name: string;
   passed: boolean;
+  /**
+   * false = recorded but not graded: the report tallies it and derives SDK
+   * recall from it, and the scorer must leave it out of `passed`. Absent = true.
+   */
+  graded?: boolean;
   notes?: string;
   evidence?: EvidenceReference[];
 }

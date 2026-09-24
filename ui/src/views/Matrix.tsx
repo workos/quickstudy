@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
 import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
+import { countGradedChecks, isGraded, UNGRADED_TITLE } from "../checks.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } from "../components/Heatmap.tsx";
@@ -79,7 +80,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
     const passed = completed.filter((attempt) => attempt.passed === true).length;
     const scored = completed.length;
     const outcomes = new Set(completed.map((attempt) => attempt.passed === true));
-    const checks = completed.flatMap((attempt) => attempt.checks ?? []);
+    const checks = countGradedChecks(completed.flatMap((attempt) => attempt.checks ?? []));
     cells.push({
       evalId: first.eval_id,
       experimentId: first.experiment_id,
@@ -89,7 +90,7 @@ function buildCells(attempts: DataAttempt[], expectedTrials: number): HeatCell[]
       flaky: outcomes.size > 1,
       incomplete: group.length < expectedTrials || group.some((attempt) => attempt.status === "incomplete"),
       errors: group.filter((attempt) => attempt.status === "error").length,
-      checks: checks.length > 0 ? { passed: checks.filter((check) => check.passed).length, total: checks.length } : null,
+      checks: checks.total > 0 ? checks : null,
     });
   }
   return cells;
@@ -131,6 +132,11 @@ function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: 
           {attempt.checks.map((check) => (
             <span key={check.name} className={check.passed ? "crit pass" : "crit fail"} title={check.notes ?? check.name}>
               {check.passed ? "✓" : "✗"} {check.name}
+              {!isGraded(check) && (
+                <span className="tag" data-testid="ungraded-tag" title={UNGRADED_TITLE}>
+                  recorded
+                </span>
+              )}
             </span>
           ))}
         </div>
