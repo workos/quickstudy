@@ -435,6 +435,11 @@ table.matrix th.matrix-group-head {
   font-weight: 400;
 }
 
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 h3 .group-sub {
   display: inline;
   margin-left: 6px;

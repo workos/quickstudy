@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 9,
   "generated_at": "2026-07-20T02:00:00.000Z",
   "run": {
     "id": "01KXYD52010000000000000001",
@@ -251,6 +251,27 @@
         "attempts": 9,
         "recalled": 0,
         "rate": 0
+      },
+      "aggregate": {
+        "attempts": 9,
+        "completed": 9,
+        "passed": 6,
+        "failed": 3,
+        "incomplete": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "pass_rate_all": 0.6666666666666666,
+        "pass_rate_discriminating": 0.6666666666666666,
+        "discriminating_evals": 3,
+        "discriminating_passed": 6,
+        "discriminating_scored": 9,
+        "median_agent_ms": 84600,
+        "agent_time_attempts": 9,
+        "mean_tokens_in": 226,
+        "mean_tokens_out": 1226,
+        "token_attempts": 9,
+        "cost_usd": 0.99,
+        "cost_attempts": 9
       }
     },
     {
@@ -267,6 +288,27 @@
         "attempts": 12,
         "recalled": 0,
         "rate": 0
+      },
+      "aggregate": {
+        "attempts": 9,
+        "completed": 9,
+        "passed": 9,
+        "failed": 0,
+        "incomplete": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "pass_rate_all": 1,
+        "pass_rate_discriminating": 1,
+        "discriminating_evals": 3,
+        "discriminating_passed": 9,
+        "discriminating_scored": 9,
+        "median_agent_ms": 84000,
+        "agent_time_attempts": 9,
+        "mean_tokens_in": 220,
+        "mean_tokens_out": 1220,
+        "token_attempts": 9,
+        "cost_usd": 0.99,
+        "cost_attempts": 9
       }
     },
     {
@@ -283,6 +325,27 @@
         "attempts": 9,
         "recalled": 9,
         "rate": 1
+      },
+      "aggregate": {
+        "attempts": 9,
+        "completed": 9,
+        "passed": 0,
+        "failed": 9,
+        "incomplete": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "pass_rate_all": 0,
+        "pass_rate_discriminating": 0,
+        "discriminating_evals": 3,
+        "discriminating_passed": 0,
+        "discriminating_scored": 9,
+        "median_agent_ms": 84300,
+        "agent_time_attempts": 9,
+        "mean_tokens_in": 223,
+        "mean_tokens_out": 1223,
+        "token_attempts": 9,
+        "cost_usd": 0.99,
+        "cost_attempts": 9
       }
     },
     {
@@ -299,6 +362,27 @@
         "attempts": 8,
         "recalled": 0,
         "rate": 0
+      },
+      "aggregate": {
+        "attempts": 9,
+        "completed": 8,
+        "passed": 6,
+        "failed": 2,
+        "incomplete": 1,
+        "errors": 0,
+        "timeouts": 0,
+        "pass_rate_all": 0.75,
+        "pass_rate_discriminating": 0.75,
+        "discriminating_evals": 3,
+        "discriminating_passed": 6,
+        "discriminating_scored": 8,
+        "median_agent_ms": 85450,
+        "agent_time_attempts": 8,
+        "mean_tokens_in": 232.625,
+        "mean_tokens_out": 1232.625,
+        "token_attempts": 8,
+        "cost_usd": 0.88,
+        "cost_attempts": 8
       }
     },
     {
@@ -315,6 +399,27 @@
         "attempts": 12,
         "recalled": 0,
         "rate": 0
+      },
+      "aggregate": {
+        "attempts": 9,
+        "completed": 9,
+        "passed": 6,
+        "failed": 3,
+        "incomplete": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "pass_rate_all": 0.6666666666666666,
+        "pass_rate_discriminating": 0.6666666666666666,
+        "discriminating_evals": 3,
+        "discriminating_passed": 6,
+        "discriminating_scored": 9,
+        "median_agent_ms": 84900,
+        "agent_time_attempts": 9,
+        "mean_tokens_in": 229,
+        "mean_tokens_out": 1229,
+        "token_attempts": 9,
+        "cost_usd": 0.99,
+        "cost_attempts": 9
       }
     },
     {
@@ -331,6 +436,27 @@
         "attempts": 8,
         "recalled": 8,
         "rate": 1
+      },
+      "aggregate": {
+        "attempts": 9,
+        "completed": 8,
+        "passed": 3,
+        "failed": 5,
+        "incomplete": 0,
+        "errors": 1,
+        "timeouts": 0,
+        "pass_rate_all": 0.375,
+        "pass_rate_discriminating": 0.375,
+        "discriminating_evals": 3,
+        "discriminating_passed": 3,
+        "discriminating_scored": 8,
+        "median_agent_ms": 85150,
+        "agent_time_attempts": 8,
+        "mean_tokens_in": 229.625,
+        "mean_tokens_out": 1229.625,
+        "token_attempts": 8,
+        "cost_usd": 0.88,
+        "cost_attempts": 8
       }
     }
   ],

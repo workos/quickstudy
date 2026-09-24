@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fmtTokens, incompleteReason } from "./format.ts";
+import { fmtMs, fmtTokens, fmtUsd, incompleteReason } from "./format.ts";
 
 test("token counts read at a glance and null stays unavailable", () => {
   expect(fmtTokens(148074667)).toBe("148.1M");
@@ -8,6 +8,24 @@ test("token counts read at a glance and null stays unavailable", () => {
   expect(fmtTokens(512)).toBe("512");
   expect(fmtTokens(0)).toBe("0");
   expect(fmtTokens(null)).toBe("—");
+  expect(fmtTokens(2_200_000)).toBe("2.2M");
+  expect(fmtTokens(512_000)).toBe("512k");
+  expect(fmtTokens(1_000_000)).toBe("1M");
+  expect(fmtTokens(220.5)).toBe("221");
+});
+
+test("agent time reads as minutes and seconds; null stays unavailable", () => {
+  expect(fmtMs(411_000)).toBe("6m 51s");
+  expect(fmtMs(59_000)).toBe("59s");
+  expect(fmtMs(84_000)).toBe("1m 24s");
+  expect(fmtMs(null)).toBe("—");
+});
+
+test("dollar amounts round to cents; null stays unavailable", () => {
+  expect(fmtUsd(1.987)).toBe("$1.99");
+  expect(fmtUsd(0.33)).toBe("$0.33");
+  expect(fmtUsd(0.001)).toBe("<$0.01");
+  expect(fmtUsd(null)).toBe("—");
 });
 
 test("the incomplete banner names what happened, not a generic cause", () => {

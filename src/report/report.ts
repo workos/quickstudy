@@ -33,8 +33,11 @@ import type { SurfaceUsage } from "../surface-usage.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts";
 import { collectBands, collectScorerHealth, type EvalBand, type ScorerHealth } from "./scorer-health.ts";
+import { collectExperimentAggregate, compareLeaderboard, type ExperimentAggregate } from "./aggregate.ts";
 
 export type { EvalBand, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
+export type { ExperimentAggregate } from "./aggregate.ts";
+export { compareLeaderboard } from "./aggregate.ts";
 
 /** Loud, CLI-friendly failures (unknown run, missing report.json, ...). */
 export class ReportError extends Error {
@@ -44,7 +47,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 8;
+export const REPORT_SCHEMA_VERSION = 9;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -114,6 +117,11 @@ export interface ReportExperiment {
    * export may still carry — readers must tolerate absence.
    */
   sdk_recall?: ReportRecall;
+  /**
+   * Leaderboard row over benchmark-suite attempts. Optional on the wire:
+   * absent in schema_version < 9 artifacts; readers must tolerate absence.
+   */
+  aggregate?: ExperimentAggregate;
 }
 
 export interface ReportCheck {
@@ -404,7 +412,12 @@ export function collectRecall(attempts: AttemptRecord[], experimentId: string): 
   return { attempts: total, recalled, rate: total > 0 ? recalled / total : null };
 }
 
-function collectExperiments(run: RunRecord, attempts: AttemptRecord[]): ReportExperiment[] {
+function collectExperiments(
+  run: RunRecord,
+  attempts: AttemptRecord[],
+  pairs: ReportPair[],
+  costEstimate: RunCostEstimate | undefined,
+): ReportExperiment[] {
   return [...run.config.experimentIds]
     .sort((a, b) => a.localeCompare(b))
     .map((experimentId) => {
@@ -420,6 +433,7 @@ function collectExperiments(run: RunRecord, attempts: AttemptRecord[]): ReportEx
           cli_version: agent?.cliVersion ?? "unspecified",
         },
         sdk_recall: collectRecall(attempts, experimentId),
+        aggregate: collectExperimentAggregate(attempts, pairs, experimentId, costEstimate),
       };
     });
 }
@@ -622,7 +636,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
     telemetry: collectTelemetry(attempts),
     ...(costEstimate === undefined ? {} : { cost_estimate: costEstimate }),
     judge_telemetry: collectJudgeTelemetry(attempts),
-    experiments: collectExperiments(run, attempts),
+    experiments: collectExperiments(run, attempts, pairs, costEstimate),
     pairs,
     scorer_health: scorerHealth,
     groups: collectGroups(run, pairs),
@@ -642,6 +656,29 @@ export function buildReport(options: BuildReportOptions): ReportJson {
 
 function pct(rate: number | null): string {
   return rate === null ? "n/a" : `${Math.round(rate * 100)}%`;
+}
+
+function renderLeaderboard(experiments: ReportExperiment[]): string[] {
+  const header = ["experiment", "model", "pass (all/disc)", "agent median", "tokens in", "cost", "recall"];
+  const rows = [...experiments].sort(compareLeaderboard).map((experiment) => {
+    const agg = experiment.aggregate;
+    const model = experiment.agent.model === "unspecified" ? "unpinned" : experiment.agent.model;
+    const reasoning = experiment.agent.reasoning === "unspecified" ? "" : ` · ${experiment.agent.reasoning}`;
+    if (!agg) return [experiment.experiment_id, `${model}${reasoning}`, "n/a", "n/a", "n/a", "n/a", "n/a"];
+    const all = agg.pass_rate_all === null ? "n/a" : `${agg.passed}/${agg.passed + agg.failed}`;
+    const disc = agg.pass_rate_discriminating === null ? "n/a" : `${agg.discriminating_passed}/${agg.discriminating_scored}`;
+    const time = agg.median_agent_ms === null ? "n/a" : `${(agg.median_agent_ms / 1000).toFixed(1)}s (${agg.agent_time_attempts})`;
+    const tokens = agg.mean_tokens_in === null ? "n/a" : `${Math.round(agg.mean_tokens_in)}`;
+    const cost =
+      (agg.cost_usd === null ? `not reported (0/${agg.attempts})` : `$${agg.cost_usd.toFixed(4)} ${agg.cost_attempts}/${agg.attempts} reported`) +
+      (typeof agg.estimated_cost_usd === "number" ? ` +$${agg.estimated_cost_usd.toFixed(4)} est.` : "");
+    const recall = experiment.sdk_recall;
+    const recallText = recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts}` : "n/a";
+    return [experiment.experiment_id, `${model}${reasoning}`, `${all} · ${disc}`, time, tokens, cost, recallText];
+  });
+  const widths = header.map((title, i) => Math.max(title.length, ...rows.map((row) => row[i]!.length)));
+  const format = (cells: string[]): string => `  ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join("  ").trimEnd()}`;
+  return ["leaderboard (benchmark suite, sorted by discriminating pass rate):", format(header), ...rows.map(format)];
 }
 
 /** Render the report as plain text. Renders FROM the JSON, never the store. */
@@ -675,6 +712,9 @@ export function renderReportText(report: ReportJson): string {
       lines.push(`    sdk recall: ${recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts} (${pct(recall.rate)})` : "n/a"}`);
     }
     lines.push("");
+    if (experiments.some((experiment) => experiment.aggregate !== undefined)) {
+      lines.push(...renderLeaderboard(experiments), "");
+    }
   }
 
   if (report.retry_history?.length) lines.push(`prior retry history: ${report.retry_history.length} unsuccessful executions retained in the source artifacts`);

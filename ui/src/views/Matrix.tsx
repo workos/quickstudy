@@ -8,6 +8,8 @@
  * carries eval bands, rows split into discriminating / solved-by-all /
  * failed-by-all sections (uniform bands collapsed) under a scorer-health
  * banner; older reports or a failed report load render one unbanded grid.
+ * Above the matrix, a per-experiment leaderboard renders from the same report
+ * (a stale-report note when it predates the aggregate; nothing when the load failed).
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -17,6 +19,7 @@ import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
 import { countGradedChecks, isGraded, UNGRADED_TITLE } from "../checks.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
+import { Leaderboard } from "../components/Leaderboard.tsx";
 import { Heatmap, HeatmapLegend, formatRate, type HeatCell, type HeatColumn } from "../components/Heatmap.tsx";
 import { OutcomeBadges, StatBadge, displayStatus, statusTone } from "../components/StatBadge.tsx";
 import { AttemptSurfaceUsage } from "../components/SurfaceUsage.tsx";
@@ -499,6 +502,8 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
           <div className="kpi-meta">manifest {summary.manifest_hash.slice(0, 10)}…</div>
         </div>
       </div>
+
+      {reportValue !== null && <Leaderboard report={reportValue} runId={runId} />}
 
       <div className="card">
         <div className="head">

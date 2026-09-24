@@ -1,9 +1,28 @@
-/** 148074667 → "148.1M", 4172900 → "4.2M", 40900 → "40.9k", 512 → "512"; null → "—" (unavailable, never 0). */
+/**
+ * 148074667 → "148.1M", 2200000 → "2.2M", 512000 → "512k", 40900 → "40.9k", 512 → "512";
+ * null → "—" (unavailable, never 0). A whole-number k/M drops its ".0".
+ */
 export function fmtTokens(tokens: number | null): string {
   if (tokens === null) return "—";
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
+  const short = (value: number): string => value.toFixed(1).replace(/\.0$/, "");
+  if (tokens >= 1_000_000) return `${short(tokens / 1_000_000)}M`;
+  if (tokens >= 1000) return `${short(tokens / 1000)}k`;
+  return String(Math.round(tokens));
+}
+
+/** 411000 → "6m 51s", 59000 → "59s", 3720000 → "62m 0s"; null → "—". */
+export function fmtMs(ms: number | null): string {
+  if (ms === null) return "—";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+/** 1.987 → "$1.99", 0.004 → "<$0.01", 0 → "$0.00"; null → "—". */
+export function fmtUsd(usd: number | null): string {
+  if (usd === null) return "—";
+  if (usd > 0 && usd < 0.005) return "<$0.01";
+  return `$${usd.toFixed(2)}`;
 }
 
 /**

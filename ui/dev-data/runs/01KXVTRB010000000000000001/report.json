@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 9,
   "generated_at": "2026-07-20T02:00:00.000Z",
   "run": {
     "id": "01KXVTRB010000000000000001",
@@ -137,6 +137,27 @@
         "attempts": 0,
         "recalled": 0,
         "rate": null
+      },
+      "aggregate": {
+        "attempts": 15,
+        "completed": 15,
+        "passed": 8,
+        "failed": 7,
+        "incomplete": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "pass_rate_all": 0.5333333333333333,
+        "pass_rate_discriminating": 0.5,
+        "discriminating_evals": 2,
+        "discriminating_passed": 3,
+        "discriminating_scored": 6,
+        "median_agent_ms": 52400,
+        "agent_time_attempts": 15,
+        "mean_tokens_in": 110.2,
+        "mean_tokens_out": 910.2,
+        "token_attempts": 15,
+        "cost_usd": 1.0500000000000005,
+        "cost_attempts": 15
       }
     },
     {
@@ -153,6 +174,27 @@
         "attempts": 0,
         "recalled": 0,
         "rate": null
+      },
+      "aggregate": {
+        "attempts": 10,
+        "completed": 10,
+        "passed": 4,
+        "failed": 6,
+        "incomplete": 0,
+        "errors": 0,
+        "timeouts": 3,
+        "pass_rate_all": 0.4,
+        "pass_rate_discriminating": 0.25,
+        "discriminating_evals": 2,
+        "discriminating_passed": 1,
+        "discriminating_scored": 4,
+        "median_agent_ms": 52875,
+        "agent_time_attempts": 10,
+        "mean_tokens_in": 117.2,
+        "mean_tokens_out": 917.2,
+        "token_attempts": 10,
+        "cost_usd": 0.7000000000000002,
+        "cost_attempts": 10
       }
     }
   ],

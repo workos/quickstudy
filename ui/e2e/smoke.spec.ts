@@ -1,6 +1,7 @@
 /**
  * UI smoke suite (v3 shapes):
- *   - served mode: matrix / compare / report render with data
+ *   - served mode: matrix / compare / report render with data; the leaderboard
+ *     ranks experiments above the matrix
  *   - offline mode: file:// load with every network scheme aborted → the
  *     heatmap still renders (inline data index)
  *   - the heatmap cell states (incl. graded timeouts) render distinctly and drill down correctly
@@ -75,6 +76,29 @@ test.describe("served mode: three routes render with data", () => {
     // defaults to benchmark.
     await expect(page.getByTestId("suite-benchmark")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("suite-regression")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("leaderboard ranks experiments by discriminating pass rate above the matrix", async ({ page }) => {
+    await page.goto("/site/index.html#/");
+    const board = page.getByTestId("leaderboard");
+    await expect(board).toBeVisible();
+    await expect(page.getByTestId("leaderboard-stale")).toHaveCount(0);
+    const rows = board.locator("tbody tr");
+    await expect(rows).toHaveCount(6);
+    const order = await rows.evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+    expect(order).toEqual([
+      "leaderboard-row-claude-docs",
+      "leaderboard-row-codex-cli",
+      "leaderboard-row-claude-cli",
+      "leaderboard-row-codex-docs",
+      "leaderboard-row-codex-mcp",
+      "leaderboard-row-claude-mcp",
+    ]);
+    const first = page.getByTestId("leaderboard-row-claude-docs");
+    await expect(first).toContainText("model-a-1");
+    await expect(first.getByTestId("leaderboard-pass")).toHaveText("9/9 · 9/9");
+    await expect(first.getByTestId("leaderboard-cost")).toContainText("9/9 reported");
+    await expect(page.getByTestId("leaderboard-row-codex-cli").getByTestId("leaderboard-cost")).toContainText("8/9 reported");
   });
 
   test("metadata filters narrow the eval rows without touching run identity", async ({ page }) => {

@@ -217,6 +217,39 @@ either side. The summary sentence is a fixed template that never includes
 eval or check names; the names are in the structured `suspects` list, which
 the matrix banner and the text report's `suspect:` lines display.
 
+### Leaderboard
+
+Each entry in `report.json`'s `experiments[]` carries an `aggregate`: one
+leaderboard row per experiment, rendered as a table above the matrix and in
+the text report. Every number in it except SDK recall counts **benchmark-suite
+attempts only**, so regression evals never move the ranking. That is why the
+row's `cost_usd` can be lower than the run-wide `telemetry.cost_usd`. Its
+columns and their denominators:
+
+- **Pass rate (all · discriminating)**: `passed / scored` over the
+  experiment's benchmark pairs, then the same over only the evals whose band
+  is `discriminating` (`discriminating_passed / discriminating_scored`).
+  Incomplete and errored attempts count in `attempts` but never in `scored`.
+  The discriminating rate is null when the experiment scored no
+  discriminating eval.
+- **Agent time (median)**: the median of `agent_finished_at − agent_started_at`
+  over scored attempts that recorded both stamps (`agent_time_attempts`). An
+  even count takes the mean of the two middle values.
+- **Tokens/run (in)**: the mean over attempts that reported input tokens.
+- **Cost/run**: the mean provider-reported cost over the attempts that
+  reported it, shown with `cost_attempts / attempts reported`, or
+  `not reported (0/N)` when none did. With `--pricing`, the row also carries
+  `estimated_cost_usd` and `estimated_attempts` (shown as `est.`). Without
+  pricing, those keys are absent.
+- **SDK recall**: the same `sdk_recall` the report already states per
+  experiment, over every suite.
+
+Rows sort by discriminating pass rate (nulls last), then the all-eval pass
+rate, then experiment id. Unavailable values render as "—", never 0. A report
+written before the leaderboard existed (`schema_version` < 9) shows a
+one-line note to regenerate it with `quickstudy report <run-id>`. `export`
+rebuilds such stored reports automatically.
+
 For missing Codex dollar telemetry, `report --pricing <file>` can calculate
 [retrospective token-cost estimates](./cost-estimates.md) from saved transcripts
 and a runtime rate snapshot. These supplement reported cost rather than replacing
