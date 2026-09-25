@@ -32,10 +32,18 @@ import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord }
 import type { SurfaceUsage } from "../surface-usage.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts";
-import { collectBands, collectScorerHealth, type EvalBand, type ScorerHealth } from "./scorer-health.ts";
+import {
+  collectBands,
+  collectScorerHealth,
+  experimentRole,
+  type EvalBand,
+  type ExperimentRole,
+  type ScorerHealth,
+} from "./scorer-health.ts";
 import { collectExperimentAggregate, compareLeaderboard, type ExperimentAggregate } from "./aggregate.ts";
 
-export type { EvalBand, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
+export type { EvalBand, ExperimentRole, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
+export { experimentRole } from "./scorer-health.ts";
 export type { ExperimentAggregate } from "./aggregate.ts";
 export { compareLeaderboard } from "./aggregate.ts";
 
@@ -47,7 +55,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 9;
+export const REPORT_SCHEMA_VERSION = 10;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -79,7 +87,9 @@ export function methodologyNote(trials: number): string {
     `recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded ` +
     `checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every ` +
     `scored attempt of an eval under every arm while another check in the same attempts passed: a statement ` +
-    `about the instrument, not about any treatment.`
+    `about the instrument, not about any treatment. Control experiments — the oracle, which applies each ` +
+    `eval's reference solution, and the echo no-op — are reported alongside the arms but are never arms: ` +
+    `bands and scorer health are decided over the agent experiments only, and controls sort after them.`
   );
 }
 
@@ -112,6 +122,13 @@ export interface ReportExperiment {
   experiment_id: string;
   treatment: string | null;
   agent: ReportAgentIdentity;
+  /**
+   * "agent" for an arm; "positive-control" (the oracle) and "negative-control"
+   * (the echo no-op) never decide a band or a scorer-health suspect. Optional on
+   * the wire: absent in schema_version < 10 artifacts; readers treat absence as
+   * "agent".
+   */
+  role?: ExperimentRole;
   /**
    * Optional on the wire: absent in schema_version < 7 artifacts, which the
    * export may still carry — readers must tolerate absence.
@@ -161,8 +178,9 @@ export interface ReportPair {
   flaky: boolean;
   checks: ReportCheck[];
   /**
-   * The eval's band, denormalised onto each of its pairs: decided over the
-   * eval's pairs with scored > 0; null when fewer than 2 arms scored. Absent
+   * The eval's band, denormalised onto each of its pairs (control pairs too):
+   * decided over the eval's agent pairs with scored > 0; null when fewer than 2
+   * agent arms scored (before schema 10, controls counted as arms). Absent
    * in schema_version < 8 artifacts; readers treat absence as unbanded.
    */
   band: EvalBand | null;
@@ -412,6 +430,15 @@ export function collectRecall(attempts: AttemptRecord[], experimentId: string): 
   return { attempts: total, recalled, rate: total > 0 ? recalled / total : null };
 }
 
+/** The run's control experiments, by their recorded adapter. */
+function controlExperiments(run: RunRecord): Set<string> {
+  return new Set(
+    run.config.experimentIds.filter(
+      (id) => experimentRole(run.manifest.experiments[id]?.components.agent?.adapter ?? "unspecified") !== "agent",
+    ),
+  );
+}
+
 function collectExperiments(
   run: RunRecord,
   attempts: AttemptRecord[],
@@ -425,6 +452,7 @@ function collectExperiments(
       return {
         experiment_id: experimentId,
         treatment: treatmentOf(run, experimentId),
+        role: experimentRole(agent?.adapter ?? "unspecified"),
         agent: {
           adapter: agent?.adapter ?? "unspecified",
           provider: agent?.provider ?? "unspecified",
@@ -599,9 +627,10 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   if (publication && publication.eligible.length === 0) throw new ReportError(`no eligible complete samples for run ${runId}: ${publication.omitted.map((p) => `${p.eval_id} × ${p.experiment_id}: ${p.reasons.join("; ")}`).join(" | ")}`);
   const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
   const pairs = collectPairs(attempts);
-  const bands = collectBands(pairs);
+  const controls = controlExperiments(run);
+  const bands = collectBands(pairs, controls);
   for (const pair of pairs) pair.band = bands.get(pair.eval_id) ?? null;
-  const scorerHealth = collectScorerHealth(attempts, pairs);
+  const scorerHealth = collectScorerHealth(attempts, pairs, controls);
   const costEstimate = options.pricing === undefined ? undefined : estimateRunCosts(run, attempts, options.resultsDir, options.pricing);
 
   const methodology = methodologyNote(run.config.trials) + (costEstimate === undefined ? "" :
@@ -674,7 +703,8 @@ function renderLeaderboard(experiments: ReportExperiment[]): string[] {
       (typeof agg.estimated_cost_usd === "number" ? ` +$${agg.estimated_cost_usd.toFixed(4)} est.` : "");
     const recall = experiment.sdk_recall;
     const recallText = recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts}` : "n/a";
-    return [experiment.experiment_id, `${model}${reasoning}`, `${all} · ${disc}`, time, tokens, cost, recallText];
+    const id = (experiment.role ?? "agent") === "agent" ? experiment.experiment_id : `${experiment.experiment_id} (control)`;
+    return [id, `${model}${reasoning}`, `${all} · ${disc}`, time, tokens, cost, recallText];
   });
   const widths = header.map((title, i) => Math.max(title.length, ...rows.map((row) => row[i]!.length)));
   const format = (cells: string[]): string => `  ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join("  ").trimEnd()}`;

@@ -21,7 +21,7 @@ import {
   REPORT_SCHEMA_VERSION,
   type ReportJson,
 } from "../src/report/report.ts";
-import { collectBands, collectScorerHealth } from "../src/report/scorer-health.ts";
+import { collectBands, collectScorerHealth, experimentRole } from "../src/report/scorer-health.ts";
 import { ResultsStore, type AttemptRecord } from "../src/store/db.ts";
 
 const roots: string[] = [];
@@ -92,6 +92,72 @@ describe("bands", () => {
     expect(bandOf(attempts)).toBe("solved-by-all");
     // With only one scored arm left, the zero-scored arm does not make two.
     expect(bandOf([...trials("e1", "x", [false]), attempt("e1", "z", "error", false)])).toBeNull();
+  });
+});
+
+describe("control experiments", () => {
+  const controls = new Set(["oracle", "nop"]);
+  const shapeFails = (): CheckResult[] => [
+    { name: "shape", passed: false },
+    { name: "e2e", passed: true },
+  ];
+  const allPass = (): CheckResult[] => [
+    { name: "shape", passed: true },
+    { name: "e2e", passed: true },
+  ];
+
+  test("the built-in adapters name the controls; every other adapter is an agent", () => {
+    expect(experimentRole("oracle")).toBe("positive-control");
+    expect(experimentRole("echo")).toBe("negative-control");
+    expect(experimentRole("claude")).toBe("agent");
+    expect(experimentRole("unspecified")).toBe("agent");
+  });
+
+  test("an oracle that passes and a no-op that fails never make an eval discriminating", () => {
+    const attempts = [
+      ...trials("e1", "x", [false]),
+      ...trials("e1", "y", [false]),
+      ...trials("e1", "oracle", [true]),
+      ...trials("e1", "nop", [false]),
+      ...trials("e2", "x", [true]),
+      ...trials("e2", "y", [true]),
+      ...trials("e2", "oracle", [true]),
+      ...trials("e2", "nop", [false]),
+    ];
+    const pairs = collectPairs(attempts);
+    expect(collectBands(pairs).get("e1")).toBe("discriminating");
+    expect(collectBands(pairs, controls).get("e1")).toBe("failed-by-all");
+    expect(collectBands(pairs, controls).get("e2")).toBe("solved-by-all");
+  });
+
+  test("one agent arm beside the controls is unbanded, and a control-only eval still gets a null entry", () => {
+    const attempts = [
+      ...trials("e1", "x", [true]),
+      ...trials("e1", "oracle", [true]),
+      ...trials("e1", "nop", [false]),
+      ...trials("e2", "oracle", [true]),
+    ];
+    const bands = collectBands(collectPairs(attempts), controls);
+    expect(bands.get("e1")).toBeNull();
+    expect(bands.has("e2")).toBeTrue();
+    expect(bands.get("e2")).toBeNull();
+  });
+
+  test("a check every agent arm failed is a suspect although the oracle passed it", () => {
+    const attempts = [
+      ...trials("e1", "x", [false, false], shapeFails),
+      ...trials("e1", "y", [false, false], shapeFails),
+      ...trials("e1", "oracle", [true], allPass),
+      ...trials("e1", "nop", [false], () => [
+        { name: "shape", passed: false },
+        { name: "e2e", passed: false },
+      ]),
+    ];
+    const pairs = collectPairs(attempts);
+    expect(collectScorerHealth(attempts, pairs).suspects).toEqual([]);
+    expect(collectScorerHealth(attempts, pairs, controls).suspects).toEqual([
+      { eval_id: "e1", check: "shape", experiments: ["x", "y"], attempts: 4, passing_checks: ["e2e"] },
+    ]);
   });
 });
 
@@ -204,7 +270,7 @@ describe("scorer health", () => {
     try {
       const report = buildReport({ store, runId, resultsDir });
       expect(report.schema_version).toBe(REPORT_SCHEMA_VERSION);
-      expect(report.schema_version).toBe(9);
+      expect(report.schema_version).toBe(10);
       expect(report.scorer_health).toBeDefined();
       expect(report.scorer_health?.suspects).toEqual([]);
       for (const pair of report.pairs) expect(pair.band === null || typeof pair.band === "string").toBeTrue();

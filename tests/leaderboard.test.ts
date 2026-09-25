@@ -247,6 +247,66 @@ describe("aggregate", () => {
   });
 });
 
+describe("control experiments on the leaderboard", () => {
+  const experiment = (id: string, disc: number | null, role?: ReportExperiment["role"]): ReportExperiment =>
+    ({
+      experiment_id: id,
+      treatment: null,
+      agent: { adapter: "x", provider: "p", model: "m", reasoning: "r", cli_version: "v" },
+      ...(role ? { role } : {}),
+      aggregate: { pass_rate_discriminating: disc, pass_rate_all: disc } as ReportExperiment["aggregate"],
+    }) as ReportExperiment;
+
+  test("controls sort after every agent arm, whatever their rate; absent role is an agent", () => {
+    const sorted = [
+      experiment("oracle", 1, "positive-control"),
+      experiment("nop", 0, "negative-control"),
+      experiment("weak", 0.2, "agent"),
+      experiment("legacy", 0.5),
+    ].sort(compareLeaderboard);
+    expect(sorted.map((e) => e.experiment_id)).toEqual(["legacy", "weak", "oracle", "nop"]);
+  });
+
+  test("buildReport marks the controls, bands over the agents alone and says so in the methodology", () => {
+    const agentsFail = (id: string, experimentId: string, passed: boolean): AttemptRecord =>
+      attempt(id, experimentId, { result: { passed, checks: [] }, surfaceUsage: null });
+    const attempts = [
+      agentsFail("e1", "agent-a", false),
+      agentsFail("e1", "agent-b", false),
+      agentsFail("e1", "oracle", true),
+      agentsFail("e1", "nop", false),
+    ];
+    const agent = (adapter: string) => ({ components: { treatment: null, agent: { adapter, provider: "p", model: "m", reasoning: "r", cliVersion: "v" } } });
+    const run = {
+      id: "run",
+      startedAt: 0,
+      finishedAt: 1,
+      config: { trials: 1, evalIds: ["e1"], experimentIds: ["agent-a", "agent-b", "nop", "oracle"] },
+      manifest: {
+        hash: "h",
+        experiments: { "agent-a": agent("claude"), "agent-b": agent("codex"), nop: agent("echo"), oracle: agent("oracle") },
+      },
+      manifestHash: "h",
+    };
+    const store = { getRun: () => run, listRuns: () => [run], listAttempts: () => attempts };
+    const report = buildReport({ store: store as never, runId: "run", resultsDir: tempRoot() });
+    expect(report.schema_version).toBe(REPORT_SCHEMA_VERSION);
+    expect(Object.fromEntries((report.experiments ?? []).map((e) => [e.experiment_id, e.role]))).toEqual({
+      "agent-a": "agent",
+      "agent-b": "agent",
+      nop: "negative-control",
+      oracle: "positive-control",
+    });
+    // Every agent failed: the controls no longer make the eval look discriminating.
+    expect(new Set(report.pairs.map((pair) => pair.band))).toEqual(new Set(["failed-by-all"]));
+    expect(report.methodology).toContain("bands and scorer health are decided over the agent experiments only");
+    const text = renderReportText(report);
+    expect(text).toContain("oracle (control)");
+    expect(text).toContain("nop (control)");
+    expect(text).not.toContain("agent-a (control)");
+  });
+});
+
 describe("stale schema rebuild", () => {
   test("export rebuilds a schema 6 report.json into one carrying aggregates", async () => {
     const { store, resultsDir, runId, root } = seeded();

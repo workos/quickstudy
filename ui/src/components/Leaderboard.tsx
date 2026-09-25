@@ -82,6 +82,15 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
                       <code>{experiment.experiment_id}</code>
                       {experiment.treatment !== null ? ` · ${experiment.treatment}` : ""}
                     </span>
+                    {(experiment.role ?? "agent") !== "agent" && (
+                      <span
+                        className="tag"
+                        data-testid="leaderboard-control"
+                        title="A control checks the instrument; it is not an arm and never decides a band."
+                      >
+                        {experiment.role === "positive-control" ? "positive control" : "negative control"}
+                      </span>
+                    )}
                   </td>
                   <td data-testid="leaderboard-pass">
                     <PassCell experiment={experiment} />
