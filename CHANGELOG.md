@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/workos/quickstudy/compare/v0.4.0...v0.5.0) (2026-09-25)
+
+
+### Features
+
+* **report:** keep control experiments out of bands, scorer health and the leaderboard lead ([#20](https://github.com/workos/quickstudy/issues/20)) ([34dd802](https://github.com/workos/quickstudy/commit/34dd8024c4f1d9e6926e75032029cbd69a0ecae8))
+
 ## [0.4.0](https://github.com/workos/quickstudy/compare/v0.3.0...v0.4.0) (2026-09-24)
 
 
