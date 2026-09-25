@@ -447,26 +447,51 @@ function isBuiltIn(
 }
 
 /**
- * An experiment's role as the run recorded it. A run from before roles were
- * recorded (so an export rebuilding its schema-9 report) falls back to the
- * manifest: a control only when the recorded agent is a built-in's exact pinned
- * identity — the oracle's (which refuses a scripted command), or the echo
- * adapter's on a host runtime. A name alone never makes a control.
+ * Every attempt of the experiment carries the telemetry only a built-in leaves:
+ * the oracle runs no model (turns 0, cost 0, tokens unavailable); echo makes one
+ * canned turn at no cost. An experiment with no attempts proves nothing.
  */
-function roleOf(run: RunRecord, experimentId: string): ExperimentRole {
+function attemptsLookLike(attempts: AttemptRecord[], experimentId: string, builtIn: "oracle" | "echo"): boolean {
+  const mine = attempts.filter((attempt) => attempt.experimentId === experimentId && attempt.status !== "error");
+  if (mine.length === 0) return false;
+  return mine.every((attempt) =>
+    builtIn === "oracle"
+      ? attempt.turns === 0 && attempt.costUsd === 0 && attempt.tokensIn === null
+      : attempt.turns === 1 && attempt.costUsd === 0,
+  );
+}
+
+/**
+ * An experiment's role as the run recorded it — always, when it did. A run from
+ * before roles were recorded (an export rebuilding its schema-9 report) keeps no
+ * record of which adapter ran, so the fallback asks for two independent signs:
+ * the manifest's declared agent is a built-in's exact pinned identity (echo only
+ * on a host runtime — in a container it can only be a scripted command), AND
+ * every attempt carries that built-in's telemetry fingerprint (no model spend).
+ * A name alone, or an identity alone, never makes a control.
+ */
+function roleOf(run: RunRecord, attempts: AttemptRecord[], experimentId: string): ExperimentRole {
   const recorded = run.config.roles?.[experimentId];
   if (recorded !== undefined) return recorded;
   const components = run.manifest.experiments[experimentId]?.components;
   const agent = components?.agent;
   if (agent === undefined) return "agent";
-  if (isBuiltIn(agent, "oracle", ORACLE_IDENTITY)) return "positive-control";
-  if (isBuiltIn(agent, "echo", ECHO_IDENTITY) && (components?.image ?? null) === null) return "negative-control";
+  if (isBuiltIn(agent, "oracle", ORACLE_IDENTITY) && attemptsLookLike(attempts, experimentId, "oracle")) {
+    return "positive-control";
+  }
+  if (
+    isBuiltIn(agent, "echo", ECHO_IDENTITY) &&
+    (components?.image ?? null) === null &&
+    attemptsLookLike(attempts, experimentId, "echo")
+  ) {
+    return "negative-control";
+  }
   return "agent";
 }
 
-/** The run's control experiments, from the roles it recorded. */
-function controlExperiments(run: RunRecord): Set<string> {
-  return new Set(run.config.experimentIds.filter((id) => roleOf(run, id) !== "agent"));
+/** The run's control experiments. */
+function controlExperiments(run: RunRecord, attempts: AttemptRecord[]): Set<string> {
+  return new Set(run.config.experimentIds.filter((id) => roleOf(run, attempts, id) !== "agent"));
 }
 
 function collectExperiments(
@@ -482,7 +507,7 @@ function collectExperiments(
       return {
         experiment_id: experimentId,
         treatment: treatmentOf(run, experimentId),
-        role: roleOf(run, experimentId),
+        role: roleOf(run, attempts, experimentId),
         agent: {
           adapter: agent?.adapter ?? "unspecified",
           provider: agent?.provider ?? "unspecified",
@@ -657,7 +682,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   if (publication && publication.eligible.length === 0) throw new ReportError(`no eligible complete samples for run ${runId}: ${publication.omitted.map((p) => `${p.eval_id} × ${p.experiment_id}: ${p.reasons.join("; ")}`).join(" | ")}`);
   const attempts = publication ? current.filter((a) => publication.eligible.some((p) => p.eval_id === a.evalId && p.experiment_id === a.experimentId)) : current;
   const pairs = collectPairs(attempts);
-  const controls = controlExperiments(run);
+  const controls = controlExperiments(run, attempts);
   const bands = collectBands(pairs, controls);
   for (const pair of pairs) pair.band = bands.get(pair.eval_id) ?? null;
   const scorerHealth = collectScorerHealth(attempts, pairs, controls);

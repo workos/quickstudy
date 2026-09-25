@@ -316,8 +316,8 @@ describe("control experiments on the leaderboard", () => {
     const attempts = [
       attempt("e1", "agent-a", { result: { passed: false, checks: [] }, surfaceUsage: null }),
       attempt("e1", "agent-b", { result: { passed: false, checks: [] }, surfaceUsage: null }),
-      attempt("e1", "oracle", { result: { passed: true, checks: [] }, surfaceUsage: null }),
-      attempt("e1", "nop", { result: { passed: false, checks: [] }, surfaceUsage: null }),
+      attempt("e1", "oracle", { result: { passed: true, checks: [] }, surfaceUsage: null, turns: 0, costUsd: 0, tokensIn: null }),
+      attempt("e1", "nop", { result: { passed: false, checks: [] }, surfaceUsage: null, turns: 1, costUsd: 0, tokensIn: 800 }),
     ];
     const identity = (adapter: string, model: string, image: unknown = null) => ({
       components: { treatment: null, image, agent: { adapter, provider: "local", model, reasoning: "none", cliVersion: "built-in" } },
@@ -358,6 +358,14 @@ describe("control experiments on the leaderboard", () => {
     const store2 = { getRun: () => scripted, listRuns: () => [scripted], listAttempts: () => attempts };
     const rebuilt = buildReport({ store: store2 as never, runId: "run", resultsDir: tempRoot() });
     expect(rebuilt.experiments?.find((e) => e.experiment_id === "nop")?.role).toBe("agent");
+
+    // A custom adapter that declared the oracle's exact identity but did model work is an agent.
+    const spoofed = attempts.map((entry) =>
+      entry.experimentId === "oracle" ? { ...entry, turns: 12, costUsd: 0.4, tokensIn: 90_000 } : entry,
+    );
+    const store3 = { getRun: () => run, listRuns: () => [run], listAttempts: () => spoofed };
+    const impostor = buildReport({ store: store3 as never, runId: "run", resultsDir: tempRoot() });
+    expect(impostor.experiments?.find((e) => e.experiment_id === "oracle")?.role).toBe("agent");
   });
 
   test("a run that recorded no roles reads a real agent under a control's name as an agent", () => {
