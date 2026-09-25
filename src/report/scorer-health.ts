@@ -13,6 +13,15 @@ import type { ReportPair } from "./report.ts";
 
 export type EvalBand = "discriminating" | "solved-by-all" | "failed-by-all";
 
+/**
+ * What an experiment is for (the run's recorded RunConfig.roles). A control
+ * says whether the instrument works — the oracle must pass, the echo no-op must
+ * fail — so bands and scorer health are decided over agent experiments only:
+ * with an oracle and a no-op in the run, no eval could otherwise be solved or
+ * failed by all.
+ */
+export type ExperimentRole = import("../adapters/types.ts").AdapterRole;
+
 export interface ScorerHealthSuspect {
   eval_id: string;
   check: string;
@@ -30,10 +39,19 @@ export interface ScorerHealth {
   summary: string;
 }
 
-/** Per eval: over pairs with scored > 0. null when fewer than 2 arms scored. */
-export function collectBands(pairs: ReportPair[]): Map<string, EvalBand | null> {
+/**
+ * Per eval: over agent pairs with scored > 0 (`controls` names the control
+ * experiments, which never decide a band). null when fewer than 2 agent arms
+ * scored. Every eval of the run gets an entry, control-only ones as null.
+ */
+export function collectBands(
+  pairs: ReportPair[],
+  controls: ReadonlySet<string> = new Set(),
+): Map<string, EvalBand | null> {
   const byEval = new Map<string, ReportPair[]>();
   for (const pair of pairs) {
+    if (!byEval.has(pair.eval_id)) byEval.set(pair.eval_id, []);
+    if (controls.has(pair.experiment_id)) continue;
     const list = byEval.get(pair.eval_id) ?? [];
     list.push(pair);
     byEval.set(pair.eval_id, list);
@@ -62,18 +80,25 @@ export function scorerHealthSummary(suspects: ScorerHealthSuspect[]): string {
 }
 
 /**
- * Suspects come only from `failed-by-all` evals (≥2 scored arms). A check is a
- * suspect when it is present and failing in every scored (completed) attempt
- * of those arms, and at least one other graded check is present and passing
- * in every one of them. A name flagged `graded: false` in any attempt (the
- * pair tally's rule) is excluded from both sides.
+ * Suspects come only from `failed-by-all` evals (≥2 scored agent arms). A
+ * check is a suspect when it is present and failing in every scored
+ * (completed) attempt of those arms, and at least one other graded check is
+ * present and passing in every one of them. A name flagged `graded: false` in
+ * any attempt (the pair tally's rule) is excluded from both sides. Control
+ * experiments (`controls`) are never arms.
  */
-export function collectScorerHealth(attempts: AttemptRecord[], pairs: ReportPair[]): ScorerHealth {
-  const bands = collectBands(pairs);
+export function collectScorerHealth(
+  attempts: AttemptRecord[],
+  pairs: ReportPair[],
+  controls: ReadonlySet<string> = new Set(),
+): ScorerHealth {
+  const bands = collectBands(pairs, controls);
   const suspects: ScorerHealthSuspect[] = [];
   for (const [evalId, band] of bands) {
     if (band !== "failed-by-all") continue;
-    const arms = pairs.filter((pair) => pair.eval_id === evalId && pair.scored > 0);
+    const arms = pairs.filter(
+      (pair) => pair.eval_id === evalId && pair.scored > 0 && !controls.has(pair.experiment_id),
+    );
     const experiments = arms.map((pair) => pair.experiment_id).sort((a, b) => a.localeCompare(b));
     const ungraded = new Set(arms.flatMap((pair) => pair.checks.filter((check) => check.graded === false).map((check) => check.name)));
     const scored = attempts.filter(

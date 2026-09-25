@@ -119,13 +119,16 @@ export function collectExperimentAggregate(
 }
 
 /**
- * Leaderboard order: discriminating pass rate desc (nulls last), then the
+ * Leaderboard order: agent arms before controls (the oracle would otherwise
+ * lead every board), then discriminating pass rate desc (nulls last), then the
  * all-eval pass rate desc (nulls last), then experiment id — a total order,
  * so every consumer renders the same rows in the same sequence.
  */
 export function compareLeaderboard(a: ReportExperiment, b: ReportExperiment): number {
   const rate = (value: number | null | undefined): number => (value === null || value === undefined ? -1 : value);
+  const control = (experiment: ReportExperiment): number => ((experiment.role ?? "agent") === "agent" ? 0 : 1);
   return (
+    control(a) - control(b) ||
     rate(b.aggregate?.pass_rate_discriminating) - rate(a.aggregate?.pass_rate_discriminating) ||
     rate(b.aggregate?.pass_rate_all) - rate(a.aggregate?.pass_rate_all) ||
     a.experiment_id.localeCompare(b.experiment_id)

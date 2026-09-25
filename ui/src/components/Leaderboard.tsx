@@ -1,6 +1,7 @@
 /**
  * Per-experiment leaderboard: one row per experiment from the report's
- * `experiments[].aggregate` (benchmark suite only), sorted by pass rate on
+ * `experiments[].aggregate` (benchmark suite only), controls after the agent
+ * experiments, then sorted by pass rate on
  * discriminating evals. Reports written before the aggregate existed get a
  * one-line "regenerate" note instead of a partial table.
  */
@@ -56,7 +57,7 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
     <div className="card" data-testid="leaderboard">
       <div className="head">
         <h3>Which experiment is best?</h3>
-        <span className="muted">sorted by pass rate on discriminating evals</span>
+        <span className="muted">sorted by pass rate on discriminating evals; controls last</span>
       </div>
       <div className="body">
         <table className="data">
@@ -82,6 +83,15 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
                       <code>{experiment.experiment_id}</code>
                       {experiment.treatment !== null ? ` · ${experiment.treatment}` : ""}
                     </span>
+                    {(experiment.role ?? "agent") !== "agent" && (
+                      <span
+                        className="tag"
+                        data-testid="leaderboard-control"
+                        title="A control checks the instrument; it is not an arm and never decides a band."
+                      >
+                        {experiment.role === "positive-control" ? "positive control" : "negative control"}
+                      </span>
+                    )}
                   </td>
                   <td data-testid="leaderboard-pass">
                     <PassCell experiment={experiment} />

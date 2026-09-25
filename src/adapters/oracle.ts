@@ -27,6 +27,7 @@ function oracleMetrics(): AttemptMetrics {
 /** Host variant: the prepared fixture already carries the solution overlay. */
 export class OracleAdapter implements AgentAdapter {
   readonly name = "oracle";
+  readonly role = "positive-control" as const;
   readonly identity = ORACLE_IDENTITY;
   readonly startingState = "solution" as const;
 
@@ -50,6 +51,7 @@ export class OracleContainerAdapter implements ContainerAgentAdapter {
   readonly name = "oracle";
   readonly identity = ORACLE_IDENTITY;
   readonly startingState = "solution" as const;
+  readonly role = "positive-control" as const;
   readonly requiredHostEnv: readonly string[] = [];
 
   setupFiles(): Record<string, string> {

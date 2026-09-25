@@ -13,6 +13,8 @@ import type { AgentAdapter, AttemptContext, AttemptOutcome, TranscriptEvent } fr
 
 export class EchoAdapter implements AgentAdapter {
   readonly name: string;
+  /** Does nothing, so every eval must fail it: a scorer it passes rewards doing nothing. */
+  readonly role = "negative-control" as const;
   readonly identity = {
     provider: "local", model: "echo-v1", reasoning: "none", cliVersion: "built-in",
     surfacePolicies: { docs: "no-network", mcp: "no-network", cli: "no-network" },

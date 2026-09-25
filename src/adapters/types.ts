@@ -82,12 +82,24 @@ export interface AttemptOutcome {
  */
 export type StartingState = "fixture" | "solution";
 
+/**
+ * What an adapter's attempts are for. "agent" is an arm under measurement; a
+ * control checks the instrument instead: "positive-control" must pass (the
+ * built-in oracle applies each eval's reference solution) and
+ * "negative-control" must fail (the built-in echo adapter does nothing). The
+ * runner records the role of the adapter that actually runs each experiment
+ * (RunConfig.roles); the report never guesses it from a name.
+ */
+export type AdapterRole = "agent" | "positive-control" | "negative-control";
+
 export interface AgentAdapter {
   /** The adapter name experiments select via `agent.adapter` (e.g. "echo"). */
   name: string;
   identity?: AdapterIdentityConfig;
   /** Starting workspace the runner prepares for this adapter (default "fixture"). */
   startingState?: StartingState;
+  /** What the adapter's attempts are for (default "agent"). */
+  role?: AdapterRole;
   runAttempt(ctx: AttemptContext): Promise<AttemptOutcome>;
 }
 
@@ -128,6 +140,8 @@ export interface ContainerAgentAdapter {
   identity?: AdapterIdentityConfig;
   /** Starting workspace the runner prepares for this adapter (default "fixture"). */
   startingState?: StartingState;
+  /** What the adapter's attempts are for (default "agent"). */
+  role?: AdapterRole;
   /** Command used during preflight to record the executable's exact version. */
   versionCommand?: readonly string[];
   /**

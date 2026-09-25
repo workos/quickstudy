@@ -506,6 +506,18 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       // ON THE RUN: the manifest holds runtime config only as an opaque hash,
       // so the report could never recompute this after the fact.
       groups: compareGroups(options.experiments.map((entry) => entry.experiment), manifest),
+      // Roles come from the resolved adapter, never its name: a scripted
+      // container command is an agent whatever `agent.adapter` says.
+      roles: Object.fromEntries(
+        [...experimentsById.values()].map((experiment) => [
+          experiment.id,
+          experiment.runtime.kind === "host"
+            ? (hostAdapters[experiment.agent.adapter]?.role ?? "agent")
+            : (experiment.runtime.command ?? []).length > 0
+              ? "agent"
+              : (containerAgents.get(experiment.id)?.role ?? "agent"),
+        ]),
+      ),
       ...(offeredSurfaces !== undefined ? { surfaces: offeredSurfaces } : {}),
     };
 
