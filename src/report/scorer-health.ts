@@ -14,21 +14,13 @@ import type { ReportPair } from "./report.ts";
 export type EvalBand = "discriminating" | "solved-by-all" | "failed-by-all";
 
 /**
- * What an experiment is for. The built-in oracle adapter applies each eval's
- * reference solution (a positive control: it must pass) and the built-in echo
- * adapter leaves the fixture alone (a negative control: it must fail). A
- * control says whether the instrument works; it is never an arm being compared,
- * so bands and scorer health are decided over agent arms only — with an oracle
- * and a no-op in the run, no eval could otherwise be solved or failed by all.
+ * What an experiment is for (the run's recorded RunConfig.roles). A control
+ * says whether the instrument works — the oracle must pass, the echo no-op must
+ * fail — so bands and scorer health are decided over agent experiments only:
+ * with an oracle and a no-op in the run, no eval could otherwise be solved or
+ * failed by all.
  */
-export type ExperimentRole = "agent" | "positive-control" | "negative-control";
-
-/** The role implied by an experiment's recorded adapter name. */
-export function experimentRole(adapter: string): ExperimentRole {
-  if (adapter === "oracle") return "positive-control";
-  if (adapter === "echo") return "negative-control";
-  return "agent";
-}
+export type ExperimentRole = import("../adapters/types.ts").AdapterRole;
 
 export interface ScorerHealthSuspect {
   eval_id: string;

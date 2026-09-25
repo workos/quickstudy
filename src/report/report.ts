@@ -35,7 +35,6 @@ import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts
 import {
   collectBands,
   collectScorerHealth,
-  experimentRole,
   type EvalBand,
   type ExperimentRole,
   type ScorerHealth,
@@ -43,7 +42,6 @@ import {
 import { collectExperimentAggregate, compareLeaderboard, type ExperimentAggregate } from "./aggregate.ts";
 
 export type { EvalBand, ExperimentRole, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
-export { experimentRole } from "./scorer-health.ts";
 export type { ExperimentAggregate } from "./aggregate.ts";
 export { compareLeaderboard } from "./aggregate.ts";
 
@@ -87,9 +85,10 @@ export function methodologyNote(trials: number): string {
     `recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded ` +
     `checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every ` +
     `scored attempt of an eval under every arm while another check in the same attempts passed: a statement ` +
-    `about the instrument, not about any treatment. Control experiments — the oracle, which applies each ` +
-    `eval's reference solution, and the echo no-op — are reported alongside the arms but are never arms: ` +
-    `bands and scorer health are decided over the agent experiments only, and controls sort after them.`
+    `about the instrument, not about any treatment. Control experiments — an oracle that applies each eval's ` +
+    `reference solution, a no-op that changes nothing — are reported alongside the agent experiments and ` +
+    `tagged as controls wherever they appear; bands and scorer health are decided over the agent experiments ` +
+    `only, and controls are ranked after every agent experiment.`
   );
 }
 
@@ -430,13 +429,14 @@ export function collectRecall(attempts: AttemptRecord[], experimentId: string): 
   return { attempts: total, recalled, rate: total > 0 ? recalled / total : null };
 }
 
-/** The run's control experiments, by their recorded adapter. */
+/** An experiment's role as the run recorded it; "agent" when the run predates roles. */
+function roleOf(run: RunRecord, experimentId: string): ExperimentRole {
+  return run.config.roles?.[experimentId] ?? "agent";
+}
+
+/** The run's control experiments, from the roles it recorded. */
 function controlExperiments(run: RunRecord): Set<string> {
-  return new Set(
-    run.config.experimentIds.filter(
-      (id) => experimentRole(run.manifest.experiments[id]?.components.agent?.adapter ?? "unspecified") !== "agent",
-    ),
-  );
+  return new Set(run.config.experimentIds.filter((id) => roleOf(run, id) !== "agent"));
 }
 
 function collectExperiments(
@@ -452,7 +452,7 @@ function collectExperiments(
       return {
         experiment_id: experimentId,
         treatment: treatmentOf(run, experimentId),
-        role: experimentRole(agent?.adapter ?? "unspecified"),
+        role: roleOf(run, experimentId),
         agent: {
           adapter: agent?.adapter ?? "unspecified",
           provider: agent?.provider ?? "unspecified",
@@ -708,7 +708,7 @@ function renderLeaderboard(experiments: ReportExperiment[]): string[] {
   });
   const widths = header.map((title, i) => Math.max(title.length, ...rows.map((row) => row[i]!.length)));
   const format = (cells: string[]): string => `  ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join("  ").trimEnd()}`;
-  return ["leaderboard (benchmark suite, sorted by discriminating pass rate):", format(header), ...rows.map(format)];
+  return ["leaderboard (benchmark suite, sorted by discriminating pass rate; controls last):", format(header), ...rows.map(format)];
 }
 
 /** Render the report as plain text. Renders FROM the JSON, never the store. */
@@ -824,7 +824,9 @@ export function renderReportText(report: ReportJson): string {
       lines.push(`  ${group.group}: compared (raw counts per arm)`);
       for (const arm of group.arms) {
         const cells = arm.evals.map((entry) => `${entry.eval_id} ${entry.display}`).join(", ");
-        lines.push(`    ${arm.experiment_id}${arm.treatment !== null ? ` [${arm.treatment}]` : ""}: ${cells || "no scored attempts"}`);
+        const role = experiments.find((experiment) => experiment.experiment_id === arm.experiment_id)?.role ?? "agent";
+        const control = role === "agent" ? "" : " (control)";
+        lines.push(`    ${arm.experiment_id}${control}${arm.treatment !== null ? ` [${arm.treatment}]` : ""}: ${cells || "no scored attempts"}`);
       }
     }
   }

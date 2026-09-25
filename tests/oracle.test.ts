@@ -156,6 +156,21 @@ describe("run", () => {
     }
     const run = store.getRun(summary.runId)!;
     expect(run.manifest.evals["hello-solution"]?.solution).toMatch(/^[0-9a-f]{64}$/);
+    // The role the resolved adapter declares is recorded on the run, not in the manifest.
+    expect(run.config.roles).toEqual({ "oracle-local": "positive-control" });
+    store.close();
+  });
+
+  test("the recorded role is the resolved adapter's, never its name's", async () => {
+    const evals = discoverEvals(join(ORACLE, "ready"));
+    const experiments = await discoverExperiments(join(ORACLE, "experiments"));
+    const plan = planRun(evals, experiments.map((entry) => entry.experiment), 1);
+    const { store, artifacts } = makeStores();
+    const real = new OracleAdapter();
+    // A supplied adapter registered under the oracle's name that declares no role.
+    const impostor = { name: "oracle", startingState: "solution" as const, runAttempt: real.runAttempt.bind(real) };
+    const summary = await executeRunV3({ evals, experiments, plan, store, artifacts, log: silent, hostAdapters: { oracle: impostor } });
+    expect(store.getRun(summary.runId)!.config.roles).toEqual({ "oracle-local": "agent" });
     store.close();
   });
 

@@ -21,7 +21,9 @@ import {
   REPORT_SCHEMA_VERSION,
   type ReportJson,
 } from "../src/report/report.ts";
-import { collectBands, collectScorerHealth, experimentRole } from "../src/report/scorer-health.ts";
+import { EchoAdapter } from "../src/adapters/echo.ts";
+import { OracleAdapter, OracleContainerAdapter } from "../src/adapters/oracle.ts";
+import { collectBands, collectScorerHealth } from "../src/report/scorer-health.ts";
 import { ResultsStore, type AttemptRecord } from "../src/store/db.ts";
 
 const roots: string[] = [];
@@ -106,11 +108,12 @@ describe("control experiments", () => {
     { name: "e2e", passed: true },
   ];
 
-  test("the built-in adapters name the controls; every other adapter is an agent", () => {
-    expect(experimentRole("oracle")).toBe("positive-control");
-    expect(experimentRole("echo")).toBe("negative-control");
-    expect(experimentRole("claude")).toBe("agent");
-    expect(experimentRole("unspecified")).toBe("agent");
+  test("the built-in control adapters declare their role; an adapter that declares none is an agent", () => {
+    expect(new OracleAdapter().role).toBe("positive-control");
+    expect(new OracleContainerAdapter().role).toBe("positive-control");
+    expect(new EchoAdapter().role).toBe("negative-control");
+    // Renamed, the echo adapter is still a no-op, and still a control.
+    expect(new EchoAdapter("smoke").role).toBe("negative-control");
   });
 
   test("an oracle that passes and a no-op that fails never make an eval discriminating", () => {

@@ -34,6 +34,13 @@ function toLimitKind(value: string | null): LimitKind | null {
 
 /** The run-level configuration recorded in `runs.config_json`. */
 export interface RunConfig {
+  /**
+   * Each experiment's role, from the adapter that actually ran it (a scripted
+   * container command is always "agent"). Recorded here — NOT in the manifest —
+   * like `groups`, so it never perturbs run identity. Absent on older runs: every
+   * experiment then reads as "agent".
+   */
+  roles?: Record<string, import("../adapters/types.ts").AdapterRole>;
   scheduler?: { concurrency: number; seed: string; policy: "seeded-hash-v1"; order: import("../plan.ts").AttemptPlan[] };
   trials: number;
   evalIds: string[];

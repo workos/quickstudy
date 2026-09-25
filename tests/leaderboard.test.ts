@@ -281,7 +281,12 @@ describe("control experiments on the leaderboard", () => {
       id: "run",
       startedAt: 0,
       finishedAt: 1,
-      config: { trials: 1, evalIds: ["e1"], experimentIds: ["agent-a", "agent-b", "nop", "oracle"] },
+      config: {
+        trials: 1,
+        evalIds: ["e1"],
+        experimentIds: ["agent-a", "agent-b", "nop", "oracle"],
+        roles: { "agent-a": "agent", "agent-b": "agent", nop: "negative-control", oracle: "positive-control" },
+      },
       manifest: {
         hash: "h",
         experiments: { "agent-a": agent("claude"), "agent-b": agent("codex"), nop: agent("echo"), oracle: agent("oracle") },
@@ -304,6 +309,27 @@ describe("control experiments on the leaderboard", () => {
     expect(text).toContain("oracle (control)");
     expect(text).toContain("nop (control)");
     expect(text).not.toContain("agent-a (control)");
+    expect(text).toContain("controls last");
+  });
+
+  test("a run that recorded no roles reads every experiment as an agent, whatever its adapter is called", () => {
+    const attempts = [
+      attempt("e1", "agent-a", { result: { passed: false, checks: [] }, surfaceUsage: null }),
+      attempt("e1", "echo", { result: { passed: false, checks: [] }, surfaceUsage: null }),
+    ];
+    const agent = (adapter: string) => ({ components: { treatment: null, agent: { adapter, provider: "p", model: "m", reasoning: "r", cliVersion: "v" } } });
+    const run = {
+      id: "run",
+      startedAt: 0,
+      finishedAt: 1,
+      config: { trials: 1, evalIds: ["e1"], experimentIds: ["agent-a", "echo"] },
+      manifest: { hash: "h", experiments: { "agent-a": agent("claude"), echo: agent("echo") } },
+      manifestHash: "h",
+    };
+    const store = { getRun: () => run, listRuns: () => [run], listAttempts: () => attempts };
+    const report = buildReport({ store: store as never, runId: "run", resultsDir: tempRoot() });
+    expect((report.experiments ?? []).map((e) => e.role)).toEqual(["agent", "agent"]);
+    expect(report.pairs.every((pair) => pair.band === "failed-by-all")).toBeTrue();
   });
 });
 
