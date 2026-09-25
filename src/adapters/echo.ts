@@ -11,19 +11,16 @@ import { cp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentAdapter, AttemptContext, AttemptOutcome, TranscriptEvent } from "./types.ts";
 
-/** The echo adapter's pinned identity — what a manifest records for it. */
-export const ECHO_IDENTITY = {
-  provider: "local", model: "echo-v1", reasoning: "none", cliVersion: "built-in",
-  surfacePolicies: { docs: "no-network", mcp: "no-network", cli: "no-network" },
-  nativeWebControl: "controlled" as const,
-  reproducible: true,
-};
-
 export class EchoAdapter implements AgentAdapter {
   readonly name: string;
   /** Does nothing, so every eval must fail it: a scorer it passes rewards doing nothing. */
   readonly role = "negative-control" as const;
-  readonly identity = ECHO_IDENTITY;
+  readonly identity = {
+    provider: "local", model: "echo-v1", reasoning: "none", cliVersion: "built-in",
+    surfacePolicies: { docs: "no-network", mcp: "no-network", cli: "no-network" },
+    nativeWebControl: "controlled" as const,
+    reproducible: true,
+  };
 
   constructor(name = "echo") {
     this.name = name;

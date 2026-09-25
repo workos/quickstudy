@@ -312,7 +312,7 @@ describe("control experiments on the leaderboard", () => {
     expect(text).toContain("controls last");
   });
 
-  test("a run that recorded no roles falls back to the built-ins' exact identities", () => {
+  test("a run that recorded no roles reads every experiment as an agent — even the built-ins' exact identities", () => {
     const attempts = [
       attempt("e1", "agent-a", { result: { passed: false, checks: [] }, surfaceUsage: null }),
       attempt("e1", "agent-b", { result: { passed: false, checks: [] }, surfaceUsage: null }),
@@ -342,30 +342,10 @@ describe("control experiments on the leaderboard", () => {
     };
     const store = { getRun: () => run, listRuns: () => [run], listAttempts: () => attempts };
     const report = buildReport({ store: store as never, runId: "run", resultsDir: tempRoot() });
-    expect(Object.fromEntries((report.experiments ?? []).map((e) => [e.experiment_id, e.role]))).toEqual({
-      "agent-a": "agent",
-      "agent-b": "agent",
-      nop: "negative-control",
-      oracle: "positive-control",
-    });
-    expect(report.pairs.every((pair) => pair.band === "failed-by-all")).toBeTrue();
-
-    // The echo identity on a container runtime is a scripted command, not the no-op.
-    const scripted = {
-      ...run,
-      manifest: { ...run.manifest, experiments: { ...run.manifest.experiments, nop: identity("echo", "echo-v1", { tag: "img", digest: "d" }) } },
-    };
-    const store2 = { getRun: () => scripted, listRuns: () => [scripted], listAttempts: () => attempts };
-    const rebuilt = buildReport({ store: store2 as never, runId: "run", resultsDir: tempRoot() });
-    expect(rebuilt.experiments?.find((e) => e.experiment_id === "nop")?.role).toBe("agent");
-
-    // A custom adapter that declared the oracle's exact identity but did model work is an agent.
-    const spoofed = attempts.map((entry) =>
-      entry.experimentId === "oracle" ? { ...entry, turns: 12, costUsd: 0.4, tokensIn: 90_000 } : entry,
-    );
-    const store3 = { getRun: () => run, listRuns: () => [run], listAttempts: () => spoofed };
-    const impostor = buildReport({ store: store3 as never, runId: "run", resultsDir: tempRoot() });
-    expect(impostor.experiments?.find((e) => e.experiment_id === "oracle")?.role).toBe("agent");
+    // No record of which adapter ran: nothing is guessed, exactly as before roles existed.
+    expect((report.experiments ?? []).map((e) => e.role)).toEqual(["agent", "agent", "agent", "agent"]);
+    // So the oracle's pass keeps e1 discriminating, as it did at schema 9.
+    expect(report.pairs.every((pair) => pair.band === "discriminating")).toBeTrue();
   });
 
   test("a run that recorded no roles reads a real agent under a control's name as an agent", () => {
