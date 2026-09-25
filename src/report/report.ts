@@ -30,6 +30,8 @@ import { publicationCoverage, trialCoverage, type PairCoverage, type Publication
 import type { ComparisonGroup } from "../experiments/groups.ts";
 import { activeAttempts, type AttemptRecord, type ResultsStore, type RunRecord } from "../store/db.ts";
 import type { SurfaceUsage } from "../surface-usage.ts";
+import { ECHO_IDENTITY } from "../adapters/echo.ts";
+import { ORACLE_IDENTITY } from "../adapters/oracle.ts";
 import { collectPassAtK, displayPassAtK, type PassAtKEntry } from "./pass-at-k.ts";
 import { estimateRunCosts, type Pricing, type RunCostEstimate } from "./costs.ts";
 import {
@@ -429,9 +431,37 @@ export function collectRecall(attempts: AttemptRecord[], experimentId: string): 
   return { attempts: total, recalled, rate: total > 0 ? recalled / total : null };
 }
 
-/** An experiment's role as the run recorded it; "agent" when the run predates roles. */
+/** The manifest's agent components equal a built-in adapter's pinned identity, field for field. */
+function isBuiltIn(
+  agent: { adapter: string; provider: string; model: string; reasoning: string; cliVersion: string },
+  adapter: string,
+  identity: { provider: string; model: string; reasoning: string; cliVersion: string },
+): boolean {
+  return (
+    agent.adapter === adapter &&
+    agent.provider === identity.provider &&
+    agent.model === identity.model &&
+    agent.reasoning === identity.reasoning &&
+    agent.cliVersion === identity.cliVersion
+  );
+}
+
+/**
+ * An experiment's role as the run recorded it. A run from before roles were
+ * recorded (so an export rebuilding its schema-9 report) falls back to the
+ * manifest: a control only when the recorded agent is a built-in's exact pinned
+ * identity — the oracle's (which refuses a scripted command), or the echo
+ * adapter's on a host runtime. A name alone never makes a control.
+ */
 function roleOf(run: RunRecord, experimentId: string): ExperimentRole {
-  return run.config.roles?.[experimentId] ?? "agent";
+  const recorded = run.config.roles?.[experimentId];
+  if (recorded !== undefined) return recorded;
+  const components = run.manifest.experiments[experimentId]?.components;
+  const agent = components?.agent;
+  if (agent === undefined) return "agent";
+  if (isBuiltIn(agent, "oracle", ORACLE_IDENTITY)) return "positive-control";
+  if (isBuiltIn(agent, "echo", ECHO_IDENTITY) && (components?.image ?? null) === null) return "negative-control";
+  return "agent";
 }
 
 /** The run's control experiments, from the roles it recorded. */

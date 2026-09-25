@@ -312,7 +312,55 @@ describe("control experiments on the leaderboard", () => {
     expect(text).toContain("controls last");
   });
 
-  test("a run that recorded no roles reads every experiment as an agent, whatever its adapter is called", () => {
+  test("a run that recorded no roles falls back to the built-ins' exact identities", () => {
+    const attempts = [
+      attempt("e1", "agent-a", { result: { passed: false, checks: [] }, surfaceUsage: null }),
+      attempt("e1", "agent-b", { result: { passed: false, checks: [] }, surfaceUsage: null }),
+      attempt("e1", "oracle", { result: { passed: true, checks: [] }, surfaceUsage: null }),
+      attempt("e1", "nop", { result: { passed: false, checks: [] }, surfaceUsage: null }),
+    ];
+    const identity = (adapter: string, model: string, image: unknown = null) => ({
+      components: { treatment: null, image, agent: { adapter, provider: "local", model, reasoning: "none", cliVersion: "built-in" } },
+    });
+    const claude = { components: { treatment: null, image: null, agent: { adapter: "claude", provider: "p", model: "m", reasoning: "r", cliVersion: "v" } } };
+    const run = {
+      id: "run",
+      startedAt: 0,
+      finishedAt: 1,
+      config: { trials: 1, evalIds: ["e1"], experimentIds: ["agent-a", "agent-b", "nop", "oracle"] },
+      manifest: {
+        hash: "h",
+        experiments: {
+          "agent-a": claude,
+          "agent-b": claude,
+          nop: identity("echo", "echo-v1"),
+          // The oracle runs in a container in real sweeps; its image does not matter.
+          oracle: identity("oracle", "oracle-v1", { tag: "img", digest: "d" }),
+        },
+      },
+      manifestHash: "h",
+    };
+    const store = { getRun: () => run, listRuns: () => [run], listAttempts: () => attempts };
+    const report = buildReport({ store: store as never, runId: "run", resultsDir: tempRoot() });
+    expect(Object.fromEntries((report.experiments ?? []).map((e) => [e.experiment_id, e.role]))).toEqual({
+      "agent-a": "agent",
+      "agent-b": "agent",
+      nop: "negative-control",
+      oracle: "positive-control",
+    });
+    expect(report.pairs.every((pair) => pair.band === "failed-by-all")).toBeTrue();
+
+    // The echo identity on a container runtime is a scripted command, not the no-op.
+    const scripted = {
+      ...run,
+      manifest: { ...run.manifest, experiments: { ...run.manifest.experiments, nop: identity("echo", "echo-v1", { tag: "img", digest: "d" }) } },
+    };
+    const store2 = { getRun: () => scripted, listRuns: () => [scripted], listAttempts: () => attempts };
+    const rebuilt = buildReport({ store: store2 as never, runId: "run", resultsDir: tempRoot() });
+    expect(rebuilt.experiments?.find((e) => e.experiment_id === "nop")?.role).toBe("agent");
+  });
+
+  test("a run that recorded no roles reads a real agent under a control's name as an agent", () => {
     const attempts = [
       attempt("e1", "agent-a", { result: { passed: false, checks: [] }, surfaceUsage: null }),
       attempt("e1", "echo", { result: { passed: false, checks: [] }, surfaceUsage: null }),

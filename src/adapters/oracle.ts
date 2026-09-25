@@ -13,7 +13,8 @@
 import { cp } from "node:fs/promises";
 import type { AgentAdapter, AttemptContext, AttemptMetrics, AttemptOutcome, ContainerAgentAdapter } from "./types.ts";
 
-const ORACLE_IDENTITY = {
+/** The oracle adapter's pinned identity — what a manifest records for it. */
+export const ORACLE_IDENTITY = {
   provider: "local", model: "oracle-v1", reasoning: "none", cliVersion: "built-in",
   surfacePolicies: { docs: "no-network", mcp: "no-network", cli: "no-network" },
   nativeWebControl: "controlled" as const,
