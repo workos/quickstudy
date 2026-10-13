@@ -10,7 +10,13 @@ import type { Experiment, LoadedExperiment } from "../src/experiments/types.ts";
 import type { LoadedEval } from "../src/evals/types.ts";
 import { buildRunManifest } from "../src/manifest.ts";
 import { discoverEvals } from "../src/evals/discovery.ts";
-import { resolve } from "node:path";
+import { executeRunV3 } from "../src/runner/execute.ts";
+import { planRun } from "../src/plan.ts";
+import { ArtifactsStore } from "../src/store/artifacts.ts";
+import { ResultsStore } from "../src/store/db.ts";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const FIXTURE_EVALS = resolve(import.meta.dir, "__fixtures__", "evals");
 
@@ -81,5 +87,32 @@ describe("promptPreamble identity", () => {
     ];
     const allowed = compareGroups(declared.map((e) => e.experiment), buildRunManifest({ evals, experiments: declared, harness }));
     expect(allowed[0]?.comparison).toBe("allowed");
+  });
+});
+
+
+describe("promptPreamble delivery", () => {
+  test("the host runner hands the agent the recorded preamble followed by the verbatim eval body", async () => {
+    const evals = await loadedEvals();
+    const loaded = experiment("hinted", "cli", "A `acme` CLI is on PATH; run `acme --help`.");
+    const root = mkdtempSync(join(tmpdir(), "qs-preamble-"));
+    const store = new ResultsStore(join(root, "results.db"));
+    const artifacts = new ArtifactsStore(join(root, "results"));
+    const summary = await executeRunV3({
+      evals,
+      experiments: [loaded],
+      plan: planRun(evals, [loaded.experiment], 1),
+      store,
+      artifacts,
+      log: () => {},
+    });
+    expect(summary.total).toBe(1);
+    const attempt = store.listAttempts(summary.runId)[0]!;
+    const recorded = store.getRun(summary.runId)!.manifest.pairs?.[pairKey("hello-local", "hinted")]?.promptPreamble;
+    expect(recorded).toBe("A `acme` CLI is on PATH; run `acme --help`.");
+    // The echo adapter records the prompt it received as the first user turn.
+    const transcript = readFileSync(artifacts.paths(summary.runId, attempt.id).transcript, "utf8");
+    const userTurn = transcript.split("\n").map((line) => { try { return JSON.parse(line); } catch { return null; } }).find((event) => event?.role === "user");
+    expect(userTurn?.content).toBe(`${recorded}\n\n${evals[0]!.promptBody}`);
   });
 });

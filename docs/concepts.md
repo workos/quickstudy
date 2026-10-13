@@ -192,9 +192,10 @@ manifest is stored with the run, and comparison groups are diffed against it.
    product-doc fetches and product-naming web searches, MCP tool calls, and
    product CLI commands, where the agent's transcript stream supports
    extraction. Docs evidence comes only from fetches (native web tools, shell
-   fetchers such as `curl`) and searches; a docs URL inside a file the agent
-   wrote is never counted, and `docs.urls` lists fetched pages only, so a
-   `docs` count above the URL total means searches. A docs host may carry a
+   fetchers such as `curl`) and product-naming searches; a docs URL inside a
+   file the agent wrote is never counted. `docs.urls` lists each fetched page
+   once while the count tallies every event, so a count above the URL total
+   comes from repeated fetches, searches, or both. A docs host may carry a
    path prefix (`acme.com/docs`) so API calls to the same domain are not
    mistaken for reading. Availability is not use, and unavailable telemetry
    is never counted as zero use.

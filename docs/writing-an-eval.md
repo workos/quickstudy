@@ -199,10 +199,7 @@ check of any other kind is tallied and shown but never enters SDK recall.
 
 An ungraded check is stored, exported and tallied like any other (the report
 and the UI tag it as recorded, and the matrix's "x/y checks" counts graded
-checks only). The report derives **SDK recall** from ungraded checks: per
-experiment, the scored attempts that recorded at least one ungraded check, and
-of those, the ones whose ungraded checks all passed. If a check name is graded
-in one attempt and ungraded in another, the report tallies it as ungraded.
+checks only). The report derives **SDK recall** from the ungraded checks of kind `sdk` (an ungraded check with no `kind` counts as `sdk`): per experiment, the scored attempts that recorded at least one such check, and of those, the ones whose `sdk` checks all passed. Ungraded checks of any other kind are tallied and shown but never enter that ratio. If a check name is graded in one attempt and ungraded in another, the report tallies it as ungraded.
 
 Two rules of thumb keep scorers honest:
 

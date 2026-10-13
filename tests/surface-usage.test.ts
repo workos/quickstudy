@@ -169,6 +169,46 @@ describe("surface-use telemetry", () => {
     expect(extractSurfaceUsage("codex", real, config).cli).toEqual({ count: 1, commands: ["workos"] });
   });
 
+  test("written examples, prompts and MCP searches are never docs evidence", () => {
+    const raw = [
+      JSON.stringify({ type: "assistant", message: { content: [
+        // the fetcher appears inside an echo, a heredoc body, and a written file: no page was opened
+        { type: "tool_use", id: "b1", name: "Bash", input: { command: "echo \"run: curl https://workos.com/docs/start\"" } },
+        { type: "tool_use", id: "b2", name: "Bash", input: { command: "cat <<'EOF' > README.md\ncurl https://workos.com/docs/start\nEOF" } },
+        // an MCP docs search is MCP use, not web docs use
+        { type: "tool_use", id: "m1", name: "mcp__workos__search_docs", input: { query: "workos login" } },
+        // a docs URL mentioned in a fetch PROMPT (the page fetched is unrelated) or in a search QUERY is not a fetched page
+        { type: "tool_use", id: "f1", name: "WebFetch", input: { url: "https://example.com/blog", prompt: "compare with https://workos.com/docs/sso" } },
+        { type: "tool_use", id: "s1", name: "WebSearch", input: { query: "workos https://workos.com/docs/authkit sessions" } },
+      ] } }),
+    ].join("\n");
+    const usage = extractSurfaceUsage("claude", raw, config);
+    expect(usage.mcp).toEqual({ count: 1, tools: ["mcp__workos__search_docs"] });
+    // exactly one docs event: the product-naming search; no URL was ever fetched
+    expect(usage.docs).toEqual({ count: 1, urls: [] });
+  });
+
+  test("continuation lines, chained heredoc openers and multi-part domains are handled", () => {
+    const raw = [
+      JSON.stringify({ type: "assistant", message: { content: [
+        { type: "tool_use", id: "b1", name: "Bash", input: { command: "curl -sL \\\n  https://workos.com/docs/start" } },
+        { type: "tool_use", id: "b2", name: "Bash", input: { command: "cat <<EOF > README.md && workos --help\nhello\nEOF" } },
+      ] } }),
+    ].join("\n");
+    const usage = extractSurfaceUsage("claude", raw, config);
+    expect(usage.docs).toEqual({ count: 1, urls: ["https://workos.com/docs/start"] });
+    expect(usage.cli).toEqual({ count: 1, commands: ["workos"] });
+    // a path prefix keeps its case; a multi-part suffix still yields the product token
+    const cased = extractSurfaceUsage("claude", JSON.stringify({ type: "assistant", message: { content: [
+      { type: "tool_use", id: "f1", name: "WebFetch", input: { url: "https://acme.co.uk/Docs/start" } },
+      { type: "tool_use", id: "s1", name: "WebSearch", input: { query: "acme sessions" } },
+    ] } }), { docsHosts: ["acme.co.uk/Docs"] });
+    expect(cased.docs).toEqual({ count: 2, urls: ["https://acme.co.uk/Docs/start"] });
+    // Codex reports an opened page as a search item carrying action.url
+    const opened = JSON.stringify({ type: "item.completed", item: { id: "w1", type: "web_search", query: "", action: { type: "open_page", url: "https://workos.com/docs/events" } } });
+    expect(extractSurfaceUsage("codex", opened, config).docs).toEqual({ count: 1, urls: ["https://workos.com/docs/events"] });
+  });
+
   test("returns observed zeroes for a supported stream with no configured surface use", () => {
     expect(extractSurfaceUsage("claude", '{"type":"result"}\n', config)).toEqual({
       docs: { count: 0, urls: [] },
