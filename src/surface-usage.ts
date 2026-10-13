@@ -3,10 +3,18 @@
  *
  * Availability is recorded in the experiment manifest; this module answers a
  * different question: did the agent actually call an MCP tool, invoke the
- * product CLI, or open a product documentation URL? Extraction is deliberately
- * conservative and stores only redacted identifiers. Full shell commands and
- * URL query strings can contain credentials and must remain in the protected
- * raw transcript, never in aggregate telemetry.
+ * product CLI, or reach for the product documentation? Extraction is
+ * deliberately conservative and stores only redacted identifiers. Full shell
+ * commands and URL query strings can contain credentials and must remain in
+ * the protected raw transcript, never in aggregate telemetry.
+ *
+ * Docs evidence comes only from fetches (native web tools, shell fetchers
+ * such as curl) and from web searches that name the product. A docs URL
+ * inside a file the agent WROTE is not a page it opened and is never
+ * counted. `docs.count` is the number of docs events (fetches + searches);
+ * `docs.urls` lists only the fetched pages, so a count above the URL total
+ * means searches. A docs host may carry a path prefix (`acme.com/docs`) so
+ * API calls to the same domain do not count as reading.
  */
 
 import { parseJsonlLines } from "./adapters/parse.ts";
@@ -57,6 +65,8 @@ function claudeInvocations(event: Record<string, unknown>): ToolInvocation[] {
       ...(typeof item["id"] === "string" ? { id: item["id"] } : {}),
       name: item["name"],
       input: item["input"],
+      ...(/^web(fetch|search)$/i.test(item["name"]) ? { kind: "web" as const } : {}),
+      ...(/^bash$/i.test(item["name"]) ? { kind: "command" as const } : {}),
     }];
   });
 }
@@ -75,7 +85,10 @@ function codexInvocations(event: Record<string, unknown>): ToolInvocation[] {
     return [{ ...identity, name: server === "" ? tool : `${server}__${tool}`, input: item["arguments"] ?? item["input"], kind: "mcp" }];
   }
   if (type === "web_search") {
-    return [{ ...identity, name: "web_search", input: item, kind: "web" }];
+    // The started phase carries an empty query; only the completed item says
+    // what was searched. Keyed by the same id, so it still counts once.
+    if (event["type"] !== "item.completed") return [];
+    return [{ ...identity, name: "web_search", input: { query: item["query"], action: item["action"] }, kind: "web" }];
   }
   return [];
 }
@@ -122,36 +135,119 @@ function allStrings(value: unknown, out: string[] = []): string[] {
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>)}\]]+/giu;
 
-function sanitizedDocsUrls(input: unknown, hosts: readonly string[]): string[] {
-  if (hosts.length === 0) return [];
-  const configured = hosts.map((host) => host.trim().toLowerCase().replace(/^\.+|\.+$/g, "")).filter(Boolean);
+/**
+ * A configured documentation target: a host (subdomains match) with an
+ * optional path prefix — `docs.acme.test`, or `acme.com/docs` so that API
+ * traffic to `api.acme.com` is never mistaken for reading the docs.
+ */
+interface DocsTarget {
+  host: string;
+  pathPrefix: string | null;
+}
+
+function docsTargets(hosts: readonly string[]): DocsTarget[] {
+  return hosts
+    .map((entry) => entry.trim().toLowerCase().replace(/^https?:\/\//u, "").replace(/^\.+/u, ""))
+    .filter(Boolean)
+    .map((entry) => {
+      const slash = entry.indexOf("/");
+      if (slash === -1) return { host: entry.replace(/\.+$/u, ""), pathPrefix: null };
+      const prefix = entry.slice(slash).replace(/\/+$/u, "");
+      return { host: entry.slice(0, slash).replace(/\.+$/u, ""), pathPrefix: prefix === "" ? null : prefix };
+    });
+}
+
+function matchesDocsTarget(url: URL, targets: readonly DocsTarget[]): boolean {
+  const host = url.hostname.toLowerCase();
+  return targets.some(
+    (target) =>
+      (host === target.host || host.endsWith(`.${target.host}`)) &&
+      (target.pathPrefix === null || url.pathname === target.pathPrefix || url.pathname.startsWith(`${target.pathPrefix}/`)),
+  );
+}
+
+/** Product tokens a web-search query must mention to count as a docs search (`acme` from `docs.acme.test`). */
+function productTokens(targets: readonly DocsTarget[]): string[] {
+  const tokens = new Set<string>();
+  for (const target of targets) {
+    const labels = target.host.split(".").filter((label) => label !== "www" && label !== "docs");
+    const token = labels.length >= 2 ? labels[labels.length - 2]! : labels[0];
+    if (token && token.length >= 3) tokens.add(token);
+  }
+  return [...tokens];
+}
+
+/**
+ * URLs a shell command actually fetched: only arguments of a fetching
+ * program (`curl`, `wget`, …). A URL inside a heredoc, an echo, or a file
+ * body written through the shell is not a page the agent opened.
+ */
+const SHELL_FETCH = /(?:^|[\s|;&(])(?:curl|wget|xh|http|https|httpie|aria2c|lynx|w3m)\b([^\n|;&]*)/giu;
+
+function fetchedUrlsInCommand(command: string): string[] {
   const urls: string[] = [];
-  for (const text of allStrings(input)) {
-    for (const raw of text.match(URL_PATTERN) ?? []) {
-      try {
-        const url = new URL(raw);
-        const host = url.hostname.toLowerCase();
-        if (!configured.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) continue;
-        url.username = "";
-        url.password = "";
-        url.search = "";
-        url.hash = "";
-        const safe = url.toString();
-        if (!urls.includes(safe)) urls.push(safe);
-      } catch {
-        // A transcript fragment that merely resembles a URL is not evidence.
-      }
-    }
+  for (const match of command.matchAll(SHELL_FETCH)) {
+    for (const url of match[1]?.match(URL_PATTERN) ?? []) urls.push(url);
   }
   return urls;
 }
+
+function sanitizeUrl(raw: string, targets: readonly DocsTarget[]): string | null {
+  try {
+    const url = new URL(raw);
+    if (!matchesDocsTarget(url, targets)) return null;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    // A transcript fragment that merely resembles a URL is not evidence.
+    return null;
+  }
+}
+
+/**
+ * Documentation evidence from ONE invocation: the URLs it fetched (web tools
+ * and shell fetchers only — never the body of a file the agent wrote) and
+ * whether it was a web search naming the product (counted as a docs event,
+ * never listed as a URL: a query is not a page).
+ */
+function docsEvidence(invocation: ToolInvocation, targets: readonly DocsTarget[]): { urls: string[]; search: boolean } {
+  if (targets.length === 0) return { urls: [], search: false };
+  const urls: string[] = [];
+  const push = (raw: string): void => {
+    const safe = sanitizeUrl(raw, targets);
+    if (safe !== null && !urls.includes(safe)) urls.push(safe);
+  };
+  const isSearch = /search/i.test(invocation.name);
+  const isFetch = invocation.kind === "web" || /fetch/i.test(invocation.name);
+  if (isSearch || isFetch) {
+    const strings = allStrings(invocation.input);
+    for (const text of strings) for (const raw of text.match(URL_PATTERN) ?? []) push(raw);
+    if (urls.length === 0 && isSearch) {
+      const tokens = productTokens(targets);
+      const query = strings.join(" ").toLowerCase();
+      return { urls, search: query.trim() !== "" && tokens.some((token) => query.includes(token)) };
+    }
+    return { urls, search: false };
+  }
+  if (invocation.kind === "command" || /bash|shell|terminal|command/i.test(invocation.name)) {
+    const command = typeof invocation.input === "string" ? invocation.input : allStrings(invocation.input).join("\n");
+    for (const raw of fetchedUrlsInCommand(command)) push(raw);
+  }
+  return { urls, search: false };
+}
+
+/** Heredoc bodies (`cat <<EOF … EOF`) are file contents, not commands. */
+const HEREDOC = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/gu;
 
 function shellSegments(command: string): string[] {
   // Unwrap the common structured-stream representation `bash -lc '<body>'`.
   // This is intentionally not a full shell parser; it only finds the leading
   // executable of each simple pipeline/list segment and never executes text.
   const wrapped = /^\s*(?:\/bin\/)?(?:ba|z|da)?sh\s+-[a-z]*c\s+(['"])([\s\S]*)\1\s*$/u.exec(command);
-  const body = wrapped?.[2] ?? command;
+  const body = (wrapped?.[2] ?? command).replace(HEREDOC, "");
   return body.split(/(?:&&|\|\||[;|\n])/u).map((segment) => segment.trim().replace(/^['"(]+|['")]+$/g, ""));
 }
 
@@ -173,6 +269,8 @@ function cliLabel(input: unknown, executables: readonly string[]): string | null
       const basename = invoked.split("/").at(-1);
       if (invoked !== trimmed && basename !== trimmed) continue;
       const rawSubcommand = tokens[index + 1]?.replace(/^['"]|['"]$/g, "");
+      // `acme = Client()` is a line of source, not a CLI call.
+      if (rawSubcommand !== undefined && /^[=:]/u.test(rawSubcommand)) continue;
       const subcommand = rawSubcommand && !rawSubcommand.startsWith("-") ? rawSubcommand : undefined;
       return subcommand ? `${trimmed} ${subcommand}` : trimmed;
     }
@@ -257,7 +355,7 @@ export function extractSurfaceUsage(
     mcp: { count: 0, tools: [] },
     cli: { count: 0, commands: [] },
   };
-  const docsHosts = config.docsHosts ?? [];
+  const targets = docsTargets(config.docsHosts ?? []);
   const cliCommands = config.cliCommands ?? [];
   const mcpServers = config.mcpServers ?? [];
   const seenInvocations = new Set<string>();
@@ -278,9 +376,9 @@ export function extractSurfaceUsage(
         : null;
       if (command) pushUnique(usage.cli, usage.cli.commands, command);
 
-      for (const url of sanitizedDocsUrls(invocation.input, docsHosts)) {
-        pushUnique(usage.docs, usage.docs.urls, url);
-      }
+      const docs = docsEvidence(invocation, targets);
+      for (const url of docs.urls) pushUnique(usage.docs, usage.docs.urls, url);
+      if (docs.search) usage.docs.count += 1;
     }
   }
 
