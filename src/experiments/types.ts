@@ -41,7 +41,7 @@ export interface Runtime extends RuntimeCapabilities {
    * Images and lifecycle budgets can never be exempted. All group members must
    * declare the same fields. Source/config identity still changes per attempt.
    */
-  treatmentPolicyFields?: Array<"egress" | "webPolicy" | "pathTreatment" | "mcp">;
+  treatmentPolicyFields?: Array<"egress" | "webPolicy" | "pathTreatment" | "mcp" | "promptPreamble">;
   /** Container image tag (container runtimes; alternative to `containerImage`). */
   image?: string;
   /** Scripted command run in /workspace (container runtimes, this phase). */

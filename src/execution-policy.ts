@@ -24,7 +24,15 @@ export interface PairEnvironment {
   webPolicy: WebPolicy;
   pathTreatment: string | null;
   mcp: string | null;
+  /** Runtime text prepended to the eval prompt for this pair (null = prompt verbatim). */
+  promptPreamble: string | null;
   budgets: LifecycleBudgets;
+}
+
+/** The prompt an agent receives: the runtime's preamble (if any), a blank line, the eval's verbatim body. */
+export function composePrompt(preamble: string | null | undefined, body: string): string {
+  const text = preamble?.trim() ?? "";
+  return text === "" ? body : `${text}\n\n${body}`;
 }
 export function pairKey(evalId: string, experimentId: string): string {
   return JSON.stringify([evalId, experimentId]);
@@ -64,6 +72,10 @@ export function resolvePairEnvironments(options: {
         webPolicy: runtime.webPolicy?.() ?? "native-web-blocked",
         pathTreatment: runtime.pathTreatment?.() ?? null,
         mcp: options.mcpHashes?.[experiment.id] ?? null,
+        promptPreamble: (() => {
+          const text = runtime.promptPreamble?.(loaded.metadata)?.trim() ?? "";
+          return text === "" ? null : text;
+        })(),
         budgets: { ...budgets },
       };
     }

@@ -84,6 +84,19 @@ export interface RuntimeCapabilities {
   webPolicy?(): WebPolicy;
   /** Directory prepended to the container PATH (the CLI treatment), if any. */
   pathTreatment?(): string | undefined;
+  /**
+   * Text placed BEFORE the eval's prompt for every attempt under this
+   * runtime — the one sanctioned way to tell the agent what the treatment
+   * offers ("a `acme` CLI is on PATH; run `acme --help`"). An offered surface
+   * nobody mentions is rarely discovered, and an undiscovered surface
+   * measures nothing. Identity-bearing: the resolved text is recorded per
+   * pair in the run manifest (`pairs[].promptPreamble`), so group members
+   * that differ here must list `"promptPreamble"` in `treatmentPolicyFields`
+   * (and mirror the text under `config[treatment]`) or comparison is
+   * withheld. `undefined` or an empty string means the prompt is used
+   * verbatim.
+   */
+  promptPreamble?(metadata: EvalMetadata): string | undefined;
   /** Capabilities (`query`, `getClient`) exposed to the eval's scorer. */
   scorerCapabilities?(ctx: ScorerCapabilityContext): ScorerCapabilities;
 }
