@@ -216,6 +216,18 @@ describe("surface-use telemetry", () => {
       { type: "tool_use", id: "p2", name: "Bash", input: { command: "if curl -fsS https://workos.com/docs/b >/dev/null; then echo ok; fi" } },
     ] } });
     expect(extractSurfaceUsage("claude", prefixed, config).docs).toEqual({ count: 2, urls: ["https://workos.com/docs/a", "https://workos.com/docs/b"] });
+    // `command -v workos` only looks the CLI up; `which workos` runs `which`: neither is CLI use
+    const lookups = JSON.stringify({ type: "assistant", message: { content: [
+      { type: "tool_use", id: "l1", name: "Bash", input: { command: "command -v workos && which workos && type workos" } },
+    ] } });
+    expect(extractSurfaceUsage("claude", lookups, config).cli).toEqual({ count: 0, commands: [] });
+    // hosted docs keep the product label; explicit search tokens override the derivation
+    const hosted = JSON.stringify({ type: "assistant", message: { content: [
+      { type: "tool_use", id: "s4", name: "WebSearch", input: { query: "acme sessions" } },
+      { type: "tool_use", id: "s5", name: "WebSearch", input: { query: "readthedocs theming" } },
+    ] } });
+    expect(extractSurfaceUsage("claude", hosted, { docsHosts: ["acme.readthedocs.io"] }).docs.count).toBe(2);
+    expect(extractSurfaceUsage("claude", hosted, { docsHosts: ["acme.readthedocs.io"], searchTokens: ["acme"] }).docs.count).toBe(1);
     // Codex reports an opened page as a search item carrying action.url
     const opened = JSON.stringify({ type: "item.completed", item: { id: "w1", type: "web_search", query: "", action: { type: "open_page", url: "https://workos.com/docs/events" } } });
     expect(extractSurfaceUsage("codex", opened, config).docs).toEqual({ count: 1, urls: ["https://workos.com/docs/events"] });

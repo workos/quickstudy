@@ -29,8 +29,15 @@ export interface SurfaceUsage {
 }
 
 export interface SurfaceUsageConfig {
-  /** Exact host or parent domain; subdomains also match. */
+  /** Exact host or parent domain (subdomains also match), optionally with a path prefix. */
   docsHosts?: readonly string[];
+  /**
+   * Words a web search must mention to count as a docs search. Optional:
+   * derived from the docs hosts' product labels when absent — set it when
+   * the docs live on a hosting domain (`acme.readthedocs.io`) or the product
+   * name is not in the hostname.
+   */
+  searchTokens?: readonly string[];
   /** Product CLI executable names, without arguments. */
   cliCommands?: readonly string[];
   /** MCP server names as configured for the attempt. */
@@ -175,20 +182,23 @@ const SITE_LABELS = new Set(["www", "docs", "doc", "developer", "developers", "d
 const SECOND_LEVEL_SUFFIXES = new Set(["co", "com", "org", "net", "ac", "gov", "edu", "ne", "or"]);
 
 /**
- * The product token a web-search query must mention to count as a docs
- * search: the registrable label of the host — `acme` from `docs.acme.com`,
- * `acme.cloud` and `docs.acme.co.uk` alike. One token per target: a TLD
- * such as `cloud` is never a product name.
+ * The product tokens a web-search query must mention to count as a docs
+ * search. Explicit `searchTokens` win; otherwise every host label that is
+ * neither a site label (`docs`, `www`), the TLD, nor a second-level suffix:
+ * `acme` from `docs.acme.com`, `acme.cloud` and `docs.acme.co.uk`; `acme`
+ * and `readthedocs` from `acme.readthedocs.io`. A TLD such as `cloud` is
+ * never a product name.
  */
-function productTokens(targets: readonly DocsTarget[]): string[] {
+function productTokens(targets: readonly DocsTarget[], explicit: readonly string[]): string[] {
+  const configured = explicit.map((token) => token.trim().toLowerCase()).filter((token) => token !== "");
+  if (configured.length > 0) return [...new Set(configured)];
   const tokens = new Set<string>();
   for (const target of targets) {
     const labels = target.host.split(".").filter(Boolean);
     while (labels.length > 1 && SITE_LABELS.has(labels[0]!)) labels.shift();
     if (labels.length >= 2) labels.pop(); // the TLD
     if (labels.length >= 2 && SECOND_LEVEL_SUFFIXES.has(labels[labels.length - 1]!)) labels.pop();
-    const token = labels[labels.length - 1];
-    if (token !== undefined && token.length >= 3) tokens.add(token);
+    for (const label of labels) if (label.length >= 3) tokens.add(label);
   }
   return [...tokens];
 }
@@ -259,7 +269,11 @@ function searchQueryOf(input: unknown): string {
  * MCP `search_docs` is MCP use, tallied on its own channel. A URL that only
  * appears in a prompt, a query, or a file the agent wrote is not evidence.
  */
-function docsEvidence(invocation: ToolInvocation, targets: readonly DocsTarget[]): { urls: string[]; search: boolean } {
+function docsEvidence(
+  invocation: ToolInvocation,
+  targets: readonly DocsTarget[],
+  searchTokens: readonly string[],
+): { urls: string[]; search: boolean } {
   const none = { urls: [] as string[], search: false };
   if (targets.length === 0 || invocation.kind === "mcp" || /^mcp__/i.test(invocation.name)) return none;
   const urls: string[] = [];
@@ -280,7 +294,7 @@ function docsEvidence(invocation: ToolInvocation, targets: readonly DocsTarget[]
       return { urls, search: false };
     }
     const query = searchQueryOf(invocation.input).toLowerCase();
-    const tokens = productTokens(targets);
+    const tokens = productTokens(targets, searchTokens);
     return { urls, search: query.trim() !== "" && tokens.some((token) => query.includes(token)) };
   }
   if (invocation.kind === "command" || /bash|shell|terminal|command/i.test(invocation.name)) {
@@ -315,9 +329,14 @@ const COMMAND_PREFIXES = new Set([
   "if", "elif", "while", "until", "then", "do", "else", "!", "{", "(",
 ]);
 
-/** The executable a segment runs (after prefixes such as `sudo`, `command`, `if`, and VAR=value) and its arguments. */
+/**
+ * The executable a segment runs (after prefixes such as `sudo`, `command`,
+ * `if`, and VAR=value) and its arguments. `command -v x` / `-V x` only look
+ * `x` up and run nothing, so they yield no executable.
+ */
 function leadingExecutable(segment: string): { name: string; rest: string[] } | null {
   const tokens = segment.split(/\s+/u).filter(Boolean);
+  if (tokens[0] === "command" && (tokens[1] === "-v" || tokens[1] === "-V")) return null;
   let index = 0;
   while (
     index < tokens.length &&
@@ -389,10 +408,13 @@ export function surfaceUsageConfigFromRuntime(
 ): SurfaceUsageConfig {
   const docsHosts: string[] = [];
   const cliCommands: string[] = [];
+  const searchTokens: string[] = [];
   const visit = (value: unknown): void => {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return;
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      if ((key === "hosts" || key === "docsHosts") && Array.isArray(item)) {
+      if (key === "searchTokens" && Array.isArray(item)) {
+        for (const token of item) if (typeof token === "string") searchTokens.push(token);
+      } else if ((key === "hosts" || key === "docsHosts") && Array.isArray(item)) {
         // Wildcard entries ("*.example.com") reduce to their parent domain —
         // the matcher already covers subdomains of a configured parent.
         for (const host of item) if (typeof host === "string") docsHosts.push(host.replace(/^\*\./u, ""));
@@ -408,6 +430,7 @@ export function surfaceUsageConfigFromRuntime(
     docsHosts: [...new Set(docsHosts)],
     cliCommands: [...new Set(cliCommands)],
     mcpServers: [...new Set(mcpServerNames)],
+    ...(searchTokens.length > 0 ? { searchTokens: [...new Set(searchTokens)] } : {}),
   };
 }
 
@@ -449,7 +472,7 @@ export function extractSurfaceUsage(
         : null;
       if (command) pushUnique(usage.cli, usage.cli.commands, command);
 
-      const docs = docsEvidence(invocation, targets);
+      const docs = docsEvidence(invocation, targets, config.searchTokens ?? []);
       for (const url of docs.urls) pushUnique(usage.docs, usage.docs.urls, url);
       if (docs.search) usage.docs.count += 1;
     }
@@ -460,9 +483,11 @@ export function extractSurfaceUsage(
 
 /** Observe offered surfaces plus explicitly shared targets, without changing offered state. */
 export function observationConfig(offered: SurfaceUsageConfig, targets?: SurfaceUsageConfig): SurfaceUsageConfig {
+  const searchTokens = [...new Set([...(offered.searchTokens ?? []), ...(targets?.searchTokens ?? [])])].sort();
   return {
     docsHosts: [...new Set([...(offered.docsHosts ?? []), ...(targets?.docsHosts ?? [])])].sort(),
     cliCommands: [...new Set([...(offered.cliCommands ?? []), ...(targets?.cliCommands ?? [])])].sort(),
     mcpServers: [...new Set([...(offered.mcpServers ?? []), ...(targets?.mcpServers ?? [])])].sort(),
+    ...(searchTokens.length > 0 ? { searchTokens } : {}),
   };
 }

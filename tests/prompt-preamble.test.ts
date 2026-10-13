@@ -7,6 +7,10 @@ import { describe, expect, test } from "bun:test";
 import { composePrompt, pairKey, resolvePairEnvironments } from "../src/execution-policy.ts";
 import { ClaudeCodeAdapter } from "../src/adapters/claude.ts";
 import { CodexAdapter } from "../src/adapters/codex.ts";
+import type { ContainerAgentAdapter } from "../src/adapters/types.ts";
+import { dockerDaemonReachable, imageExists } from "../src/isolation/docker.ts";
+import { AGENT_RUNTIME_IMAGE } from "../src/isolation/images.ts";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { compareGroups } from "../src/experiments/groups.ts";
 import type { Experiment, LoadedExperiment } from "../src/experiments/types.ts";
 import type { LoadedEval } from "../src/evals/types.ts";
@@ -127,4 +131,65 @@ describe("promptPreamble delivery", () => {
     const userTurn = transcript.split("\n").map((line) => { try { return JSON.parse(line); } catch { return null; } }).find((event) => event?.role === "user");
     expect(userTurn?.content).toBe(`${recorded}\n\n${evals[0]!.promptBody}`);
   });
+});
+
+// The container path, for real: a container agent whose only act is to write
+// the prompt it was handed into the workspace, so the scorer can read it back.
+const daemonUp = await dockerDaemonReachable();
+const containerReady = daemonUp && (await imageExists(AGENT_RUNTIME_IMAGE));
+if (!containerReady) {
+  console.warn(`\n⚠️  SKIPPING promptPreamble container delivery test — ${daemonUp ? `image ${AGENT_RUNTIME_IMAGE} not built` : "no Docker daemon reachable"}.\n`);
+  if (process.env["QUICKSTUDY_REQUIRE_DOCKER"] === "1") throw new Error("promptPreamble container delivery test requires Docker and the agent-runtime image");
+}
+const describeContainer = containerReady ? describe : describe.skip;
+
+describeContainer("promptPreamble delivery (container path)", () => {
+  test("the container runner hands the agent the recorded preamble followed by the verbatim eval body", async () => {
+    const evalsRoot = mkdtempSync(join(tmpdir(), "qs-preamble-evals-"));
+    const evalDir = join(evalsRoot, "prompt-echo");
+    mkdirSync(evalDir, { recursive: true });
+    writeFileSync(join(evalDir, "PROMPT.md"), "---\nid: prompt-echo\nsuite: benchmark\n---\n\nDo the prompt-echo task.\n");
+    writeFileSync(
+      join(evalDir, "EVAL.ts"),
+      `export default async (ctx) => ({ passed: true, checks: [{ name: "prompt_seen", passed: true, notes: await ctx.readFile("PROMPT.txt") }] });\n`,
+    );
+    const evals = await discoverEvals(evalsRoot);
+
+    const writer: ContainerAgentAdapter = {
+      kind: "container",
+      name: "prompt-writer",
+      requiredHostEnv: [],
+      setupFiles: () => ({}),
+      command: (ctx) => ["sh", "-c", 'printf "%s" "$1" > PROMPT.txt', "sh", ctx.prompt],
+      parseStream: () => ({ tokensIn: null, tokensOut: null, turns: 0 }),
+    };
+    const preamble = "The `acme` CLI is on PATH; run `acme --help`.";
+    const experimentDir = mkdtempSync(join(tmpdir(), "qs-preamble-exp-"));
+    const path = join(experimentDir, "hinted-container.ts");
+    writeFileSync(path, "export default {};\n");
+    const loaded = {
+      experiment: {
+        id: "hinted-container",
+        agent: { adapter: "prompt-writer" },
+        runtime: { kind: "container" as const, image: AGENT_RUNTIME_IMAGE, config: { cli: { hint: preamble } }, promptPreamble: () => preamble },
+      },
+      path,
+    } as unknown as LoadedExperiment;
+
+    const root = mkdtempSync(join(tmpdir(), "qs-preamble-run-"));
+    const summary = await executeRunV3({
+      evals,
+      experiments: [loaded],
+      plan: planRun(evals, [loaded.experiment], 1),
+      store: new ResultsStore(join(root, "results.db")),
+      artifacts: new ArtifactsStore(join(root, "results")),
+      containerAdapters: { "prompt-writer": () => writer },
+      log: () => {},
+    });
+    expect(summary).toMatchObject({ total: 1, errors: 0 });
+    const store = new ResultsStore(join(root, "results.db"));
+    const attempt = store.listAttempts(summary.runId)[0]!;
+    expect(attempt.status).toBe("completed");
+    expect(attempt.result?.checks[0]?.notes).toBe(`${preamble}\n\n${evals[0]!.promptBody}`);
+  }, 120_000);
 });
