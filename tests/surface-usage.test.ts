@@ -221,6 +221,10 @@ describe("surface-use telemetry", () => {
       { type: "tool_use", id: "l1", name: "Bash", input: { command: "command -v workos && which workos && type workos" } },
     ] } });
     expect(extractSurfaceUsage("claude", lookups, config).cli).toEqual({ count: 0, commands: [] });
+    const guardedLookup = JSON.stringify({ type: "assistant", message: { content: [
+      { type: "tool_use", id: "l2", name: "Bash", input: { command: "if command -v workos >/dev/null; then sudo command -V workos; fi" } },
+    ] } });
+    expect(extractSurfaceUsage("claude", guardedLookup, config).cli).toEqual({ count: 0, commands: [] });
     // hosted docs keep the product label; explicit search tokens override the derivation
     const hosted = JSON.stringify({ type: "assistant", message: { content: [
       { type: "tool_use", id: "s4", name: "WebSearch", input: { query: "acme sessions" } },

@@ -14,11 +14,7 @@ import { seedRun } from "../scripts/seed-run.ts";
 import { buildReport } from "../src/report/report.ts";
 import { ResultsStore } from "../src/store/db.ts";
 import type { RunManifest } from "../src/manifest.ts";
-import {
-  extractSurfaceUsage,
-  surfaceUsageConfigFromRuntime,
-  surfaceUsageVendor,
-} from "../src/surface-usage.ts";
+import { extractSurfaceUsage, observationConfig, surfaceUsageConfigFromRuntime, surfaceUsageVendor } from "../src/surface-usage.ts";
 
 function claudeEvent(id: string, name: string, input: unknown): string {
   return JSON.stringify({
@@ -88,6 +84,16 @@ describe("offered vs used extraction", () => {
     const usage = extractSurfaceUsage("claude", raw, config);
     expect(usage.docs.count).toBe(1);
     expect(usage.cli.count).toBe(0);
+  });
+});
+
+describe("observation config merges search words per target", () => {
+  test("explicit tokens for an added target never hide the words derived for the offered one", () => {
+    const offered = surfaceUsageConfigFromRuntime({ docs: { hosts: ["docs.acme.test"] } }, []);
+    const merged = observationConfig(offered, { docsHosts: ["other.readthedocs.io"], searchTokens: ["other"] });
+    expect(merged.searchTokens).toEqual(["acme", "other"]);
+    const raw = claudeEvent("1", "WebSearch", { query: "acme sessions" });
+    expect(extractSurfaceUsage("claude", raw, merged).docs.count).toBe(1);
   });
 });
 

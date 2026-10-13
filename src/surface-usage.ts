@@ -336,7 +336,6 @@ const COMMAND_PREFIXES = new Set([
  */
 function leadingExecutable(segment: string): { name: string; rest: string[] } | null {
   const tokens = segment.split(/\s+/u).filter(Boolean);
-  if (tokens[0] === "command" && (tokens[1] === "-v" || tokens[1] === "-V")) return null;
   let index = 0;
   while (
     index < tokens.length &&
@@ -344,6 +343,8 @@ function leadingExecutable(segment: string): { name: string; rest: string[] } | 
       /^[A-Za-z_][A-Za-z0-9_]*=.*/u.test(tokens[index]!) ||
       (tokens[index]!.startsWith("-") && index > 0 && COMMAND_PREFIXES.has(tokens[index - 1]!)))
   ) {
+    // `command -v x` / `-V x` (after any prefix: `if command -v x`) looks x up and runs nothing.
+    if (tokens[index] === "command" && (tokens[index + 1] === "-v" || tokens[index + 1] === "-V")) return null;
     index += 1;
   }
   const invoked = (tokens[index] ?? "").replace(/^['"]|['"]$/g, "");
@@ -482,8 +483,15 @@ export function extractSurfaceUsage(
 }
 
 /** Observe offered surfaces plus explicitly shared targets, without changing offered state. */
+/** The words a web search must mention for THIS config: its explicit tokens, else those derived from its own docs hosts. */
+export function resolveSearchTokens(config: SurfaceUsageConfig): string[] {
+  return productTokens(docsTargets(config.docsHosts ?? []), config.searchTokens ?? []);
+}
+
 export function observationConfig(offered: SurfaceUsageConfig, targets?: SurfaceUsageConfig): SurfaceUsageConfig {
-  const searchTokens = [...new Set([...(offered.searchTokens ?? []), ...(targets?.searchTokens ?? [])])].sort();
+  // Resolve each side on its own first: explicit tokens for one target must
+  // never replace the words derived for another target's hosts.
+  const searchTokens = [...new Set([...resolveSearchTokens(offered), ...(targets ? resolveSearchTokens(targets) : [])])].sort();
   return {
     docsHosts: [...new Set([...(offered.docsHosts ?? []), ...(targets?.docsHosts ?? [])])].sort(),
     cliCommands: [...new Set([...(offered.cliCommands ?? []), ...(targets?.cliCommands ?? [])])].sort(),
