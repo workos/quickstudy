@@ -168,20 +168,27 @@ function matchesDocsTarget(url: URL, targets: readonly DocsTarget[]): boolean {
   );
 }
 
-/** Host labels that name a kind of site or a registry suffix, never a product. */
-const GENERIC_LABELS = new Set([
-  "www", "docs", "doc", "developer", "developers", "dev", "api", "app", "apps",
-  "com", "org", "net", "io", "co", "uk", "us", "eu", "de", "fr", "info", "edu", "gov",
-  "test", "local", "localhost", "example", "internal",
-]);
+/** Subdomain labels that name a kind of site, never the product. */
+const SITE_LABELS = new Set(["www", "docs", "doc", "developer", "developers", "dev", "api", "app", "apps", "help", "support"]);
 
-/** Product tokens a web-search query must mention to count as a docs search (`acme` from `docs.acme.co.uk`). */
+/** Second-level labels of multi-part public suffixes (`co.uk`, `com.au`, `ac.jp`). */
+const SECOND_LEVEL_SUFFIXES = new Set(["co", "com", "org", "net", "ac", "gov", "edu", "ne", "or"]);
+
+/**
+ * The product token a web-search query must mention to count as a docs
+ * search: the registrable label of the host — `acme` from `docs.acme.com`,
+ * `acme.cloud` and `docs.acme.co.uk` alike. One token per target: a TLD
+ * such as `cloud` is never a product name.
+ */
 function productTokens(targets: readonly DocsTarget[]): string[] {
   const tokens = new Set<string>();
   for (const target of targets) {
-    for (const label of target.host.split(".")) {
-      if (label.length >= 3 && !GENERIC_LABELS.has(label)) tokens.add(label);
-    }
+    const labels = target.host.split(".").filter(Boolean);
+    while (labels.length > 1 && SITE_LABELS.has(labels[0]!)) labels.shift();
+    if (labels.length >= 2) labels.pop(); // the TLD
+    if (labels.length >= 2 && SECOND_LEVEL_SUFFIXES.has(labels[labels.length - 1]!)) labels.pop();
+    const token = labels[labels.length - 1];
+    if (token !== undefined && token.length >= 3) tokens.add(token);
   }
   return [...tokens];
 }
@@ -302,11 +309,22 @@ function shellSegments(command: string): string[] {
   return body.split(/(?:&&|\|\||[;|\n])/u).map((segment) => segment.trim().replace(/^['"(]+|['")]+$/g, ""));
 }
 
-/** The executable a segment runs (after `sudo`, `env`, and VAR=value prefixes) and its arguments. */
+/** Words that precede the real executable of a segment without changing what runs. */
+const COMMAND_PREFIXES = new Set([
+  "sudo", "env", "command", "exec", "nohup", "time", "timeout", "nice", "xargs",
+  "if", "elif", "while", "until", "then", "do", "else", "!", "{", "(",
+]);
+
+/** The executable a segment runs (after prefixes such as `sudo`, `command`, `if`, and VAR=value) and its arguments. */
 function leadingExecutable(segment: string): { name: string; rest: string[] } | null {
   const tokens = segment.split(/\s+/u).filter(Boolean);
   let index = 0;
-  while (tokens[index] === "sudo" || tokens[index] === "env" || /^[A-Za-z_][A-Za-z0-9_]*=.*/u.test(tokens[index] ?? "")) {
+  while (
+    index < tokens.length &&
+    (COMMAND_PREFIXES.has(tokens[index]!) ||
+      /^[A-Za-z_][A-Za-z0-9_]*=.*/u.test(tokens[index]!) ||
+      (tokens[index]!.startsWith("-") && index > 0 && COMMAND_PREFIXES.has(tokens[index - 1]!)))
+  ) {
     index += 1;
   }
   const invoked = (tokens[index] ?? "").replace(/^['"]|['"]$/g, "");

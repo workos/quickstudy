@@ -5,6 +5,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import { composePrompt, pairKey, resolvePairEnvironments } from "../src/execution-policy.ts";
+import { ClaudeCodeAdapter } from "../src/adapters/claude.ts";
+import { CodexAdapter } from "../src/adapters/codex.ts";
 import { compareGroups } from "../src/experiments/groups.ts";
 import type { Experiment, LoadedExperiment } from "../src/experiments/types.ts";
 import type { LoadedEval } from "../src/evals/types.ts";
@@ -92,6 +94,16 @@ describe("promptPreamble identity", () => {
 
 
 describe("promptPreamble delivery", () => {
+  test("container adapters put the composed prompt in the agent's argv verbatim", () => {
+    // The container path hands `composePrompt(pair.promptPreamble, body)` to the
+    // adapter as ctx.prompt (src/runner/execute.ts); a real container run needs an
+    // agent key, so this pins the adapter half of that path offline.
+    const prompt = composePrompt("A `acme` CLI is on PATH.", "Do the task.");
+    const ctx = { runId: "r", attemptId: "a", prompt, trialIndex: 0, webPolicy: "native-web-blocked" as const };
+    expect(new ClaudeCodeAdapter("claude", { model: "claude-sonnet-5", reasoning: "high" }).command(ctx)).toContain(prompt);
+    expect(new CodexAdapter("codex", { model: "gpt-5.6-sol", reasoning: "high" }).command(ctx)).toContain(prompt);
+  });
+
   test("the host runner hands the agent the recorded preamble followed by the verbatim eval body", async () => {
     const evals = await loadedEvals();
     const loaded = experiment("hinted", "cli", "A `acme` CLI is on PATH; run `acme --help`.");

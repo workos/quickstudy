@@ -204,6 +204,18 @@ describe("surface-use telemetry", () => {
       { type: "tool_use", id: "s1", name: "WebSearch", input: { query: "acme sessions" } },
     ] } }), { docsHosts: ["acme.co.uk/Docs"] });
     expect(cased.docs).toEqual({ count: 2, urls: ["https://acme.co.uk/Docs/start"] });
+    // a TLD is never a product: "cloud deployment" is not an acme docs search, "acme sessions" is
+    const tld = { docsHosts: ["acme.cloud"] };
+    expect(extractSurfaceUsage("claude", JSON.stringify({ type: "assistant", message: { content: [
+      { type: "tool_use", id: "s2", name: "WebSearch", input: { query: "cloud deployment best practices" } },
+      { type: "tool_use", id: "s3", name: "WebSearch", input: { query: "acme sessions" } },
+    ] } }), tld).docs).toEqual({ count: 1, urls: [] });
+    // `command curl …` and a curl used as an `if` condition are still fetches
+    const prefixed = JSON.stringify({ type: "assistant", message: { content: [
+      { type: "tool_use", id: "p1", name: "Bash", input: { command: "command curl -s https://workos.com/docs/a" } },
+      { type: "tool_use", id: "p2", name: "Bash", input: { command: "if curl -fsS https://workos.com/docs/b >/dev/null; then echo ok; fi" } },
+    ] } });
+    expect(extractSurfaceUsage("claude", prefixed, config).docs).toEqual({ count: 2, urls: ["https://workos.com/docs/a", "https://workos.com/docs/b"] });
     // Codex reports an opened page as a search item carrying action.url
     const opened = JSON.stringify({ type: "item.completed", item: { id: "w1", type: "web_search", query: "", action: { type: "open_page", url: "https://workos.com/docs/events" } } });
     expect(extractSurfaceUsage("codex", opened, config).docs).toEqual({ count: 1, urls: ["https://workos.com/docs/events"] });
