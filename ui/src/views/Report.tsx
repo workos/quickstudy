@@ -12,7 +12,7 @@ import type { DataMeta } from "../../../src/export-types.ts";
 import { displayPassAtK } from "../../../src/report/pass-at-k.ts";
 import type { ReportGroup, ReportJson, ReportPair } from "../../../src/report/report.ts";
 import { formatAgentLabel } from "../agent-label.ts";
-import { isGraded, UNGRADED_TITLE } from "../checks.ts";
+import { isGraded, recordedLabel, UNGRADED_TITLE } from "../checks.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { CostEstimate } from "../components/CostEstimate.tsx";
@@ -56,7 +56,7 @@ function ChecksCell({ pair }: { pair: ReportPair }): ReactNode {
           {check.passed === check.total ? "✓" : "✗"} {check.name} ({check.passed}/{check.total})
           {!isGraded(check) && (
             <span className="tag" data-testid="ungraded-tag" title={UNGRADED_TITLE}>
-              recorded
+              {recordedLabel(check)}
             </span>
           )}
         </span>

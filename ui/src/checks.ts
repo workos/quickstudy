@@ -11,3 +11,7 @@ export function countGradedChecks(checks: CheckResult[] | null): { passed: numbe
 
 /** Tooltip for the ungraded tag, shared by every check list. */
 export const UNGRADED_TITLE = "Recorded, not graded: never enters pass/fail";
+
+/** Text for the recorded tag: `recorded`, or `recorded · wiring` when the check carries a kind. */
+export const recordedLabel = (check: { kind?: string | null | undefined }): string =>
+  check.kind ? `recorded · ${check.kind}` : "recorded";

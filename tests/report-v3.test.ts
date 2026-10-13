@@ -80,7 +80,7 @@ describe("v3 report aggregation", () => {
     // claude-mcp failures cluster on flow-wired.
     const mcpPair = pairOf(report, "auth-nextjs", "claude-mcp");
     const flowWired = mcpPair.checks.find((check) => check.name === "flow-wired");
-    expect(flowWired).toEqual({ name: "flow-wired", passed: 0, total: 3, graded: true });
+    expect(flowWired).toEqual({ name: "flow-wired", passed: 0, total: 3, graded: true, kind: null });
 
     // claude-cli is deliberately flaky (pass, fail, pass).
     expect(pairOf(report, "auth-nextjs", "claude-cli").flaky).toBeTrue();

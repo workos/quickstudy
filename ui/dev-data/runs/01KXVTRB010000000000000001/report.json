@@ -1,5 +1,5 @@
 {
-  "schema_version": 9,
+  "schema_version": 11,
   "generated_at": "2026-07-20T02:00:00.000Z",
   "run": {
     "id": "01KXVTRB010000000000000001",
@@ -126,6 +126,7 @@
     {
       "experiment_id": "claude-docs",
       "treatment": "docs",
+      "role": "agent",
       "agent": {
         "adapter": "claude",
         "provider": "anthropic",
@@ -163,6 +164,7 @@
     {
       "experiment_id": "claude-mcp",
       "treatment": "mcp",
+      "role": "agent",
       "agent": {
         "adapter": "claude",
         "provider": "anthropic",
@@ -216,13 +218,15 @@
           "name": "build-passes",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 2,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": null,
@@ -261,13 +265,15 @@
           "name": "build-passes",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 0,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "discriminating",
@@ -306,13 +312,15 @@
           "name": "build-passes",
           "passed": 1,
           "total": 1,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 1,
           "total": 1,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "discriminating",
@@ -341,13 +349,15 @@
           "name": "build-passes",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "discriminating",
@@ -386,13 +396,15 @@
           "name": "build-passes",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 0,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "discriminating",
@@ -431,13 +443,15 @@
           "name": "shape-check",
           "passed": 0,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "works-e2e",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "failed-by-all",
@@ -476,13 +490,15 @@
           "name": "shape-check",
           "passed": 0,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "works-e2e",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "failed-by-all",
@@ -521,13 +537,15 @@
           "name": "build-passes",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "solved-by-all",
@@ -566,13 +584,15 @@
           "name": "build-passes",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         },
         {
           "name": "flow-wired",
           "passed": 3,
           "total": 3,
-          "graded": true
+          "graded": true,
+          "kind": null
         }
       ],
       "band": "solved-by-all",
@@ -770,5 +790,5 @@
       "01KXVTRB0T000000000000000T"
     ]
   },
-  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 3 planned trials — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every scored attempt of an eval under every arm while another check in the same attempts passed: a statement about the instrument, not about any treatment."
+  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 3 planned trials — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that recorded at least one ungraded check of kind \"sdk\" (an ungraded check with no kind counts as \"sdk\") and recalled are those whose ungraded \"sdk\" checks all passed. Ungraded checks of any other kind are tallied and shown but never enter SDK recall. Ungraded checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every scored attempt of an eval under every arm while another check in the same attempts passed: a statement about the instrument, not about any treatment. Control experiments — an oracle that applies each eval's reference solution, a no-op that changes nothing — are reported alongside the agent experiments and tagged as controls wherever they appear; bands and scorer health are decided over the agent experiments only, and controls are ranked after every agent experiment."
 }

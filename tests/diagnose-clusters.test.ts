@@ -66,6 +66,7 @@ const check = (name: string, passed: number, total: number, graded = true): Repo
   name,
   passed,
   total,
+  kind: null,
   graded,
 });
 

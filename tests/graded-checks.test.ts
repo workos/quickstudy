@@ -79,6 +79,13 @@ describe("validation", () => {
     expect(validEvalResult(base(false))).toBeTrue();
   });
 
+  test("accepts a string kind and rejects a non-string or empty one", () => {
+    const ok = { passed: true, checks: [{ name: "sdk_wired", passed: true, graded: false, kind: "sdk" }, { name: "route", passed: true, graded: false, kind: "wiring" }] };
+    expect(validEvalResult(ok)).toBe(true);
+    expect(validEvalResult({ passed: true, checks: [{ name: "x", passed: true, kind: 7 }] })).toBe(false);
+    expect(validEvalResult({ passed: true, checks: [{ name: "x", passed: true, kind: "" }] })).toBe(false);
+  });
+
   test("rejects a non-boolean graded flag", () => {
     expect(validEvalResult(base("no"))).toBeFalse();
     expect(validEvalResult(base(0))).toBeFalse();
@@ -97,8 +104,8 @@ describe("report", () => {
     const pair = pairs[0]!;
     expect(pair.passed).toBe(1);
     expect(pair.checks).toEqual([
-      { name: "flow", passed: 1, total: 1, graded: true },
-      { name: "sdk-wired", passed: 0, total: 1, graded: false },
+      { name: "flow", passed: 1, total: 1, graded: true, kind: null },
+      { name: "sdk-wired", passed: 0, total: 1, graded: false, kind: null },
     ]);
   });
 
@@ -107,7 +114,7 @@ describe("report", () => {
       attempt("x", "completed", true, [{ name: "mixed", passed: true, graded: true }]),
       attempt("x", "completed", true, [{ name: "mixed", passed: false, graded: false }]),
     ]);
-    expect(pairs[0]!.checks).toEqual([{ name: "mixed", passed: 1, total: 2, graded: false }]);
+    expect(pairs[0]!.checks).toEqual([{ name: "mixed", passed: 1, total: 2, graded: false, kind: null }]);
   });
 
   test("SDK recall counts scored attempts that recorded an ungraded check", () => {
@@ -121,6 +128,18 @@ describe("report", () => {
     ];
     expect(collectRecall(attempts, "x")).toEqual({ attempts: 2, recalled: 1, rate: 0.5 });
     expect(collectRecall(attempts, "y")).toEqual({ attempts: 0, recalled: 0, rate: null });
+  });
+
+  test("SDK recall ignores ungraded checks of another kind; untagged ungraded checks still count as sdk", () => {
+    const attempts = [
+      // sdk passed, wiring failed → recalled (wiring never enters)
+      attempt("x", "completed", true, [{ name: "sdk_wired", passed: true, graded: false, kind: "sdk" }, { name: "route", passed: false, graded: false, kind: "wiring" }]),
+      // only wiring recorded → not in the denominator at all
+      attempt("x", "completed", true, [{ name: "route", passed: true, graded: false, kind: "wiring" }]),
+      // untagged ungraded check: pre-tag convention, counts as sdk
+      attempt("x", "completed", false, [{ name: "sdk_wired", passed: false, graded: false }]),
+    ];
+    expect(collectRecall(attempts, "x")).toEqual({ attempts: 2, recalled: 1, rate: 0.5 });
   });
 
   test("the methodology sentence passes the language guard", () => {

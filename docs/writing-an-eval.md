@@ -186,6 +186,17 @@ of it — the two lines above are the whole convention. An absent `graded` means
 `true`; any non-boolean value makes the result invalid (the attempt becomes an
 `error`).
 
+Give a recorded check a `kind` so recorded checks of different natures never
+pool: `kind: "sdk"` for "did the agent use the product SDK" (these feed SDK
+recall) and, say, `kind: "wiring"` for shape-of-code signals you want to see
+but not grade. An ungraded check without a `kind` counts as `sdk`; an ungraded
+check of any other kind is tallied and shown but never enters SDK recall.
+
+```ts
+{ name: "sdk_wired", passed: sdkOk, graded: false, kind: "sdk" },
+{ name: "callback_route_present", passed: routeOk, graded: false, kind: "wiring" },
+```
+
 An ungraded check is stored, exported and tallied like any other (the report
 and the UI tag it as recorded, and the matrix's "x/y checks" counts graded
 checks only). The report derives **SDK recall** from ungraded checks: per

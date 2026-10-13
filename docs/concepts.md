@@ -72,7 +72,12 @@ An experiment is one TypeScript module under the experiments root (default
   `host` (a scratch directory on your machine, used by the no-op `echo`
   agent) or `container` (a per-attempt Docker container). Container runtimes
   own the image, per-attempt provisioning, the egress allowlist, MCP servers,
-  native-web policy, and PATH treatment.
+  native-web policy, PATH treatment, and an optional **prompt preamble**: a
+  short text placed before the eval's prompt that tells the agent what the
+  treatment offers ("a `acme` CLI is on PATH; run `acme --help`"). An offered
+  surface nobody mentions is rarely discovered, and an undiscovered surface
+  measures nothing. The resolved preamble is recorded per pair in the run
+  manifest; the eval body itself stays byte-identical across experiments.
 - the optional **treatment** and **comparisonGroup** (below).
 
 Because agent pins, runtime configuration, and the module source are all part
@@ -176,14 +181,23 @@ manifest is stored with the run, and comparison groups are diffed against it.
    with a `trials disagreed` flag when trials split. Each experiment also
    reports **SDK recall** — `recalled / attempts`, where attempts are the
    scored attempts that recorded at least one ungraded (`graded: false`)
-   check and recalled are those whose ungraded checks all passed (`n/a` when
-   none recorded one). Ungraded checks are tallied but never enter pass/fail.
+   check of kind `sdk` and recalled are those whose ungraded `sdk` checks all
+   passed (`n/a` when none recorded one). An ungraded check with no `kind`
+   counts as `sdk`; ungraded checks of any other kind (`wiring`, …) are
+   tallied and shown but never enter SDK recall. Ungraded checks never enter
+   pass/fail.
 3. **Comparison groups** — raw per-arm counts for groups whose members agree
    beyond their declared treatment; a component diff for withheld groups.
 4. **Surface usage** — offered-versus-used telemetry per experiment: observed
-   product-doc URLs, MCP tool calls, and product CLI commands, where the
-   agent's transcript stream supports extraction. Availability is not use,
-   and unavailable telemetry is never counted as zero use.
+   product-doc fetches and product-naming web searches, MCP tool calls, and
+   product CLI commands, where the agent's transcript stream supports
+   extraction. Docs evidence comes only from fetches (native web tools, shell
+   fetchers such as `curl`) and searches; a docs URL inside a file the agent
+   wrote is never counted, and `docs.urls` lists fetched pages only, so a
+   `docs` count above the URL total means searches. A docs host may carry a
+   path prefix (`acme.com/docs`) so API calls to the same domain are not
+   mistaken for reading. Availability is not use, and unavailable telemetry
+   is never counted as zero use.
 5. **Egress denials** — on proxied runs (`--egress-proxy`), the hosts an
    agent reached for that were not on the allowlist. An agent groping for an
    undocumented endpoint is itself a DX finding.
@@ -304,8 +318,8 @@ exactly what a negative control should do.
 | **comparisonGroup** | Experiments claiming to differ only by treatment; agreement is checked, never assumed.       |
 | **scorer**          | `EVAL.ts`'s default export: returns named pass/fail checks for one attempt.                  |
 | **check**           | One named verdict inside a scorer result (`build_passes`, `no_secrets_in_client`, …).        |
-| **ungraded check**  | A check marked `graded: false`: recorded and tallied, never part of pass/fail.              |
-| **SDK recall**      | Per experiment: scored attempts whose ungraded checks all passed / those that recorded one. |
+| **ungraded check**  | A check marked `graded: false`: recorded and tallied, never part of pass/fail. Its `kind` says what it is about (`sdk`, `wiring`, …). |
+| **SDK recall**      | Per experiment: scored attempts whose ungraded `sdk` checks all passed / those that recorded one. |
 | **attempt**         | One agent × eval × experiment execution, run once, in isolation.                             |
 | **trial**           | A repeat of the same pair (default 3).                                                       |
 | **pair**            | One eval × experiment combination — the report's row unit (a *cell* in the UI).              |
