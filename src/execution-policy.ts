@@ -1,3 +1,4 @@
+import { workspaceFilesIdentity, type WorkspaceFilesIdentity } from "./runtime/workspace-files.ts";
 import type { LoadedEval } from "./evals/types.ts";
 import type { LoadedExperiment } from "./experiments/types.ts";
 import type { RuntimeImageIdentity } from "./manifest.ts";
@@ -19,6 +20,8 @@ export const DEFAULT_BUDGETS: LifecycleBudgets = {
   cleanupMs: 30_000,
 };
 export interface PairEnvironment {
+  /** Omitted on historical/no-overlay pairs; payload bytes never enter manifests. */
+  workspaceFiles?: WorkspaceFilesIdentity;
   image: RuntimeImageIdentity | null;
   egress: { proxy: boolean; allowlist: string[] };
   webPolicy: WebPolicy;
@@ -59,6 +62,7 @@ export function resolvePairEnvironments(options: {
         runtime.image ??
         runtime.containerImage?.(loaded.metadata);
       pairs[pairKey(loaded.metadata.id, experiment.id)] = {
+        ...(runtime.workspaceFiles ? { workspaceFiles: workspaceFilesIdentity(runtime.workspaceFiles) } : {}),
         image: tag ? (options.images?.[tag] ?? { tag, id: "unresolved", repoDigests: [] }) : null,
         // With the flag, every container is proxied. No runtime hosts means
         // only the adapter's provider endpoints are permitted.

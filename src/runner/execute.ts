@@ -21,6 +21,8 @@
  * and never allowed to mask the attempt's result.
  */
 
+import { stageWorkspaceFiles } from "./workspace-files.ts";
+import { defineWorkspaceFiles, validateWorkspaceFilesRuntime, workspaceFilesIdentity } from "../runtime/workspace-files.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,6 +104,8 @@ export interface ExecuteRunV3Options {
   config?: Partial<RunConfig>;
   /** Host adapters by name. Defaults to the built-in echo adapter. */
   hostAdapters?: Record<string, AgentAdapter>;
+  /** Internal offline-test seam; not part of the public consumer API. */
+  createContainer?: typeof createAttemptContainer;
   /**
    * Container agent adapter factories by name, constructed per experiment
    * from its `agent` spec. Defaults to the built-in claude/codex adapters.
@@ -314,6 +318,15 @@ export function collectOfferedSurfaces(options: {
 }
 
 export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSummaryV3> {
+  // Capture immutable payload strings before the first await, including callers
+  // that did not use defineExperiment. Identity and execution share this snapshot.
+  options = { ...options, experiments: options.experiments.map((loaded) => {
+    validateWorkspaceFilesRuntime(loaded.experiment.runtime);
+    const files = loaded.experiment.runtime.workspaceFiles;
+    return files === undefined ? loaded : { ...loaded, experiment: { ...loaded.experiment,
+      runtime: { ...loaded.experiment.runtime, workspaceFiles: defineWorkspaceFiles(files) },
+    } };
+  }) };
   const { store, artifacts, plan } = options;
   const log = options.log ?? ((line: string) => console.log(line));
   const attemptTimeoutMs = options.attemptTimeoutMs ?? options.budgets?.agentMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS;
@@ -464,6 +477,15 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       mcpHashes: Object.fromEntries([...declaredByExperiment].map(([id, servers]) => [id, hashString(canonicalJson(servers))])),
     });
     manifest = buildRunManifest({ evals: options.evals, experiments: options.experiments, images, cliVersions, pairs, scorerIdentities });
+  }
+  // Injected/stale manifests must not authorize a different payload (or silently
+  // omit one). Historical no-overlay manifests retain their original shape.
+  for (const entry of plan) {
+    const files = experimentsById.get(entry.experimentId)!.runtime.workspaceFiles;
+    const intended = files ? workspaceFilesIdentity(files) : undefined;
+    if (canonicalJson(intended ?? null) !== canonicalJson(manifest.pairs?.[pairKey(entry.evalId, entry.experimentId)]?.workspaceFiles ?? null)) {
+      throw new Error("workspaceFiles: manifest payload identity mismatch");
+    }
   }
   const recorded = options.resumeRunId ? store.getRun(options.resumeRunId) : null;
   if (options.resumeRunId && !recorded) throw new Error(`cannot resume unknown run ${options.resumeRunId}`);
@@ -828,7 +850,7 @@ async function runContainerAttemptV3(
 
       const paths = await inStage("environment", () => artifacts.prepareAttempt(runId, attemptId));
       const fixtureDir = sourceDir;
-      const container = await inStage("environment", () => createAttemptContainer({
+      const container = await inStage("environment", () => (options.createContainer ?? createAttemptContainer)({
         image,
         env,
         resultsDir: paths.attemptDir,
@@ -859,6 +881,7 @@ async function runContainerAttemptV3(
               return (await mustExec(container, ["git", "rev-parse", "HEAD"])).stdout.trim();
             });
           } else {
+            if (runtime.workspaceFiles) throw new StageFailure("environment", new Error("workspaceFiles: git baseline is required"));
             (options.log ?? console.log)(
               `attempt ${attemptId}: git is unavailable in image "${image}" — diff.patch will be empty ` +
                 `(the agent-runtime image ships git; only bare test images lack it)`,
@@ -877,8 +900,13 @@ async function runContainerAttemptV3(
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
           await inStage("environment", async () => {
-            for (const [path, content] of Object.entries(agentAdapter.setupFiles(promptCtx))) {
-              await container.writeFile(path, content);
+            const setup = agentAdapter.setupFiles(promptCtx);
+            if (runtime.workspaceFiles) {
+              const evidence = await stageWorkspaceFiles(container, runtime.workspaceFiles, environment!.workspaceFiles!, setup, options.signal);
+              await artifacts.writeWorkspaceFilesEvidence(runId, attemptId, evidence);
+              if (options.signal?.aborted) throw new Error("workspaceFiles: staging cancelled");
+            } else {
+              for (const [path, content] of Object.entries(setup)) await container.writeFile(path, content);
             }
           });
           command = agentAdapter.command(promptCtx);
@@ -886,6 +914,7 @@ async function runContainerAttemptV3(
           command = runtime.command as string[];
         }
 
+        if (runtime.workspaceFiles && options.signal?.aborted) throw new StageFailure("environment", new Error("workspaceFiles: staging cancelled"));
         persisted.agentStartedAt = Date.now();
         let agentResult: Awaited<ReturnType<typeof container.execInWorkspace>>;
         try {
@@ -1008,7 +1037,10 @@ async function runContainerAttemptV3(
       try { await egress.sidecar.teardown(); } catch { containerTeardownFailure = "egress sidecar teardown failed"; }
       try { await removeRunNetwork(egress.networkName); } catch { containerTeardownFailure = "egress network teardown failed"; }
     }
-    if (sourceDir) await rm(sourceDir, { recursive: true, force: true });
+    if (sourceDir) {
+      try { await rm(sourceDir, { recursive: true, force: true }); }
+      catch { containerTeardownFailure = [containerTeardownFailure, "workspace source cleanup failed"].filter(Boolean).join("; "); }
+    }
   }
 
   // Explicit teardown accounting: the attempt keeps its status and result;

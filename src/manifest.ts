@@ -10,6 +10,7 @@
  * adding or removing a component is a deliberate, test-visible act.
  */
 
+import { validateWorkspaceFilesRuntime, workspaceFilesIdentity } from "./runtime/workspace-files.ts";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EMBEDDED_BUILD_INFO } from "./build-info.generated.ts";
@@ -178,6 +179,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
 
   const experiments: Record<string, ExperimentIdentity> = {};
   for (const { experiment, path } of options.experiments) {
+    validateWorkspaceFilesRuntime(experiment.runtime);
     const imageTag = experiment.runtime.image;
     const components: ExperimentIdentityComponents = {
       source: sourceIdentity(path),
@@ -190,6 +192,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
       },
       runtime: contentHash({
         kind: experiment.runtime.kind,
+        ...(experiment.runtime.workspaceFiles ? { workspaceFiles: workspaceFilesIdentity(experiment.runtime.workspaceFiles) } : {}),
         capacity: experiment.runtime.capacity ?? null,
         observationTargets: experiment.runtime.observationTargets ?? null,
         treatmentPolicyFields: [...(experiment.runtime.treatmentPolicyFields ?? [])].sort(),

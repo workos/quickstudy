@@ -6,6 +6,7 @@
  * manifest), so nothing may mutate it after definition.
  */
 
+import { validateWorkspaceFilesRuntime, type WorkspaceFiles } from "../runtime/workspace-files.ts";
 import type { SurfaceUsageConfig } from "../surface-usage.ts";
 import type { RuntimeCapabilities } from "../runtime/types.ts";
 
@@ -41,7 +42,9 @@ export interface Runtime extends RuntimeCapabilities {
    * Images and lifecycle budgets can never be exempted. All group members must
    * declare the same fields. Source/config identity still changes per attempt.
    */
-  treatmentPolicyFields?: Array<"egress" | "webPolicy" | "pathTreatment" | "mcp" | "promptPreamble">;
+  treatmentPolicyFields?: Array<"egress" | "webPolicy" | "pathTreatment" | "mcp" | "promptPreamble" | "workspaceFiles">;
+  /** Attempt-local non-secret files, staged without replacing the normal adapter. */
+  workspaceFiles?: WorkspaceFiles;
   /** Container image tag (container runtimes; alternative to `containerImage`). */
   image?: string;
   /** Scripted command run in /workspace (container runtimes, this phase). */
@@ -112,5 +115,6 @@ export function defineExperiment(experiment: Experiment): Experiment {
   if (experiment.comparisonGroup !== undefined && experiment.comparisonGroup.trim() === "") {
     throw new Error(`defineExperiment: experiment "${experiment.id}" comparisonGroup must not be empty`);
   }
+  validateWorkspaceFilesRuntime(experiment.runtime);
   return deepFreeze(experiment);
 }
