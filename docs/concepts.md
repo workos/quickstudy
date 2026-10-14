@@ -78,6 +78,9 @@ An experiment is one TypeScript module under the experiments root (default
   surface nobody mentions is rarely discovered, and an undiscovered surface
   measures nothing. The resolved preamble is recorded per pair in the run
   manifest; the eval body itself stays byte-identical across experiments.
+  Runtimes also offer optional non-secret
+  [attempt-local workspace files](workspace-files.md). These files are offered
+  before the normal adapter starts; verified placement is not proof of model use.
 - the optional **treatment** and **comparisonGroup** (below).
 
 Because agent pins, runtime configuration, and the module source are all part
@@ -141,7 +144,7 @@ about the agent, not the harness.
 
 An **error** carries an `error_kind` naming the stage that failed:
 `environment` (provisioning, workspace prep, network, container create,
-setup, export), `agent` (the agent command exited non-zero or threw),
+setup, workspace-file staging/absence checks, export), `agent` (the agent command exited non-zero or threw),
 `scorer` (the scorer threw, returned an invalid result, or ran past its
 budget), or `harness` (anything else — a quickstudy bug). Infrastructure
 failures read apart from agent failures without opening a transcript.
