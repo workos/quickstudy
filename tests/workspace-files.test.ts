@@ -54,6 +54,7 @@ const stream = [
 ].map((event) => JSON.stringify(event)).join("\n");
 
 type Faults = {
+  agentStream?: string;
   contaminate?: (workspace: string) => void;
   corrupt?: boolean;
   setupMutation?: boolean;
@@ -106,7 +107,7 @@ function rig(experiments = [recipe()], faults: Faults = {}) {
           return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString(), timedOut: false };
         }
         events.push("agent"); commands.push(cmd);
-        return { exitCode: 0, stdout: stream, stderr: "", timedOut: false };
+        return { exitCode: 0, stdout: faults.agentStream ?? stream, stderr: "", timedOut: false };
       },
       workspaceFiles: async (request, signal) => {
         events.push(request.phase);
@@ -218,6 +219,43 @@ describe("production runner with offline containers", () => {
     expect(JSON.stringify(r.store.getRun(summary.runId))).not.toContain(text);
     expect(JSON.stringify(evidence)).not.toContain(process.env.QUICKSTUDY_TEST_FILE_KEY!);
     expect(readFileSync(attempt.transcriptRef!, "utf8")).not.toContain(process.env.QUICKSTUDY_TEST_FILE_KEY!);
+  });
+
+  test("overlay staging preserves the recorded preamble, check kinds and fetch-only docs evidence", async () => {
+    const url = "https://docs.example.test/guide";
+    const experiment = recipe("files", files(`${text}\n${url}\n`));
+    let preamble = "  Read the local Harbor guide.\n";
+    let resolutions = 0;
+    experiment.runtime.promptPreamble = () => { resolutions++; return preamble; };
+    experiment.runtime.observationTargets = { docsHosts: ["docs.example.test"] };
+    const agentStream = [stream,
+      JSON.stringify({ type: "item.completed", item: { id: "write", type: "command_execution", command: `printf '%s' '${url}' > README.md` } }),
+      JSON.stringify({ type: "item.completed", item: { id: "fetch", type: "command_execution", command: `curl '${url}'` } }),
+    ].join("\n");
+    const r = rig([experiment], { agentStream });
+    const checks = [
+      { name: "sdk_seen", passed: true, graded: false, kind: "sdk" },
+      { name: "wiring_seen", passed: false, graded: false, kind: "wiring" },
+    ];
+    writeFileSync(join(r.dir, "EVAL.ts"), `export default async () => (${JSON.stringify({ passed: true, checks })});\n`);
+    const manifest = r.manifest();
+    const intended = manifest.pairs![pairKey("task", "files")]!;
+    expect(intended.promptPreamble).toBe("Read the local Harbor guide.");
+    preamble = "Changed after manifest resolution; must not be delivered.";
+    const prompt = `${intended.promptPreamble}\n\n${r.evals[0]!.promptBody}`;
+    const adapter = offlineCodex();
+    const setupFiles = adapter.setupFiles;
+    adapter.setupFiles = (ctx) => { expect(ctx.prompt).toBe(prompt); return setupFiles(ctx); };
+    const summary = await r.run({ manifest, containerAdapters: { codex: () => adapter } });
+    expect(summary).toMatchObject({ passed: 1, errors: 0 });
+    expect(resolutions).toBe(1);
+    expect(r.commands[0]).toContain(prompt);
+    expect(r.events).toEqual(["create", "baseline", "stage", "setup", "verify", "agent", "export", "teardown"]);
+    const attempt = r.store.listAttempts(summary.runId)[0]!;
+    expect(attempt.result?.checks).toEqual(checks);
+    expect(attempt.surfaceUsage?.docs).toEqual({ count: 1, urls: [url] });
+    const evidence = JSON.parse(readFileSync(join(r.artifacts.paths(summary.runId, attempt.id).attemptDir, "workspace-files.json"), "utf8"));
+    expect(evidence.verified).toEqual(intended.workspaceFiles);
   });
 
   test("base64 preserves arbitrary bytes and empty files; sorted inventory agrees", async () => {
@@ -412,6 +450,7 @@ describe("generated identity, resume and actual group comparison", () => {
       (e) => { e.runtime.egressHosts = () => ["different.example.test"]; },
       (e) => { e.runtime.webPolicy = () => "native-web-allowed"; },
       (e) => { e.runtime.pathTreatment = () => "/opt/different"; },
+      (e) => { e.runtime.promptPreamble = () => "A different treatment hint."; },
     ];
     for (const change of changes) {
       const original = { ...arm, agent: { ...arm.agent }, runtime: { ...arm.runtime } };
