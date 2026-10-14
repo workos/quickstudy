@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/workos/quickstudy/compare/v0.6.0...v0.6.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **proxy:** flush the tunnel before closing the peer ([#25](https://github.com/workos/quickstudy/issues/25)) ([c147619](https://github.com/workos/quickstudy/commit/c147619c6ffd5837ac35b0d98eae3574c58d26cd))
+
 ## [0.6.0](https://github.com/workos/quickstudy/compare/v0.5.0...v0.6.0) (2026-10-14)
 
 
