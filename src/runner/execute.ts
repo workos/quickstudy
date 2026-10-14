@@ -64,7 +64,7 @@ import {
   type McpServerConfig,
 } from "../isolation/mcp.ts";
 import { hashString } from "../hash.ts";
-import { DEFAULT_BUDGETS, pairKey, resolvePairEnvironments, type LifecycleBudgets, type PairEnvironment } from "../execution-policy.ts";
+import { DEFAULT_BUDGETS, pairKey, resolvePairEnvironments, type LifecycleBudgets, type PairEnvironment, composePrompt } from "../execution-policy.ts";
 import { ulid } from "../ids.ts";
 import { attemptIdentityHash, buildRunManifest, type RunManifest, type RuntimeImageIdentity } from "../manifest.ts";
 import { isMovingModelAlias } from "../model-identity.ts";
@@ -562,7 +562,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       try {
         disposition =
           experiment.runtime.kind === "host"
-            ? await runHostAttemptV3(options, hostAdapters, loadedEval, experiment, entry, { runId, attemptId, attemptTimeoutMs, persisted })
+            ? await runHostAttemptV3(options, hostAdapters, loadedEval, experiment, entry, { runId, attemptId, attemptTimeoutMs, persisted, environment: manifest.pairs?.[pairKey(entry.evalId, entry.experimentId)] })
             : await runContainerAttemptV3(
                 options,
                 loadedEval,
@@ -661,7 +661,7 @@ async function runHostAttemptV3(
         attemptId,
         fixtureDir: sourceDir,
         workspaceDir: scratchDir,
-        prompt: loadedEval.promptBody,
+        prompt: composePrompt(args.environment?.promptPreamble, loadedEval.promptBody),
         trialIndex: entry.trialIndex,
       }));
     } catch (err) {
@@ -868,13 +868,14 @@ async function runContainerAttemptV3(
           const promptCtx: ContainerAttemptContext = {
             runId,
             attemptId,
-            prompt: loadedEval.promptBody,
+            // The eval body is byte-identical across experiments; a runtime's
+            // promptPreamble (recorded per pair in the manifest) may precede it.
+            prompt: composePrompt(environment?.promptPreamble, loadedEval.promptBody),
             trialIndex: entry.trialIndex,
             ...(rewrittenServers !== undefined ? { mcpServers: rewrittenServers } : {}),
             webPolicy: environment?.webPolicy ?? "native-web-blocked",
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
-          // The prompt itself is byte-identical across experiments.
           await inStage("environment", async () => {
             for (const [path, content] of Object.entries(agentAdapter.setupFiles(promptCtx))) {
               await container.writeFile(path, content);

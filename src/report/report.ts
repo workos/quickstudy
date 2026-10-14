@@ -53,7 +53,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 10;
+export const REPORT_SCHEMA_VERSION = 11;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -82,7 +82,7 @@ export function methodologyNote(trials: number): string {
     `those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface ` +
     `usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. ` +
     `SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that ` +
-    `recorded at least one ungraded check and recalled are those whose ungraded checks all passed. Ungraded ` +
+    `recorded at least one ungraded check of kind "sdk" (an ungraded check with no kind counts as "sdk") and recalled are those whose ungraded "sdk" checks all passed. Ungraded checks of any other kind are tallied and shown but never enter SDK recall. Ungraded ` +
     `checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every ` +
     `scored attempt of an eval under every arm while another check in the same attempts passed: a statement ` +
     `about the instrument, not about any treatment. Control experiments — an oracle that applies each eval's ` +
@@ -150,6 +150,12 @@ export interface ReportCheck {
    * schema_version < 7 artifacts; readers treat absence as graded.
    */
   graded: boolean;
+  /**
+   * The `kind` the scorer recorded for this check (`"sdk"`, `"wiring"`, …),
+   * or null when no attempt tagged it. Absent in schema_version < 11
+   * artifacts; readers treat absence as null.
+   */
+  kind: string | null;
 }
 
 /** One eval × experiment aggregation. Pairs with zero attempts are ABSENT, never 0%. */
@@ -313,7 +319,7 @@ export interface ReportJson {
 const USAGE_VALUE_CAP = 20;
 
 export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
-  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number; graded: boolean }>; outcomes: Set<boolean> }>();
+  const pairs = new Map<string, { pair: ReportPair; checks: Map<string, { passed: number; total: number; graded: boolean; kind: string | null }>; outcomes: Set<boolean> }>();
   for (const attempt of attempts) {
     const key = `${attempt.evalId}|${attempt.experimentId}`;
     let entry = pairs.get(key);
@@ -350,10 +356,11 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
       entry.outcomes.add(false);
     }
     for (const check of attempt.result?.checks ?? []) {
-      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0, graded: true };
+      const tally = entry.checks.get(check.name) ?? { passed: 0, total: 0, graded: true, kind: null };
       tally.total += 1;
       if (check.passed) tally.passed += 1;
       if (check.graded === false) tally.graded = false;
+      if (tally.kind === null && typeof check.kind === "string" && check.kind !== "") tally.kind = check.kind;
       entry.checks.set(check.name, tally);
     }
   }
@@ -365,7 +372,7 @@ export function collectPairs(attempts: AttemptRecord[]): ReportPair[] {
     pair.pass_at_k = collectPassAtK(pair.passed, pair.scored);
     pair.flaky = outcomes.size > 1;
     pair.checks = [...checks.entries()]
-      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total, graded: tally.graded }))
+      .map(([name, tally]) => ({ name, passed: tally.passed, total: tally.total, graded: tally.graded, kind: tally.kind }))
       .sort((a, b) => a.name.localeCompare(b.name));
     result.push(pair);
   }
@@ -411,17 +418,24 @@ function treatmentOf(run: RunRecord, experimentId: string): string | null {
  * experiment; "unspecified" is its own explicit missing-value sentinel, so
  * this never invents a value the run did not pin.
  */
+/** An ungraded check that feeds SDK recall: kind "sdk", or no kind (the pre-tag convention). */
+export function isSdkRecallCheck(check: { graded?: boolean | undefined; kind?: string | undefined }): boolean {
+  return check.graded === false && (check.kind === undefined || check.kind === "sdk");
+}
+
 /**
  * SDK recall over one experiment's scored attempts: the denominator is every
- * completed attempt that recorded at least one `graded: false` check; an
- * attempt is recalled when all of those checks passed. Null rate at zero.
+ * completed attempt that recorded at least one `graded: false` check of kind
+ * "sdk" (or untagged); an attempt is recalled when all of those checks
+ * passed. Ungraded checks of any other kind (wiring, …) never enter. Null
+ * rate at zero.
  */
 export function collectRecall(attempts: AttemptRecord[], experimentId: string): ReportRecall {
   let total = 0;
   let recalled = 0;
   for (const attempt of attempts) {
     if (attempt.experimentId !== experimentId || attempt.status !== "completed") continue;
-    const ungraded = (attempt.result?.checks ?? []).filter((check) => check.graded === false);
+    const ungraded = (attempt.result?.checks ?? []).filter(isSdkRecallCheck);
     if (ungraded.length === 0) continue;
     total += 1;
     if (ungraded.every((check) => check.passed)) recalled += 1;

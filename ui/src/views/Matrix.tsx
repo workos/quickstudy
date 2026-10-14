@@ -16,7 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import type { DataAttempt, DataMeta, DataRun } from "../../../src/export-types.ts";
 import type { EvalBand, ReportJson } from "../../../src/report/report.ts";
 import { agentLabelOf, agentTitleOf } from "../agent-label.ts";
-import { countGradedChecks, isGraded, UNGRADED_TITLE } from "../checks.ts";
+import { countGradedChecks, isGraded, recordedLabel, UNGRADED_TITLE } from "../checks.ts";
 import { PublicationNotice } from "../components/PublicationNotice.tsx";
 import { ErrorPanel } from "../components/ErrorPanel.tsx";
 import { Leaderboard } from "../components/Leaderboard.tsx";
@@ -141,7 +141,7 @@ function AttemptRow({ attempt, runId, adapter }: { attempt: DataAttempt; runId: 
               {check.passed ? "✓" : "✗"} {check.name}
               {!isGraded(check) && (
                 <span className="tag" data-testid="ungraded-tag" title={UNGRADED_TITLE}>
-                  recorded
+                  {recordedLabel(check)}
                 </span>
               )}
             </span>

@@ -60,7 +60,11 @@ export interface AttemptContext {
    * it into the artifacts store afterwards.
    */
   workspaceDir: string;
-  /** The eval's task prompt, byte-identical across experiments. */
+  /**
+   * The prompt the agent receives: the eval's task body (byte-identical
+   * across experiments), preceded by the runtime's `promptPreamble` when the
+   * treatment declares one (recorded per pair in the manifest).
+   */
   prompt: string;
   trialIndex: number;
 }
@@ -112,7 +116,11 @@ export interface AgentAdapter {
 export interface ContainerAttemptContext {
   runId: string;
   attemptId: string;
-  /** The eval's task prompt, byte-identical across experiments. */
+  /**
+   * The prompt the agent receives: the eval's task body (byte-identical
+   * across experiments), preceded by the runtime's `promptPreamble` when the
+   * treatment declares one (recorded per pair in the manifest).
+   */
   prompt: string;
   trialIndex: number;
   /**

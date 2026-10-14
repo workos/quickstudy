@@ -273,7 +273,7 @@ describe("scorer health", () => {
     try {
       const report = buildReport({ store, runId, resultsDir });
       expect(report.schema_version).toBe(REPORT_SCHEMA_VERSION);
-      expect(report.schema_version).toBe(10);
+      expect(report.schema_version).toBe(11);
       expect(report.scorer_health).toBeDefined();
       expect(report.scorer_health?.suspects).toEqual([]);
       for (const pair of report.pairs) expect(pair.band === null || typeof pair.band === "string").toBeTrue();

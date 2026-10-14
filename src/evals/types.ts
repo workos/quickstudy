@@ -56,6 +56,15 @@ export interface CheckResult {
    * recall from it, and the scorer must leave it out of `passed`. Absent = true.
    */
   graded?: boolean;
+  /**
+   * What a recorded check is about, so recorded checks of different natures
+   * never pool: `"sdk"` (did the agent use the product SDK) feeds SDK recall;
+   * any other tag (`"wiring"` for shape-of-code signals, …) is tallied and
+   * shown but never enters SDK recall. Absent on an ungraded check means
+   * `"sdk"` (the pre-tag convention). Free-form string; graded checks may
+   * carry one too, purely as a label.
+   */
+  kind?: string;
   notes?: string;
   evidence?: EvidenceReference[];
 }

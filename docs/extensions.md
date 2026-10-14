@@ -78,7 +78,7 @@ Every pair records the exact resolved image ID, egress policy, web policy, PATH
 treatment, MCP configuration digest and lifecycle budgets. Execution uses those
 resolved values, including the image ID instead of its mutable tag. Experiment
 comparison checks per-eval images and budgets. A runtime may explicitly declare
-`treatmentPolicyFields` for egress/webPolicy/pathTreatment/mcp; all group members
+`treatmentPolicyFields` for egress/webPolicy/pathTreatment/mcp/promptPreamble; all group members
 must declare the same exemptions. Images and budgets cannot be exempted.
 
 v3 manifests and historical reports remain readable with their original semantics.
