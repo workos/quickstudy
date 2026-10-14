@@ -7,7 +7,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { createServer, connect, type Server, type Socket } from "node:net";
+import { createServer, connect, type Server, type Socket, connect as netConnect, createServer as netCreateServer } from "node:net";
 import {
   AllowlistEntryError,
   composeAllowlistFromHosts,
@@ -322,4 +322,105 @@ describe("egress proxy (live, loopback)", () => {
   test("startEgressProxy rejects a malformed allowlist up front", () => {
     expect(() => startEgressProxy({ allowlist: ["http://nope.example"] })).toThrow(AllowlistEntryError);
   });
+});
+
+describe("egress proxy: tunnel flushes before closing", () => {
+  test("a large response from an upstream that closes immediately arrives whole, every time", async () => {
+    const SIZE = 8 * 1024 * 1024;
+    const body = Buffer.alloc(SIZE, 0x61);
+    // node:net handles backpressure: end(body) writes everything, then FIN.
+    const origin = netCreateServer((socket) => {
+      socket.once("data", () => {
+        socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${SIZE}\r\nConnection: close\r\n\r\n`);
+        socket.end(body);
+      });
+    });
+    await new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve));
+    const originPort = (origin.address() as { port: number }).port;
+    const proxy = await startEgressProxy({ allowlist: ["localhost"], hostname: "127.0.0.1", onEvent: () => {} });
+    try {
+      const received: number[] = [];
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        received.push(
+          await new Promise<number>((resolve, reject) => {
+            let bytes = 0;
+            let head = "";
+            let headerDone = false;
+            const client = netConnect(proxy.port, "127.0.0.1", () => {
+              client.write(`GET http://localhost:${originPort}/big HTTP/1.1\r\nHost: localhost:${originPort}\r\n\r\n`);
+            });
+            client.on("data", (chunk: Buffer) => {
+              if (headerDone) {
+                bytes += chunk.length;
+                return;
+              }
+              head += chunk.toString("latin1");
+              const split = head.indexOf("\r\n\r\n");
+              if (split !== -1) {
+                headerDone = true;
+                bytes += Buffer.byteLength(head.slice(split + 4), "latin1");
+              }
+            });
+            // A reset after the last byte is still a failure: the fix is about clean closes.
+            client.on("error", (err) => reject(err));
+            client.on("close", (hadError) => (hadError ? reject(new Error("closed with error")) : resolve(bytes)));
+          }),
+        );
+      }
+      expect(received).toEqual(received.map(() => SIZE));
+    } finally {
+      await proxy.close();
+      origin.close();
+    }
+  }, 60_000);
+
+  test("a client that disconnects mid-download takes the upstream connection down with it", async () => {
+    const SIZE = 32 * 1024 * 1024;
+    let upstreamClosed = false;
+    // The origin streams fresh chunks on a timer rather than queueing one
+    // huge end(): Bun's node:net only notices a reset peer on a fresh write.
+    const origin = netCreateServer((socket) => {
+      socket.on("close", () => {
+        upstreamClosed = true;
+      });
+      socket.on("error", () => {});
+      socket.once("data", () => {
+        socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${SIZE}\r\nConnection: close\r\n\r\n`);
+        const chunk = Buffer.alloc(64 * 1024, 0x62);
+        let sent = 0;
+        const timer = setInterval(() => {
+          if (socket.destroyed || !socket.writable || sent >= SIZE) {
+            clearInterval(timer);
+            return;
+          }
+          socket.write(chunk);
+          sent += chunk.length;
+        }, 5);
+      });
+    });
+    await new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve));
+    const originPort = (origin.address() as { port: number }).port;
+    const proxy = await startEgressProxy({ allowlist: ["localhost"], hostname: "127.0.0.1", onEvent: () => {} });
+    try {
+      await new Promise<void>((resolve) => {
+        const client = netConnect(proxy.port, "127.0.0.1", () => {
+          client.write(`GET http://localhost:${originPort}/big HTTP/1.1\r\nHost: localhost:${originPort}\r\n\r\n`);
+        });
+        let seen = 0;
+        client.on("data", (chunk: Buffer) => {
+          seen += chunk.length;
+          // Walk away with most of the body still unread on the upstream side.
+          if (seen > 64 * 1024) client.destroy();
+        });
+        client.on("close", () => resolve());
+        client.on("error", () => {});
+      });
+      const deadline = Date.now() + 5_000;
+      while (!upstreamClosed && Date.now() < deadline) await new Promise((r) => setTimeout(r, 25));
+      expect(upstreamClosed).toBe(true);
+    } finally {
+      await proxy.close();
+      origin.close();
+    }
+  }, 30_000);
 });
