@@ -7,7 +7,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { createServer, connect, type Server, type Socket } from "node:net";
+import { createServer, connect, type Server, type Socket, connect as netConnect, createServer as netCreateServer } from "node:net";
 import {
   AllowlistEntryError,
   composeAllowlistFromHosts,
@@ -322,4 +322,54 @@ describe("egress proxy (live, loopback)", () => {
   test("startEgressProxy rejects a malformed allowlist up front", () => {
     expect(() => startEgressProxy({ allowlist: ["http://nope.example"] })).toThrow(AllowlistEntryError);
   });
+});
+
+describe("egress proxy: tunnel flushes before closing", () => {
+  test("a large response from an upstream that closes immediately arrives whole, every time", async () => {
+    const SIZE = 8 * 1024 * 1024;
+    const body = Buffer.alloc(SIZE, 0x61);
+    // node:net handles backpressure: end(body) writes everything, then FIN.
+    const origin = netCreateServer((socket) => {
+      socket.once("data", () => {
+        socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${SIZE}\r\nConnection: close\r\n\r\n`);
+        socket.end(body);
+      });
+    });
+    await new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve));
+    const originPort = (origin.address() as { port: number }).port;
+    const proxy = await startEgressProxy({ allowlist: ["localhost"], hostname: "127.0.0.1", onEvent: () => {} });
+    try {
+      const received: number[] = [];
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        received.push(
+          await new Promise<number>((resolve) => {
+            let bytes = 0;
+            let head = "";
+            let headerDone = false;
+            const client = netConnect(proxy.port, "127.0.0.1", () => {
+              client.write(`GET http://localhost:${originPort}/big HTTP/1.1\r\nHost: localhost:${originPort}\r\n\r\n`);
+            });
+            client.on("data", (chunk: Buffer) => {
+              if (headerDone) {
+                bytes += chunk.length;
+                return;
+              }
+              head += chunk.toString("latin1");
+              const split = head.indexOf("\r\n\r\n");
+              if (split !== -1) {
+                headerDone = true;
+                bytes += Buffer.byteLength(head.slice(split + 4), "latin1");
+              }
+            });
+            client.on("close", () => resolve(bytes));
+            client.on("error", () => resolve(bytes));
+          }),
+        );
+      }
+      expect(received).toEqual(received.map(() => SIZE));
+    } finally {
+      await proxy.close();
+      origin.close();
+    }
+  }, 60_000);
 });
