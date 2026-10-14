@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/workos/quickstudy/compare/v0.5.0...v0.6.0) (2026-10-14)
+
+
+### Features
+
+* check kinds, prompt preambles, and fetch-only docs evidence ([#23](https://github.com/workos/quickstudy/issues/23)) ([1f90f1b](https://github.com/workos/quickstudy/commit/1f90f1b639ddf4bef7529ca400ee00936683c75f))
+
 ## [0.5.0](https://github.com/workos/quickstudy/compare/v0.4.0...v0.5.0) (2026-09-25)
 
 
