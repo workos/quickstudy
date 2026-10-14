@@ -377,6 +377,8 @@ describe("egress proxy: tunnel flushes before closing", () => {
   test("a client that disconnects mid-download takes the upstream connection down with it", async () => {
     const SIZE = 32 * 1024 * 1024;
     let upstreamClosed = false;
+    // The origin streams fresh chunks on a timer rather than queueing one
+    // huge end(): Bun's node:net only notices a reset peer on a fresh write.
     const origin = netCreateServer((socket) => {
       socket.on("close", () => {
         upstreamClosed = true;
@@ -384,7 +386,16 @@ describe("egress proxy: tunnel flushes before closing", () => {
       socket.on("error", () => {});
       socket.once("data", () => {
         socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${SIZE}\r\nConnection: close\r\n\r\n`);
-        socket.end(Buffer.alloc(SIZE, 0x62));
+        const chunk = Buffer.alloc(64 * 1024, 0x62);
+        let sent = 0;
+        const timer = setInterval(() => {
+          if (socket.destroyed || !socket.writable || sent >= SIZE) {
+            clearInterval(timer);
+            return;
+          }
+          socket.write(chunk);
+          sent += chunk.length;
+        }, 5);
       });
     });
     await new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve));
