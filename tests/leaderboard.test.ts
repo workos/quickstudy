@@ -121,10 +121,26 @@ describe("aggregate", () => {
   test("regression-suite attempts count toward the aggregate; smoke-suite attempts never do", () => {
     const plain = seededReport(false);
     const withRegression = seededReport(true);
-    const attemptsOf = (report: ReportJson) => (report.experiments ?? []).reduce((n, e) => n + (e.aggregate?.attempts ?? 0), 0);
-    const regressionAttempts = (withRegression.pairs ?? []).filter((p) => p.suite === "regression").reduce((n, p) => n + p.total, 0);
-    expect(regressionAttempts).toBeGreaterThan(0);
-    expect(attemptsOf(withRegression) - attemptsOf(plain)).toBe(regressionAttempts);
+    const regressionPairs = (withRegression.pairs ?? []).filter((p) => p.suite === "regression");
+    expect(regressionPairs.length).toBeGreaterThan(0);
+    const sum = (values: number[]) => values.reduce((n, v) => n + v, 0);
+    // Every arm's row grows by exactly its regression pairs: attempts, scored,
+    // passes, and the discriminating subset, so both filters moved together.
+    for (const experiment of withRegression.experiments ?? []) {
+      const agg = experiment.aggregate!;
+      const before = plain.experiments?.find((e) => e.experiment_id === experiment.experiment_id)?.aggregate!;
+      const mine = regressionPairs.filter((p) => p.experiment_id === experiment.experiment_id);
+      const scored = sum(mine.map((p) => p.scored));
+      const passed = sum(mine.map((p) => p.passed));
+      expect(agg.attempts - before.attempts).toBe(sum(mine.map((p) => p.total)));
+      expect(agg.passed + agg.failed).toBe(before.passed + before.failed + scored);
+      expect(agg.passed).toBe(before.passed + passed);
+      expect(agg.pass_rate_all).toBeCloseTo((before.passed + passed) / (before.passed + before.failed + scored), 10);
+      const discriminating = mine.filter((p) => p.band === "discriminating");
+      expect(agg.discriminating_scored).toBe(before.discriminating_scored + sum(discriminating.map((p) => p.scored)));
+      expect(agg.discriminating_passed).toBe(before.discriminating_passed + sum(discriminating.map((p) => p.passed)));
+    }
+    expect((withRegression.pairs ?? []).some((p) => p.suite === "regression" && p.band === "discriminating")).toBe(true);
     // Smoke stays outside the headline: the row ignores it entirely.
     const x = aggregateOf(
       [pass("split", "x"), fail("split", "x"), pass("saturated", "x", { suite: "smoke" }), pass("saturated", "x", { suite: "smoke" })],
