@@ -454,7 +454,7 @@ function roleOf(run: RunRecord, experimentId: string): ExperimentRole {
 }
 
 /** The run's control experiments, from the roles it recorded. */
-function controlExperiments(run: RunRecord): Set<string> {
+export function controlExperiments(run: RunRecord): Set<string> {
   return new Set(run.config.experimentIds.filter((id) => roleOf(run, id) !== "agent"));
 }
 

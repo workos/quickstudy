@@ -275,6 +275,10 @@ When you want hypotheses about **why** pairs failed, `quickstudy diagnose
 model call and writes `diagnosis.json` beside `report.json`. Findings are
 evidence-linked hypotheses — the conservative no-attribution stance of the
 report is preserved by keeping diagnosis a separate, clearly-labeled layer.
+Control arms are never diagnosed: the oracle passes and the no-op fails by
+construction, so a model asked about them only reports a "broken harness";
+the report's scorer-health callout watches the oracle instead. Those pairs
+count toward `pairs_skipped` alongside passing-only pairs.
 
 The Diagnosis view clusters findings by eval and by the graded checks that
 failed on the cited pairs (joined from the run's `report.json`), largest

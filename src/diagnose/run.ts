@@ -30,6 +30,7 @@ import {
   type PairBundle,
 } from "./prompt.ts";
 import { selectDiagnosablePairs, type DiagnosablePair } from "./select.ts";
+import { controlExperiments } from "../report/report.ts";
 import {
   DIAGNOSIS_DISCLAIMER,
   DIAGNOSIS_PROMPT_VERSION,
@@ -218,10 +219,13 @@ export async function runDiagnose(options: RunDiagnoseOptions): Promise<Diagnosi
 
   const run = mustResolveRun(store, options.runId);
   const attempts = store.listAttempts(run.id);
-  const selection = selectDiagnosablePairs(attempts);
+  // Controls check the instrument, not an agent: the oracle passes and the
+  // no-op fails by construction, so their pairs carry no diagnosable cause.
+  const controls = controlExperiments(run);
+  const selection = selectDiagnosablePairs(attempts, { controls });
   log(
     `diagnose: run ${run.id} — ${selection.pairs.length} diagnosable pair(s), ` +
-      `${selection.skipped} passing pair(s) skipped`,
+      `${selection.skipped} passing pair(s) skipped, ${selection.controls} control pair(s) excluded`,
   );
 
   const findings: DiagnosisFinding[] = [];
@@ -281,7 +285,7 @@ export async function runDiagnose(options: RunDiagnoseOptions): Promise<Diagnosi
     prompt_version: DIAGNOSIS_PROMPT_VERSION,
     disclaimer: DIAGNOSIS_DISCLAIMER,
     pairs_diagnosed: selection.pairs.length - errors.length,
-    pairs_skipped: selection.skipped,
+    pairs_skipped: selection.skipped + selection.controls,
     findings,
     errors,
   };

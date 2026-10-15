@@ -702,3 +702,52 @@ describe("collectOfferedSurfaces", () => {
     store.close();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Control pairs (oracle / no-op) are never diagnosed
+// ---------------------------------------------------------------------------
+
+describe("control pairs", () => {
+  const ROLES: RunConfig["roles"] = { nop: "negative-control", oracle: "positive-control" };
+
+  test("selection excludes control experiments before classifying — the instrument is not the agent", () => {
+    const { store, runId } = seedDiagnoseRun(
+      [
+        { evalId: "e1", experimentId: "nop", cls: "failed" },
+        { evalId: "e1", experimentId: "nop", cls: "failed" },
+        { evalId: "e1", experimentId: "oracle", cls: "passed" },
+        { evalId: "e1", experimentId: "x1", cls: "failed" },
+      ],
+      { roles: ROLES },
+    );
+    const selection = selectDiagnosablePairs(store.listAttempts(runId), { controls: new Set(["nop", "oracle"]) });
+    expect(selection.pairs.map((pair) => pair.experimentId)).toEqual(["x1"]);
+    expect(selection.controls).toBe(2);
+    expect(selection.skipped).toBe(0);
+    // A run from before roles were recorded names no controls: nothing is excluded.
+    const legacy = selectDiagnosablePairs(store.listAttempts(runId));
+    expect(legacy.pairs.map((pair) => pair.experimentId)).toEqual(["nop", "x1"]);
+    expect(legacy.controls).toBe(0);
+    expect(legacy.skipped).toBe(1);
+    store.close();
+  });
+
+  test("runDiagnose spends nothing on the controls and counts their pairs as skipped", async () => {
+    const { store, resultsDir, runId } = seedDiagnoseRun(
+      [
+        { evalId: "auth", experimentId: "nop", cls: "failed", transcript: FAILING_CLI },
+        { evalId: "auth", experimentId: "oracle", cls: "passed", transcript: PASSING },
+        { evalId: "auth", experimentId: "mcp", cls: "failed", transcript: FAILING_MCP },
+      ],
+      { roles: ROLES },
+    );
+    const client = new FakeClient([findingsJson([1])]);
+    const diagnosis = await runDiagnose({ store, resultsDir, runId, client, model: "test-model" });
+    expect(client.requests).toHaveLength(1);
+    expect(diagnosis.findings.map((finding) => finding.experiment_id)).toEqual(["mcp"]);
+    expect(diagnosis.pairs_diagnosed).toBe(1);
+    expect(diagnosis.pairs_skipped).toBe(2);
+    expect(diagnosis.errors).toEqual([]);
+    store.close();
+  });
+});
