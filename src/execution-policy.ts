@@ -1,4 +1,4 @@
-import { workspaceFilesIdentity, type WorkspaceFilesIdentity } from "./runtime/workspace-files.ts";
+import { workspaceFilesIdentity, type WorkspaceFiles, type WorkspaceFilesIdentity } from "./runtime/workspace-files.ts";
 import type { LoadedEval } from "./evals/types.ts";
 import type { LoadedExperiment } from "./experiments/types.ts";
 import type { RuntimeImageIdentity } from "./manifest.ts";
@@ -49,6 +49,8 @@ export function resolvePairEnvironments(options: {
   budgets?: Partial<LifecycleBudgets>;
   mcpHashes?: Record<string, string>;
   imageTags?: Record<string, string>;
+  /** Runner-captured declarations; entries with undefined explicitly mean no overlay. */
+  workspaceFilesByExperiment?: ReadonlyMap<string, WorkspaceFiles | undefined>;
 }): Record<string, PairEnvironment> {
   const budgets = { ...DEFAULT_BUDGETS, ...options.budgets };
   for (const [name, value] of Object.entries(budgets))
@@ -57,12 +59,13 @@ export function resolvePairEnvironments(options: {
   for (const loaded of options.evals)
     for (const { experiment } of options.experiments) {
       const runtime = experiment.runtime;
+      const files = options.workspaceFilesByExperiment ? options.workspaceFilesByExperiment.get(experiment.id) : runtime.workspaceFiles;
       const tag =
         options.imageTags?.[pairKey(loaded.metadata.id, experiment.id)] ??
         runtime.image ??
         runtime.containerImage?.(loaded.metadata);
       pairs[pairKey(loaded.metadata.id, experiment.id)] = {
-        ...(runtime.workspaceFiles ? { workspaceFiles: workspaceFilesIdentity(runtime.workspaceFiles) } : {}),
+        ...(files ? { workspaceFiles: workspaceFilesIdentity(files) } : {}),
         image: tag ? (options.images?.[tag] ?? { tag, id: "unresolved", repoDigests: [] }) : null,
         // With the flag, every container is proxied. No runtime hosts means
         // only the adapter's provider endpoints are permitted.

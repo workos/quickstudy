@@ -379,6 +379,47 @@ describe("production runner with offline containers", () => {
     expect(r.store.listAttempts(summary.runId)[0]!.agentStartedAt).toBeNull();
   }, 40000);
 
+  test("class runtime capabilities keep their original receiver with workspace files", async () => {
+    const calls: string[] = [];
+    class GuideRuntime {
+      readonly kind = "container" as const;
+      readonly workspaceFiles = files();
+      #image = "test-image";
+      containerImage() { calls.push("image"); return this.#image; }
+      promptPreamble() { return `Guide for ${this.#image}.`; }
+      mcpServers() { return { guide: { url: `https://${this.#image}.example.test/mcp` } }; }
+      async provision() {
+        expect(runtime).toBe(this);
+        expect(this.#image).toBe("test-image");
+        calls.push("provision");
+        return {};
+      }
+      scorerCapabilities() {
+        expect(runtime).toBe(this);
+        calls.push("scorer");
+        return { query: async () => this.#image };
+      }
+      async teardown() {
+        expect(runtime).toBe(this);
+        expect(this.#image).toBe("test-image");
+        calls.push("teardown");
+      }
+    }
+    const runtime = new GuideRuntime();
+    const experiment = defineExperiment({ ...recipe(), runtime });
+    const r = rig([experiment]);
+    writeFileSync(join(r.dir, "EVAL.ts"), `export default async (ctx) => ({ passed: await ctx.query({}) === 'test-image', checks: [] });\n`);
+    expect((await r.run()).passed).toBe(1);
+    expect(calls).toContain("image");
+    expect(calls.slice(-3)).toEqual(["provision", "scorer", "teardown"]);
+    expect(r.commands[0]).toContain(`Guide for test-image.\n\n${r.evals[0]!.promptBody}`);
+    expect(r.setupContents[CODEX_CONFIG_PATH]).toContain("https://test-image.example.test/mcp");
+    expect(r.staged[0]).toEqual(Buffer.from(text));
+    expect(experiment.runtime).toBe(runtime);
+    expect(Object.isFrozen(runtime)).toBe(true);
+    expect(runtime.workspaceFiles.files[0]!.encoding).toBe("utf8");
+  });
+
   test("snapshot is bound before awaits; caller mutation cannot substitute payload bytes", async () => {
     const input = files(); const experiment = recipe("files", input);
     const r = rig([experiment], { onStage: () => { input.files[0]!.content = "mutated after identity"; } });
@@ -420,6 +461,20 @@ describe("generated identity, resume and actual group comparison", () => {
     expect(() => r.manifest()).toThrow("unsupported staging version");
     expect(JSON.stringify(baseline)).not.toContain(r.root);
     expect(JSON.stringify(baseline)).not.toContain(Buffer.from(text).toString("base64"));
+  });
+
+  test("manifest and pair resolution use captured files even if the runtime declaration changes", () => {
+    for (const offered of [files(), undefined]) {
+      const experiment = recipe();
+      experiment.runtime.workspaceFiles = offered;
+      const r = rig([experiment]);
+      const expected = r.manifest();
+      const workspaceFilesByExperiment = new Map([[experiment.id, offered ? defineWorkspaceFiles(offered) : undefined]]);
+      experiment.runtime.workspaceFiles = files("changed after capture");
+      const options = { evals: r.evals, experiments: r.loaded, harness, workspaceFilesByExperiment };
+      expect(resolvePairEnvironments(options)).toEqual(expected.pairs!);
+      expect(buildRunManifest(options)).toEqual(expected);
+    }
   });
 
   test("stale payload manifests and stale resume are rejected; unchanged resume executes nothing", async () => {

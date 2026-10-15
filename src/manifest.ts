@@ -10,7 +10,7 @@
  * adding or removing a component is a deliberate, test-visible act.
  */
 
-import { validateWorkspaceFilesRuntime, workspaceFilesIdentity } from "./runtime/workspace-files.ts";
+import { validateWorkspaceFilesRuntime, workspaceFilesIdentity, type WorkspaceFiles } from "./runtime/workspace-files.ts";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EMBEDDED_BUILD_INFO } from "./build-info.generated.ts";
@@ -152,6 +152,8 @@ export interface BuildRunManifestOptions {
   harness?: HarnessIdentity;
   pairs?: Record<string, PairEnvironment>;
   scorerIdentities?: Record<string, Record<string, unknown>>;
+  /** Share the runner's immutable payload snapshot without copying runtime instances. */
+  workspaceFilesByExperiment?: ReadonlyMap<string, WorkspaceFiles | undefined>;
 }
 
 /** Build before the first paid attempt; all reads are deterministic and local. */
@@ -179,7 +181,8 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
 
   const experiments: Record<string, ExperimentIdentity> = {};
   for (const { experiment, path } of options.experiments) {
-    validateWorkspaceFilesRuntime(experiment.runtime);
+    const files = options.workspaceFilesByExperiment ? options.workspaceFilesByExperiment.get(experiment.id) : experiment.runtime.workspaceFiles;
+    validateWorkspaceFilesRuntime({ kind: experiment.runtime.kind, command: experiment.runtime.command, workspaceFiles: files });
     const imageTag = experiment.runtime.image;
     const components: ExperimentIdentityComponents = {
       source: sourceIdentity(path),
@@ -192,7 +195,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
       },
       runtime: contentHash({
         kind: experiment.runtime.kind,
-        ...(experiment.runtime.workspaceFiles ? { workspaceFiles: workspaceFilesIdentity(experiment.runtime.workspaceFiles) } : {}),
+        ...(files ? { workspaceFiles: workspaceFilesIdentity(files) } : {}),
         capacity: experiment.runtime.capacity ?? null,
         observationTargets: experiment.runtime.observationTargets ?? null,
         treatmentPolicyFields: [...(experiment.runtime.treatmentPolicyFields ?? [])].sort(),
