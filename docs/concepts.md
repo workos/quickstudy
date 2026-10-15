@@ -244,6 +244,16 @@ attempts only** (benchmark and regression), so smoke and other evals never
 move the ranking. That is why the row's `cost_usd` can be lower than the
 run-wide `telemetry.cost_usd`. Its columns and their denominators:
 
+- **Gate**: whether the all-eval pass rate is at or above the report's
+  `pass_gate` (0.8). Pass rate is a gate, not a rank: arms that clear it are
+  ordered by the two columns below; arms below it are listed after them.
+- **Cost/pass**: reported cost summed over the attempts that reported it,
+  divided by the passes among those attempts — what one success cost with
+  the failures included. `null` (shown as a dash) when nothing reported cost
+  or none of it passed.
+- **Time/pass**: agent time summed over the scored attempts that recorded
+  both stamps, divided by the passes among them. Every adapter records agent
+  time, so this is the primary order; cost follows it.
 - **Pass rate (all · discriminating)**: `passed / scored` over the
   experiment's headline pairs, then the same over only the evals whose band
   is `discriminating` (`discriminating_passed / discriminating_scored`).
@@ -262,11 +272,10 @@ run-wide `telemetry.cost_usd`. Its columns and their denominators:
 - **SDK recall**: the same `sdk_recall` the report already states per
   experiment, over every suite.
 
-Rows sort by discriminating pass rate (nulls last), then the all-eval pass
-rate, then experiment id. Unavailable values render as "—", never 0. A report
-written before the leaderboard existed (`schema_version` < 9) shows a
-one-line note to regenerate it with `quickstudy report <run-id>`. `export`
-rebuilds such stored reports automatically.
+Rows list the agent experiments before the controls; among the agents, those
+that clear the gate come first, ordered by time-to-pass ascending, then
+cost-to-pass ascending (unpriced arms after priced ones), with the
+discriminating and all-eval pass rates as tie-breaks.
 
 For missing Codex dollar telemetry, `report --pricing <file>` can calculate
 [retrospective token-cost estimates](./cost-estimates.md) from saved transcripts
