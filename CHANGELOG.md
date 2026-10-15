@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/workos/quickstudy/compare/v0.8.0...v0.8.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **probe:** signal the app's group through /proc, not a negative pid ([#32](https://github.com/workos/quickstudy/issues/32)) ([1820860](https://github.com/workos/quickstudy/commit/1820860b2b82c640ed84834c5e173c180d89ab4d))
+
 ## [0.8.0](https://github.com/workos/quickstudy/compare/v0.7.0...v0.8.0) (2026-10-15)
 
 
