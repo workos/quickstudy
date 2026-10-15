@@ -17,7 +17,7 @@ export function renderDiagnosisText(diagnosis: DiagnosisJson, resultsDir: string
   lines.push(`diagnosis: run ${diagnosis.run_id}`);
   lines.push(`  model: ${diagnosis.model.requested}${diagnosis.model.resolved !== null ? ` (resolved: ${diagnosis.model.resolved})` : ""}`);
   lines.push(
-    `  pairs: ${diagnosis.pairs_diagnosed} diagnosed, ${diagnosis.pairs_skipped} skipped (all passing)` +
+    `  pairs: ${diagnosis.pairs_diagnosed} diagnosed, ${diagnosis.pairs_skipped} skipped (passing or control)` +
       (diagnosis.errors.length > 0 ? `, ${diagnosis.errors.length} errored` : ""),
   );
 

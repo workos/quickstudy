@@ -85,6 +85,7 @@ export interface DiagnosisJson {
   /** Fixed self-labeling: hypotheses with evidence links, not verdicts; single-sweep scope. */
   disclaimer: string;
   pairs_diagnosed: number;
+  /** Pairs never sent to the model: passing-only pairs and control (oracle / no-op) pairs. */
   pairs_skipped: number;
   findings: DiagnosisFinding[];
   errors: PairDiagnosisError[];

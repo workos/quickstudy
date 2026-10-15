@@ -47,6 +47,19 @@ export interface PairSelection {
   pairs: DiagnosablePair[];
   /** Passing-only pairs — skipped, never sent to the model. */
   skipped: number;
+  /**
+   * Control pairs (the positive-control oracle, the negative-control no-op) —
+   * excluded before classification, never sent to the model. A control's
+   * outcome is fixed by construction: asked why the no-op "failed", a model
+   * confidently reports a broken harness. The report's scorer health watches
+   * the oracle instead.
+   */
+  controls: number;
+}
+
+export interface SelectOptions {
+  /** Experiment ids the run recorded as controls (RunConfig.roles other than "agent"). */
+  controls?: ReadonlySet<string>;
 }
 
 /** Bundle ordering: failed first, then errors, then incomplete. */
@@ -58,10 +71,11 @@ const CLASS_ORDER: Record<Exclude<AttemptClass, "passed">, number> = {
 
 /**
  * Group attempts into pairs, classify, and select each diagnosable pair's
- * bundle. Deterministic: pairs sort by eval id then experiment id (the
- * report's order); within a class, attempts sort by ULID (id) order.
+ * bundle. Control experiments are excluded first (see PairSelection.controls).
+ * Deterministic: pairs sort by eval id then experiment id (the report's
+ * order); within a class, attempts sort by ULID (id) order.
  */
-export function selectDiagnosablePairs(attempts: AttemptRecord[]): PairSelection {
+export function selectDiagnosablePairs(attempts: AttemptRecord[], options: SelectOptions = {}): PairSelection {
   const byPair = new Map<string, AttemptRecord[]>();
   for (const attempt of attempts) {
     const key = `${attempt.evalId}|${attempt.experimentId}`;
@@ -72,8 +86,13 @@ export function selectDiagnosablePairs(attempts: AttemptRecord[]): PairSelection
 
   const pairs: DiagnosablePair[] = [];
   let skipped = 0;
+  let controls = 0;
 
   for (const group of byPair.values()) {
+    if (options.controls?.has(group[0]!.experimentId)) {
+      controls += 1;
+      continue;
+    }
     const report = collectPairs(group)[0]!;
     if (report.failed + report.errors + report.incomplete === 0) {
       skipped += 1;
@@ -106,5 +125,5 @@ export function selectDiagnosablePairs(attempts: AttemptRecord[]): PairSelection
   }
 
   pairs.sort((a, b) => a.evalId.localeCompare(b.evalId) || a.experimentId.localeCompare(b.experimentId));
-  return { pairs, skipped };
+  return { pairs, skipped, controls };
 }
