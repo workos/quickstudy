@@ -1,6 +1,6 @@
 /**
  * Per-experiment leaderboard: one row per experiment from the report's
- * `experiments[].aggregate` (benchmark suite only), controls after the agent
+ * `experiments[].aggregate` (headline suites: benchmark + regression), controls after the agent
  * experiments, then sorted by pass rate on
  * discriminating evals. Reports written before the aggregate existed get a
  * one-line "regenerate" note instead of a partial table.
@@ -57,7 +57,7 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
     <div className="card" data-testid="leaderboard">
       <div className="head">
         <h3>Which experiment is best?</h3>
-        <span className="muted">sorted by pass rate on discriminating evals; controls last</span>
+        <span className="muted">headline suites (benchmark + regression) · sorted by pass rate on discriminating evals; controls last</span>
       </div>
       <div className="body">
         <table className="data">

@@ -1,0 +1,45 @@
+{
+  "projectName": "Prove the Bench",
+  "slug": "prove-the-bench",
+  "date": "2026-09-24",
+  "branch": "ideation/prove-the-bench",
+  "baseBranch": "main",
+  "strict": true,
+  "summary": {
+    "completed": [
+      "Leaderboard"
+    ],
+    "noops": [],
+    "failed": [],
+    "skipped": [],
+    "results": [
+      {
+        "title": "Leaderboard",
+        "result": "PASS",
+        "reviewStatus": "passed",
+        "commitHash": "88fe459dfebafc76801281492412c369e026727e",
+        "summary": "Each report.experiments[] entry now carries a benchmark-only aggregate, built in the new src/report/aggregate.ts, with discriminating passed/scored counts added. REPORT_SCHEMA_VERSION goes from 8 to 9, and the leaderboard renders as a fixed-width table in the text report and as a sorted card above the Matrix heatmap, with a stale note for older reports. Also added: fmtMs/fmtUsd, a fmtTokens tweak (512k), modelLabel, e2e, docs, and regenerated dev data. All validation passes except the literal `git diff --quiet -- ui/dev-data` check, which cannot pass while changes stay unstaged; dev-data determinism was confirmed by hashing every file across two regenerations instead. The full `bun test` run has one failure, in mcp-proxy.test.ts, which needs a Docker daemon that is not running here. — The implementation matches the Phase 5 spec. `collectExperimentAggregate` filters to the benchmark suite, keeps unreported telemetry null instead of 0, computes the median and discriminating subset correctly, and adds the estimated fields only when --pricing is set. It is wired into `collectExperiments` with REPORT_SCHEMA_VERSION bumped to 9. The Leaderboard component, stale note, formatters, e2e checks, docs and regenerated dev-data are all in place, and the tests cover the 8 aggregate cases, the stale rebuild and the renderer. Nothing blocks the commit; the one medium finding is that the text report shows total cost while the UI shows cost per run, which should be reconciled.",
+        "findings": [
+          "medium/logic src/report/report.ts:renderLeaderboard (diff line ~268) — The text table's `cost` column prints the summed `cost_usd` (e.g. `$0.9900 9/9 reported`). Leaderboard.tsx:695 prints the per-run mean (`cost_usd / cost_attempts`) under 'Cost/run'. docs/concepts.md then calls the column 'the mean provider-reported cost' while also saying `cost_usd` is the sum that can undercut `telemetry.cost_usd`. So one field shows up as two different numbers → Choose one meaning for the displayed cost. Either print the mean in the text renderer (and the `est.` addend the same way), or label the text column `cost (total)`. Then make the concepts.md Cost/run bullet state that the stored field is a sum and the UI divides it by `cost_attempts`.",
+          "low/spec-deviation ui/src/components/Leaderboard.tsx:24 — The spec asks for the discriminating count rendered grey when `discriminating_evals === 0` (e.g. `11/17 · 0/0` greyed). The component shows a grey em-dash instead. That fits the 'never 0' rule, but it is not the spec's wording → Keep the dash and note the choice in the component doc comment, or render the grey `0/0` as the spec describes.",
+          "low/pattern-mismatch src/report/report.ts:renderLeaderboard — The text renderer labels an unpinned model `unpinned`. The experiments block right above it and the new `modelLabel` (ui/src/agent-label.ts:646) both say `model unpinned` → Use `model unpinned` in the leaderboard row too, so the text and UI agree.",
+          "low/testing tests/leaderboard.test.ts:renderer — The renderer test indexes rows by fixed offset (`lines[start + 7]`). Adding a header line would break it for a reason that has nothing to do with sorting → Find the claude-mcp row by content and assert it is the last row of the table block."
+        ],
+        "warnings": [],
+        "reviewCycles": 1
+      }
+    ]
+  },
+  "verify": {
+    "line": "VERIFY prove-the-bench: commits=6/6 pass=15 fail=0 judgment=2",
+    "exitCode": 0
+  },
+  "notesFiles": [
+    "implementation-notes-phase-1.html",
+    "implementation-notes-phase-2.html",
+    "implementation-notes-phase-3.html",
+    "implementation-notes-phase-4.html",
+    "implementation-notes-phase-5.html",
+    "implementation-notes-phase-6.html"
+  ]
+}

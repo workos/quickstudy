@@ -118,13 +118,20 @@ describe("aggregate", () => {
     expect(order).toEqual(["claude-docs", "codex-cli", "claude-cli", "codex-docs", "codex-mcp", "claude-mcp"]);
   });
 
-  test("regression-suite attempts never move any aggregate", () => {
+  test("regression-suite attempts count toward the aggregate; smoke-suite attempts never do", () => {
     const plain = seededReport(false);
     const withRegression = seededReport(true);
-    const aggregates = (report: ReportJson) => (report.experiments ?? []).map((e) => [e.experiment_id, e.aggregate]);
-    expect(aggregates(withRegression)).toEqual(aggregates(plain));
-    // The run-wide telemetry does include the regression attempts.
-    expect(withRegression.telemetry.cost_attempts).toBeGreaterThan(plain.telemetry.cost_attempts);
+    const attemptsOf = (report: ReportJson) => (report.experiments ?? []).reduce((n, e) => n + (e.aggregate?.attempts ?? 0), 0);
+    const regressionAttempts = (withRegression.pairs ?? []).filter((p) => p.suite === "regression").reduce((n, p) => n + p.total, 0);
+    expect(regressionAttempts).toBeGreaterThan(0);
+    expect(attemptsOf(withRegression) - attemptsOf(plain)).toBe(regressionAttempts);
+    // Smoke stays outside the headline: the row ignores it entirely.
+    const x = aggregateOf(
+      [pass("split", "x"), fail("split", "x"), pass("saturated", "x", { suite: "smoke" }), pass("saturated", "x", { suite: "smoke" })],
+      "x",
+    );
+    expect(x.attempts).toBe(2);
+    expect(x.pass_rate_all).toBe(0.5);
   });
 
   test("a solved-by-all eval is excluded from the discriminating subset", () => {

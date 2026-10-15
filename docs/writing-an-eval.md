@@ -40,10 +40,11 @@ frontmatter schema is deliberately tiny and closed:
 | Key          | Required | Meaning                                                                                                                                                     |
 | ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`         | yes      | Must equal the directory name (prevents silent aliasing).                                                                                                   |
-| `suite`      | yes      | `benchmark` (headline), `regression`, or `other` — non-benchmark suites never move headline scores.                                                         |
+| `suite`      | yes      | `benchmark` or `regression` (the headline suites the leaderboard counts), `smoke` (evals every arm solves; run, never counted), or `other`.                     |
 | `product`    | no       | Free-form product label, used for reporting.                                                                                                                |
 | `framework`  | no       | The app stack the task targets (`nextjs`, `rails`, `django`, …); container runtimes and `--framework` filters read it.                                      |
 | `frameworks` | no       | List of framework tokens; expands the directory into one eval per framework (id `<dirname>-<framework>`). See [Framework variants](#framework-variants-frameworks). |
+| `suites`     | no       | With `frameworks:` only — mapping of framework token to suite, retiering those variants (`django: smoke`) while the rest keep `suite`.                       |
 | `local`      | no       | With `frameworks:` only — path (relative to the eval directory) to a shared fixture root holding per-framework starting states.                             |
 | `topics`     | no       | List of free-form tags.                                                                                                                                     |
 

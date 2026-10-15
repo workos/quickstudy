@@ -1,0 +1,111 @@
+<!doctype html>
+<!--
+  Implementation-notes shell — copied VERBATIM by execute-spec on the first logged entry.
+  This file is the single owner of the implementation-notes format. Do not restate its
+  structure or styles elsewhere; change the format here and every future phase inherits it.
+  Copier substitutes: 3 (phase number, twice), prove-the-bench, 2026-09-24, Scorer health and matrix bands —
+  then deletes the example entry and appends real ones inside <main class="doc-content">.
+-->
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Implementation Notes — Phase 3</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f3;
+        --fg: #191b1d;
+        --muted: #50555a;
+        --border: #dededf;
+        --accent: #2b46c7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131417;
+          --fg: #e9e9e4;
+          --muted: #a8aaa6;
+          --border: #2d3036;
+          --accent: #93a7ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .doc-header { border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; }
+      .doc-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      .doc-meta { margin: 0; color: var(--muted); font-size: 0.875rem; }
+      .note-entry { border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+      .note-entry h3 { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--accent); }
+      .note-entry dl { margin: 0; }
+      .note-entry dt { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 0.75rem; }
+      .note-entry dt:first-child { margin-top: 0; }
+      .note-entry dd { margin: 0.15rem 0 0; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+        padding: 0.1em 0.3em;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="doc-header">
+      <h1>Implementation Notes — Phase 3</h1>
+      <p class="doc-meta">prove-the-bench · 2026-09-24 · Scorer health and matrix bands</p>
+    </header>
+    <main class="doc-content">
+      <section class="note-entry">
+        <h3>Scorer health — checks missing from some attempts</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec says a suspect "failed in every scored attempt" but is silent when a check is absent from some attempts.</dd>
+          <dt>Decision</dt>
+          <dd>A check is a suspect only when it is present with <code>passed:false</code> in every completed attempt of the arms; a passing check must be present with <code>passed:true</code> in all of them. A name flagged <code>graded:false</code> in any attempt is excluded from both sides (mirrors the pair tally). Tested.</dd>
+          <dt>Alternative</dt>
+          <dd>Treat absence as failure, which would flag scorers that emit checks conditionally.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Matrix — discriminating header count and band aria-labels</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec places unbanded (single-arm) rows in the discriminating section with a "(n evals with one scored arm)" suffix, and gives Heatmap an optional band label "for the header".</dd>
+          <dt>Decision</dt>
+          <dd>The header count includes the unbanded rows, and the suffix names how many of them there are. Counts come from the filtered rows. The band label names each heatmap's region (<code>Pass-rate matrix — {band}</code>), so the three regions have distinct accessible names. <code>&lt;details&gt;</code> stays uncontrolled. The e2e <code>.scroll-hint</code> assertion now uses <code>.first()</code>, since there is one hint per heatmap.</dd>
+          <dt>Alternative</dt>
+          <dd>Count only discriminating rows in the header, or render a visible heading inside Heatmap.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Seed data — new evals use framework "generic"</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The cell-states run needs <code>uniform-pass</code> and <code>uniform-fail</code> in its manifest and <code>config.evalIds</code>, or coverage and metadata break.</dd>
+          <dt>Decision</dt>
+          <dd>Added <code>CELL_STATE_EVALS</code> (the seed evals plus the two new ones, with framework <code>generic</code>), 3 trials × 2 arms each, and a per-spec <code>checks</code> override. This adds a <code>generic</code> option to the framework filter on that run. No e2e test enumerates the filter options.</dd>
+          <dt>Alternative</dt>
+          <dd>Reuse an existing framework such as <code>nextjs</code>, which would mix the new evals into that framework's filter.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Validation — the dev-data cleanliness check needs a commit first</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec's <code>bun run ui:dev-data &amp;&amp; git diff --quiet -- ui/dev-data &amp;&amp; test -z "$(git status --porcelain -- ui/dev-data)"</code> compares the output against the committed tree. This phase intentionally changes dev data, and the engine forbids committing here.</dd>
+          <dt>Decision</dt>
+          <dd>Checked determinism instead: the tree hash of <code>ui/dev-data</code> was identical across two regenerations. The literal command passes once the commit stage lands the regenerated files.</dd>
+          <dt>Alternative</dt>
+          <dd>Commit the dev data here, which the engine overrides forbid.</dd>
+        </dl>
+      </section>
+    </main>
+  </body>
+</html>

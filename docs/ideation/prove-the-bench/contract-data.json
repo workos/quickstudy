@@ -1,0 +1,558 @@
+{
+  "projectName": "Prove the Bench",
+  "slug": "prove-the-bench",
+  "date": "2026-09-24",
+  "status": "Approved",
+  "supersedes": null,
+  "gates": {
+    "dimensions": [
+      {
+        "key": "problem",
+        "label": "Problem Clarity",
+        "status": "ready",
+        "evidence": "The brief's per-check audit of run 01M37JJD8CG7EYR20QGXX3XGHY: 52 failed attempts, 20 with the e2e check passing and only a static shape check failing, 11 working endpoints failing only SDK-usage checks, 4 evals at 0/8 under every arm."
+      },
+      {
+        "key": "goals",
+        "label": "Goal Definition",
+        "status": "ready",
+        "evidence": "Each goal names an observable harness output: a validate exit code, a report.json field, a UI block with a test id, a DB column; none say 'better' or 'actionable' without the artifact that shows it."
+      },
+      {
+        "key": "criteria",
+        "label": "Success Criteria",
+        "status": "ready",
+        "evidence": "Every goal has a named test file guarded by an existence check, a CLI invocation against a committed fixture root, or a build/e2e command anchored on test ids; the two judgment items are the companion goal's readability and the banner on the real sweep export."
+      },
+      {
+        "key": "scope",
+        "label": "Scope Boundaries",
+        "status": "ready",
+        "evidence": "Interview locked harness-only scope with a companion evals-repo goal, tiers by the brief's ranked order with outcome taxonomy promoted to MVP, and the scope-creep critic re-grounded the UI items against main (no run list or KPI identity rows exist here)."
+      },
+      {
+        "key": "consistency",
+        "label": "Consistency",
+        "status": "ready",
+        "evidence": "Timeouts are graded; the scorer-health summary lives in report.ts with an instrument-vs-treatment carve-out in the methodology note; the oracle is a no-op adapter whose overlay runs in the shared workspace-prep step; schema versioning is report-bump plus additive run.json fields."
+      }
+    ]
+  },
+  "problem": [
+    "The latest paid sweep (136 attempts) produced 52 red cells, and by the run's own per-check data roughly 60% of them are not agent failures: 20 attempts passed their end-to-end check and failed only a static shape check (a regex expecting `request.method == \"POST\"` or a session dict under a fixed key), and 11 more delivered a working webhook endpoint and failed only for verifying the signature by hand instead of through the SDK. Four evals fail 0/8 under every experiment for the same single check. The harness has no way to say any of this: no reference solution ever proves a scorer before money is spent, every check is a hard gate, and the report's no-attribution stance is applied to instrument failures as well as treatment claims.",
+    "The run page records but does not answer. It is an eval × experiment ledger of 1/1 and 0/1 cells with no per-experiment aggregate, so 'does MCP help this agent?' is a column someone sums by eye. A timed-out attempt is discarded unscored even when it left a working tree. A provisioning failure, an agent crash and a scorer exception all land in one `error` status. The only duration recorded brackets provisioning, container start, export and Playwright probes together with the agent.",
+    "Who feels it: the benchmark author, who pays for a sweep and cannot tell whether a 0/8 row indicts the agents or the scorer, and the SDK and docs readers of the hosted report, who are steered toward documentation fixes when the scorer is the problem. The diagnose layer did find the defect pattern (40 eval-defect findings) but ranked it under 52 docs findings."
+  ],
+  "goals": [
+    "A benchmark author can prove a scorer before paying: `quickstudy validate --oracle` scores each eval's committed `solution/` on the host path and reports 1.0, the failing checks, or 'deferred to runtime' per eval, exiting non-zero on any failing or missing solution; `quickstudy run` against an experiment whose agent is the built-in `oracle` adapter scores the solution under the real runtime for zero model spend.",
+    "A check can be recorded without being graded: `CheckResult.graded` (default true) is carried through the report and export, an attempt whose only failing check is ungraded still counts as passed, the matrix's checks count excludes ungraded checks, and every experiment gets an SDK-recall metric (share of scored attempts whose ungraded checks all passed) that never enters pass/fail.",
+    "Every report separates instrument failures from agent failures without an LLM: each pair carries a band (discriminating, solved by every arm, failed by every arm), the report carries a scorer-health summary naming checks that failed under every arm while another check passed in the same attempts, worded to pass the banned-language guard, and the matrix renders the bands with the two uniform bands collapsed by default under a banner.",
+    "Outcomes are classified: a timed-out attempt is exported and scored with `limit: \"timeout\"`; every errored attempt carries `error_kind` (environment | agent | scorer | harness) badged on the attempt row; attempts record `agent_started_at` and `agent_finished_at` so 'agent time' can be reported apart from harness overhead.",
+    "The run page answers 'which experiment is best' in one block: per-experiment rows led by the model pin with pass rate (all evals and discriminating evals only), median agent time, mean tokens, mean cost with reported-vs-estimated counts, and SDK recall, sorted by discriminating pass rate.",
+    "The rest of the UI stops implying more than the data supports: Compare states when trials are below three, and Diagnosis groups findings by (eval, failing check) with eval-defect first when it is at least a quarter of findings and excerpts anchored on the last error-marker cluster."
+  ],
+  "successCriteria": [
+    {
+      "criterion": "Oracle suite: the no-op oracle adapter plus solution/ overlay scores a fixture eval at 1.0 on the host path; a Docker-gated case (auto-skips without a daemon) does the same in a container; validate --oracle distinguishes pass, fail and deferred-to-runtime",
+      "check": {
+        "cmd": "test -f tests/oracle.test.ts && bun test tests/oracle.test.ts",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "validate --oracle exits 0 on a fixture root where every eval's solution/ scores 1.0 (one plain eval, one framework-expanded eval with solution/<fw>/)",
+      "check": {
+        "cmd": "bun src/cli.ts validate --oracle --evals-root tests/__fixtures__/oracle/ready",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "validate --oracle exits 1 on a fixture root whose solution/ omits NOTES.md, and names the failing check",
+      "check": {
+        "cmd": "out=$(bun src/cli.ts validate --oracle --evals-root tests/__fixtures__/oracle/broken 2>&1); test $? -eq 1 && printf '%s' \"$out\" | grep -q 'notes-written'",
+        "expect": "exit 1 from validate and the check name in its output"
+      }
+    },
+    {
+      "criterion": "Graded checks: CheckResult.graded round-trips through result validation, report and export; an attempt whose only failing check is graded:false scores passed=true and the pair's checks count excludes it; SDK recall is null when no eval declares an ungraded check",
+      "check": {
+        "cmd": "test -f tests/graded-checks.test.ts && bun test tests/graded-checks.test.ts",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Scorer health: pair bands and the scorer_health block are computed from seeded report data; the summary text passes findBannedLanguage even when a fixture check name contains a banned substring",
+      "check": {
+        "cmd": "test -f tests/scorer-health.test.ts && bun test tests/scorer-health.test.ts",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Taxonomy: a timed-out host attempt is exported and scored with status completed and limit=timeout; error_kind is set for environment, agent, scorer and harness failures; agent_started_at/agent_finished_at are persisted and exported as ISO strings",
+      "check": {
+        "cmd": "test -f tests/outcome-taxonomy.test.ts && bun test tests/outcome-taxonomy.test.ts",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Leaderboard: report.json carries a per-experiment aggregate (pass rate all/discriminating, median agent time, mean tokens, cost_usd/cost_attempts plus estimated counts, SDK recall), null never zero; export rebuilds a stored report whose schema_version is stale",
+      "check": {
+        "cmd": "test -f tests/leaderboard.test.ts && bun test tests/leaderboard.test.ts",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Diagnosis clustering: findings group by (eval, failing check), eval-defect leads at >=25%, and the excerpt window anchors on the last error-marker cluster (marker at line 2 and line 500 yields a window around 500)",
+      "check": {
+        "cmd": "test -f tests/diagnose-clusters.test.ts && bun test tests/diagnose-clusters.test.ts",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "The Docker-independent suites covering everything this plan touches still pass: identity, discovery, runner, lifecycle, scheduler, adapters, plan, invariants, report, export, store, CLI, costs, completeness",
+      "check": {
+        "cmd": "bun test report-v3 export store-v3 cli identity-v3 evals-discovery runner-v3 lifecycle scheduler adapters plan-v3 invariants-v3 complete-export costs completeness",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Harness and UI typecheck",
+      "check": {
+        "cmd": "bun run typecheck",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Lint is clean",
+      "check": {
+        "cmd": "bun run lint",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "No consumer name in shipped harness code (src, ui/src, scripts)",
+      "check": {
+        "cmd": "bun test genericity",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "UI production bundle builds",
+      "check": {
+        "cmd": "bun run ui:build",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "Playwright smoke asserts on each new block by test id (leaderboard, matrix-band-discriminating, scorer-health-banner, ungraded-tag, compare-n-notice, error-kind-badge) and passes",
+      "check": {
+        "cmd": "for t in leaderboard matrix-band-discriminating scorer-health-banner ungraded-tag compare-n-notice error-kind-badge; do grep -q \"$t\" ui/e2e/smoke.spec.ts || exit 1; done; bun run ui:e2e",
+        "expect": "every test id appears in the spec and the suite exits 0"
+      }
+    },
+    {
+      "criterion": "Committed dev data is regenerated by the seeders, matches byte-for-byte, and leaves no untracked files",
+      "check": {
+        "cmd": "bun run ui:dev-data && git diff --quiet -- ui/dev-data && test -z \"$(git status --porcelain -- ui/dev-data)\"",
+        "expect": "exits 0"
+      }
+    },
+    {
+      "criterion": "The companion evals-repo goal (docs/ideation/prove-the-bench/evals-repo-goal.md, written alongside this contract) reads as a complete, self-contained prompt",
+      "check": {
+        "judgment": "Garen reads docs/ideation/prove-the-bench/evals-repo-goal.md and confirms it can be pasted into a session in the evals repo without this conversation"
+      }
+    },
+    {
+      "criterion": "On the real sweep, the scorer-health summary names the four 0/8 evals and their single failing check",
+      "check": {
+        "judgment": "Garen copies /Users/gjtorikian/workos/evals/results.db to a scratch path (opening it with the new store adds nullable columns), runs quickstudy report 01M37JJD8CG7EYR20QGXX3XGHY --db <copy> --results /Users/gjtorikian/workos/evals/results, then export, and reads the banner"
+      }
+    }
+  ],
+  "scope": {
+    "mvp": [
+      {
+        "item": "Built-in `oracle` adapter that is a no-op on both runner paths (host: copy the prepared workspace like `echo`; container: command `true`, null metrics) and declares `startingState: \"solution\"`; the overlay of `solution/` onto the fixture happens once in the shared workspace-prep step keyed off that declaration; identity provider local, reproducible, cost 0",
+        "reason": "The no-op (`echo`) exists; the oracle is the missing half of lemans' bench gate, and one overlay serves both paths"
+      },
+      {
+        "item": "`solution/` convention in eval discovery: `solution/` or `solution/<framework>/` mirroring `local/`, surfaced as `LoadedEval.solutionDir`; its tree hash recorded unconditionally as `solution: string | null` on EvalIdentity outside `components`, so it never enters the eval hash",
+        "reason": "Agents never see the solution, so it must not rotate eval ids; mirroring local/ needs no new mental model; an unconditional nullable field avoids a per-adapter manifest branch"
+      },
+      {
+        "item": "`quickstudy validate --oracle`: host-path scoring of every eval's solution with three outcomes: 1.0; failing checks; or deferred, when the scorer invoked a runtime-only capability (`exec`, `query`, `getClient`) and did not reach 1.0. The validate context records those calls and throws the existing capability error for them, so no framework toolchain is ever run on the author's machine. Non-zero exit on any failing or missing solution",
+        "reason": "$0 in model spend and decides whether the four 0/8 evals are broken before the next sweep"
+      },
+      {
+        "item": "`CheckResult.graded?: boolean` (default true) validated in result.ts, carried into ReportCheck, exported, and shown as an ungraded tag in the UI; `passed` stays the scorer's call; matrix 'x/y checks' counts graded only",
+        "reason": "The most-quoted lemans finding (API recall) is only possible when a check can be recorded without deciding pass/fail"
+      },
+      {
+        "item": "Per-experiment SDK recall in report.json: share of scored attempts on evals declaring at least one ungraded check where every ungraded check passed; null when none declare one",
+        "reason": "'Does MCP make agents use the SDK more?' is the benchmark's reason to exist and is currently folded into a binary fail"
+      },
+      {
+        "item": "Pair band in report.json (discriminating | solved-by-all | failed-by-all) and a deterministic scorer_health block listing checks that failed under every arm while another check passed in the same attempts, plus the affected eval ids",
+        "reason": "Every input already exists in the per-pair checks[]; this is the single most useful sentence the run could show"
+      },
+      {
+        "item": "Matrix partitioned into three bands, uniform bands collapsed by default with 'solved by every arm' / 'failed by every arm, suspect the eval' notes; scorer-health banner above the matrix",
+        "reason": "Goal 3's UI half: takes the matrix from 17 rows to the 6 that matter and puts the instrument finding where the reader looks first"
+      },
+      {
+        "item": "Methodology note gains one sentence separating instrument findings from treatment claims; all generated prose passes findBannedLanguage (note: 'because' contains 'caus')",
+        "reason": "Keeps the no-attribution stance intact while letting the report describe its own instrument"
+      },
+      {
+        "item": "Outcome taxonomy: on agent timeout the container/host workspace is still exported and scored with status completed and new nullable column `limit` ('timeout'); `incomplete` remains for attempts with no workspace to score",
+        "reason": "A working tree left behind is a real result; discarding it throws away paid work"
+      },
+      {
+        "item": "Nullable `error_kind` column (environment | agent | scorer | harness) set at every error site in execute.ts, exported on DataAttempt, badged on the UI attempt row",
+        "reason": "A provisioning failure and an agent crash must not share a badge"
+      },
+      {
+        "item": "Nullable `agent_started_at`, `agent_finished_at` columns via the existing v3 ALTER path; exported as ISO strings or null; harness overhead is derivable from the existing started_at/finished_at",
+        "reason": "Same ALTER block and runner call sites as the taxonomy columns; the leaderboard's speed metric depends on them"
+      }
+    ],
+    "full": [
+      {
+        "item": "Per-experiment aggregate in report.json (`experiments[]` gains pass rate all/discriminating, median agent time, mean tokens in/out, `cost_usd`/`cost_attempts` plus `estimated_cost_usd`/`estimated_attempts` mirroring ReportTelemetry, SDK recall, attempt counts by status); REPORT_SCHEMA_VERSION bump; export rebuilds a stored report whose schema_version is stale",
+        "reason": "Data exists in run.json; nothing aggregates it per experiment on the run page"
+      },
+      {
+        "item": "Leaderboard block above the matrix, one row per experiment led by `model · reasoning`, sorted by discriminating pass rate; cost cell reads '$X · n/m reported' or 'est.'; graceful 'regenerate the report' note when the field is absent from an older snapshot",
+        "reason": "Answers 'which is best' in one table, as the Rails page does"
+      },
+      {
+        "item": "Compare view: when run.trials < 3 or any shared eval is unscored, a notice states that per-arm counts are not comparable; no colour added",
+        "reason": "Current Compare shows raw counts with no deltas; the honesty gap is the missing statement, not a colour"
+      },
+      {
+        "item": "Diagnosis UI: findings grouped by (eval, failing checks) then target, the failing-check set derived by joining report.pairs[].checks (passed < total) on (eval_id, experiment_id), so no diagnosis schema bump and no LLM re-run; eval-defect section first when >=25% of findings; excerpt selector anchors its window on the last error-marker cluster and falls back to the tail",
+        "reason": "40 correct eval-defect findings were ranked under 52 docs findings on a 47,000px page, and 42 excerpts pointed at L1-40"
+      }
+    ],
+    "stretch": [],
+    "outOfScope": [
+      {
+        "item": "Writing the 17 reference solutions, flipping SDK checks to graded:false, canary GUID lines in PROMPT.md, an `experiments/oracle.ts`, and CI running oracle + echo on scorer changes",
+        "reason": "Lives in the sibling evals repo; written as docs/ideation/prove-the-bench/evals-repo-goal.md alongside this contract"
+      },
+      {
+        "item": "Run-list view with cost cell and infra badge; KPI identity-row collapse",
+        "reason": "Those surfaces exist in the hosted site's wrapper, not this repo's UI, which has a run <select> and a three-tile KPI row with one manifest crumb"
+      },
+      {
+        "item": "Matrix headers leading with the model pin",
+        "reason": "Already shipped: Heatmap group headers render the shared model (reasoning) label"
+      },
+      {
+        "item": "Per-attempt `cost_source` field and score-phase timestamps",
+        "reason": "Cost source is derivable from cost_usd !== null; nothing displays scorer time"
+      },
+      {
+        "item": "Running 3-trial sweeps or changing the published site's trial count",
+        "reason": "Operational decision in the evals repo's sweep config, not harness code"
+      },
+      {
+        "item": "Tamper-resistant scoring (restoring graded surfaces from a pre-agent snapshot)",
+        "reason": "Real agents are not adversarial; the brief rates it note-only"
+      },
+      {
+        "item": "Ruby/gem packaging, Daytona, YAML bench.yml with inherit_from, miniswen single-tool agent, replacing the manifest identity model",
+        "reason": "The brief's 'not worth taking' list"
+      },
+      {
+        "item": "Deploying the hosted site",
+        "reason": "Publication is deliberately outside quickstudy export and lives in another repo"
+      },
+      {
+        "item": "Bumping DATA_SCHEMA_VERSION for run.json",
+        "reason": "Hosted immutable snapshots would show a mismatch banner; new attempt fields are additive and nullable instead"
+      }
+    ],
+    "future": [
+      "`quickstudy rescore <run-id> --evals-root <path>`: re-run each EVAL.ts against the stored workspace on the host path using the same capability-tracking context as validate --oracle, so evals whose scorer needs exec, query or getClient are reported as deferred; writes a new run with `rescored_from` and the current scorer hashes; source run untouched; no experiments root needed since no runtime is started (Stretch, deferred)",
+      "Container rebuild from fixture + diff.patch so rescore can regrade exec-dependent evals",
+      "`quickstudy harvest <attempt-id>` to turn a passing agent diff into a `solution/` directory",
+      "Difficulty labels derived from measured pass rate across runs once more than one run exists per eval",
+      "Per-attempt cost/step budgets exposed on the CLI and recorded as limit kinds beyond timeout",
+      "Gate the mcp-auth fail-fast test in tests/mcp-proxy.test.ts on Docker like its sibling suites (it fails today when the daemon is down)"
+    ]
+  },
+  "decisions": [
+    {
+      "decision": "Scope this goal to the quickstudy harness and write a companion goal for the evals repo",
+      "rejected": "Both repos in one goal",
+      "reason": "Autopilot runs in one checkout and commits to one branch; the harness half is testable with fixtures alone"
+    },
+    {
+      "decision": "Fold the brief's §2 UI items into one report-honesty phase in the Full tier",
+      "rejected": "Defer them entirely, or park them as Stretch",
+      "reason": "They are UI math on data already in run.json and share files with the leaderboard work"
+    },
+    {
+      "decision": "Grade a timed-out attempt on the tree it leaves behind (status completed, limit timeout)",
+      "rejected": "Keep timeouts unscored; or score them but exclude from pass rate",
+      "reason": "A limit hit is a statement about the agent, not the harness; the container is already restarted after kill to capture the diff"
+    },
+    {
+      "decision": "Compute scorer health in report.ts and render it in the UI",
+      "rejected": "Client-side computation in the UI; or leave it to the diagnose layer",
+      "reason": "Deterministic, free, present on every run, and one implementation of pair math instead of two"
+    },
+    {
+      "decision": "Promote the outcome taxonomy to MVP",
+      "rejected": "Full tier, after the leaderboard",
+      "reason": "The first tier's numbers should already distinguish infra from agent failures and grade what agents left behind"
+    },
+    {
+      "decision": "Ship the oracle as a built-in adapter that consumers reference from their own experiment module",
+      "rejected": "A `--agent oracle` run-time override flag; or both",
+      "reason": "The experiment's runtime owns every treatment, and an override would need a special case in manifest identity"
+    },
+    {
+      "decision": "Reference solutions are a `solution/` overlay directory (per framework `solution/<fw>/`) mirroring `local/`",
+      "rejected": "A SOLUTION.patch per framework",
+      "reason": "No git dependency at score time and the same expansion rules as local/; harvesting a diff into a directory is one git apply in the evals repo"
+    },
+    {
+      "decision": "Overlay solution/ once in the shared workspace-prep step, keyed off the adapter's `startingState` declaration; the oracle adapter is a no-op on both paths",
+      "rejected": "Each adapter performs the overlay itself",
+      "reason": "Critic fix: container adapters have no host paths by design and setupFiles is string-only, so an adapter-side overlay needs a contract extension for one adapter; both runner paths already take their starting state from one function"
+    },
+    {
+      "decision": "Record the solution tree hash unconditionally as `solution: string | null` on EvalIdentity outside `components`",
+      "rejected": "A `solution_hash` present only on oracle-run manifests",
+      "reason": "Critic fix: the manifest component key set is snapshot-asserted and eval identity is computed for every eval regardless of experiment; a conditional field adds a branch for one adapter while still keeping the hash out of eval identity"
+    },
+    {
+      "decision": "Persist only the agent-phase timestamp pair",
+      "rejected": "Agent and score phase pairs (four columns)",
+      "reason": "Critic fix: nothing displays scorer time; harness overhead is derivable from the existing started_at/finished_at"
+    },
+    {
+      "decision": "Drop the run-list badge, KPI identity collapse, model-pin header and per-attempt cost_source items",
+      "rejected": "Keep them as Full-tier items",
+      "reason": "Critic fix: the run list and KPI identity rows exist only in the hosted site's wrapper, matrix headers already lead with model (reasoning), and cost source is derivable from cost_usd !== null"
+    },
+    {
+      "decision": "Bump REPORT_SCHEMA_VERSION and make export rebuild a stale-schema stored report; keep DATA_SCHEMA_VERSION at 3 with additive nullable attempt fields",
+      "rejected": "Bump DATA_SCHEMA_VERSION too",
+      "reason": "Reports rebuild from the DB for free; hosted run snapshots are immutable and would show a mismatch banner"
+    },
+    {
+      "decision": "SDK recall denominator is scored attempts on evals that declare at least one ungraded check; null otherwise",
+      "rejected": "All scored attempts",
+      "reason": "An eval with no recall check would otherwise count as recalled"
+    },
+    {
+      "decision": "`validate --oracle` reports an eval as deferred when its scorer throws the 'runtime does not provide' capability error",
+      "rejected": "Fail it; or skip exec-dependent checks",
+      "reason": "Probe-based evals would false-alarm on every validate, and which checks need a runtime is not knowable statically"
+    },
+    {
+      "decision": "Excerpt selector anchors on the last error-marker cluster",
+      "rejected": "Keep the first-marker window",
+      "reason": "A marker in the first five lines is a system-prompt false positive; the decisive error in a failing transcript is at the end"
+    },
+    {
+      "decision": "Compare gets a not-comparable notice below three trials, no colour",
+      "rejected": "Grey out deltas",
+      "reason": "Current Compare shows raw counts with no deltas to grey; the v2 red/green arrows the brief saw are no longer in main"
+    },
+    {
+      "decision": "Rescore writes a new run stamped rescored_from and ships host-path only, deferring exec-dependent evals",
+      "rejected": "Overwrite result_json in place; container rebuild in the same phase",
+      "reason": "The manifest pins scorer hashes, so mutating a graded run would break that pin; the container rebuild is the bulk of the work and matters only for exec scorers"
+    },
+    {
+      "decision": "Agent-phase timestamps land in MVP with the taxonomy columns",
+      "rejected": "Full tier with the leaderboard",
+      "reason": "Same ALTER block and the same runner call sites; splitting them costs a second migration pass"
+    },
+    {
+      "decision": "The regression gate enumerates the Docker-independent suites the plan touches",
+      "rejected": "Bare `bun test`",
+      "reason": "Critic fix widened the gate to identity, discovery, runner, lifecycle, scheduler and adapters; the full suite was rejected since one existing mcp-auth test assumes a reachable daemon and fails when Docker is down"
+    },
+    {
+      "decision": "New test suites are named files guarded by an existence check; e2e coverage is anchored on test ids grepped from the spec",
+      "rejected": "Substring filters and a bare `bun run ui:e2e`",
+      "reason": "Critic fix: a filter matching nothing or a suite that passes today would let acceptance go green with no new work"
+    },
+    {
+      "decision": "Under validate --oracle and rescore, `exec` is a runtime-only capability: the context records the call and throws the existing capability error, and an eval that invoked one without reaching 1.0 is deferred",
+      "rejected": "Run exec on the host in the overlay directory",
+      "reason": "Critic fix: consumer scorers call exec for framework commands; running them on an author's machine without the toolchain would report failing checks instead of deferred"
+    },
+    {
+      "decision": "Diagnosis grouping derives the failing-check set in the UI from report.pairs[].checks",
+      "rejected": "Add a `check` field to DiagnosisFinding with a schema bump",
+      "reason": "Critic fix: the finding has no check field today; a schema bump would force regenerating the real sweep's diagnosis.json at LLM cost, while the report already carries the per-pair failing checks"
+    },
+    {
+      "decision": "Write the companion evals-repo goal at contract time, not as an autopilot phase",
+      "rejected": "A phase that writes it",
+      "reason": "Critic fix: the goal needs the interview's context, not code; writing it alongside the contract lets the judgment criterion be met before execution starts"
+    },
+    {
+      "decision": "Target the Full tier; rescore deferred to Future",
+      "rejected": "Stretch tier",
+      "reason": "Chosen at contract approval: the six MVP/Full phases deliver every goal the brief ranks above rescore, and rescore's host-path design is recorded for a later contract"
+    }
+  ],
+  "execution": {
+    "strategy": "Hybrid: wave 1 runs Outcome taxonomy, Graded checks, Oracle and Report honesty in parallel; Scorer health follows Graded checks; Leaderboard follows the three MVP report phases. Shared files (report.ts, seed-site.ts, ui/dev-data) are serialised by the engine.",
+    "phases": [
+      {
+        "title": "Outcome taxonomy and agent timestamps",
+        "risk": "medium",
+        "blocking": true,
+        "specPath": "docs/ideation/prove-the-bench/spec-phase-1.md",
+        "notes": "MVP. Store columns limit, error_kind, agent_started_at, agent_finished_at via the v3 ALTER path; grade timeouts on both runner paths; classify every error site; DataAttempt additive fields; attempt-row error-kind badge (data-testid error-kind-badge); seed-run gives the seeded error attempt an error_kind and the seeded incomplete attempt becomes a graded timeout; regenerate ui/dev-data; docs/concepts.md.",
+        "kind": "phase",
+        "files": [
+          "src/store/schema.ts",
+          "src/store/db.ts",
+          "src/runner/execute.ts",
+          "src/export-types.ts",
+          "src/export.ts",
+          "ui/src/components/StatBadge.tsx",
+          "ui/src/views/Matrix.tsx",
+          "ui/src/views/Attempt.tsx",
+          "scripts/seed-run.ts",
+          "scripts/seed-site.ts",
+          "ui/e2e/smoke.spec.ts",
+          "docs/concepts.md",
+          "tests/outcome-taxonomy.test.ts"
+        ]
+      },
+      {
+        "title": "Graded checks and SDK recall",
+        "risk": "low",
+        "blocking": true,
+        "specPath": "docs/ideation/prove-the-bench/spec-phase-2.md",
+        "notes": "MVP. CheckResult.graded through result validation, ReportCheck, export, per-experiment sdk_recall, UI ungraded tag and graded-only counts, docs/writing-an-eval.md.",
+        "kind": "phase",
+        "files": [
+          "src/evals/types.ts",
+          "src/evals/result.ts",
+          "src/report/report.ts",
+          "src/export.ts",
+          "ui/src/checks.ts",
+          "ui/src/views/Matrix.tsx",
+          "ui/src/views/Report.tsx",
+          "ui/src/views/Attempt.tsx",
+          "scripts/seed-run.ts",
+          "ui/e2e/smoke.spec.ts",
+          "docs/writing-an-eval.md",
+          "docs/concepts.md",
+          "tests/graded-checks.test.ts"
+        ]
+      },
+      {
+        "title": "Scorer health and matrix bands",
+        "risk": "low",
+        "blocking": true,
+        "prereqs": [
+          "Graded checks and SDK recall"
+        ],
+        "specPath": "docs/ideation/prove-the-bench/spec-phase-3.md",
+        "notes": "MVP. Pair band + scorer_health in report.ts, banned-language-safe methodology sentence, Matrix bands collapsed by default, banner, seed data and e2e.",
+        "kind": "phase",
+        "files": [
+          "src/report/scorer-health.ts",
+          "src/report/report.ts",
+          "ui/src/views/Matrix.tsx",
+          "ui/src/components/Heatmap.tsx",
+          "scripts/seed-site.ts",
+          "ui/e2e/smoke.spec.ts",
+          "docs/concepts.md",
+          "tests/scorer-health.test.ts"
+        ]
+      },
+      {
+        "title": "Oracle adapter, solution/ convention, validate --oracle",
+        "risk": "medium",
+        "blocking": true,
+        "specPath": "docs/ideation/prove-the-bench/spec-phase-4.md",
+        "notes": "MVP. Discovery of solution/ with framework expansion (LoadedEval.solutionDir); solution hash on EvalIdentity outside components; overlay in prepWorkspaceSource keyed off the adapter's startingState declaration (the container path docker-cps the prepared source whole, so no container copy-in); no-op oracle adapter on both paths; validate --oracle with a capability-tracking context and pass/fail/deferred outcomes; fixture roots tests/__fixtures__/oracle/ready and broken; docs/writing-an-eval.md and getting-started.",
+        "kind": "phase",
+        "files": [
+          "src/adapters/oracle.ts",
+          "src/adapters/types.ts",
+          "src/runner/workspace-source.ts",
+          "src/runner/oracle-validate.ts",
+          "src/runner/execute.ts",
+          "src/runner/context.ts",
+          "src/evals/types.ts",
+          "src/evals/discovery.ts",
+          "src/manifest.ts",
+          "src/cli.ts",
+          "src/index.ts",
+          "tests/oracle.test.ts",
+          "tests/__fixtures__/oracle",
+          "tests/__fixtures__/experiments/oracle-local.ts",
+          "docs/writing-an-eval.md",
+          "docs/getting-started.md",
+          "README.md"
+        ]
+      },
+      {
+        "title": "Leaderboard",
+        "risk": "medium",
+        "blocking": true,
+        "prereqs": [
+          "Outcome taxonomy and agent timestamps",
+          "Graded checks and SDK recall",
+          "Scorer health and matrix bands"
+        ],
+        "specPath": "docs/ideation/prove-the-bench/spec-phase-5.md",
+        "notes": "Full. Per-experiment aggregate in report.json, REPORT_SCHEMA_VERSION bump, stale-report rebuild at export, leaderboard block with model-pin rows and reported/estimated cost counts, dev data and e2e.",
+        "kind": "phase",
+        "files": [
+          "src/report/aggregate.ts",
+          "src/report/report.ts",
+          "ui/src/components/Leaderboard.tsx",
+          "ui/src/format.ts",
+          "ui/src/format.test.ts",
+          "ui/src/views/Matrix.tsx",
+          "ui/src/agent-label.ts",
+          "ui/e2e/smoke.spec.ts",
+          "docs/concepts.md",
+          "tests/leaderboard.test.ts"
+        ]
+      },
+      {
+        "title": "Report honesty",
+        "risk": "low",
+        "blocking": false,
+        "specPath": "docs/ideation/prove-the-bench/spec-phase-6.md",
+        "notes": "Full. Compare n-notice (data-testid compare-n-notice) driven by a new trials:1 seeded run in scripts/seed-site.ts; diagnosis clustering by (eval, failing checks) joined from report pairs with eval-defect-first ordering; excerpt anchoring on the last marker cluster; regenerate ui/dev-data.",
+        "kind": "phase",
+        "files": [
+          "src/diagnose/excerpt.ts",
+          "src/diagnose/types.ts",
+          "tests/diagnose.test.ts",
+          "ui/src/diagnosis-clusters.ts",
+          "ui/src/views/Compare.tsx",
+          "ui/src/views/Diagnosis.tsx",
+          "scripts/seed-run.ts",
+          "scripts/seed-site.ts",
+          "ui/e2e/fixture-server.ts",
+          "ui/e2e/smoke.spec.ts",
+          "docs/concepts.md",
+          "tests/diagnose-clusters.test.ts"
+        ]
+      }
+    ]
+  },
+  "approvalMode": "express",
+  "branch": "ideation/prove-the-bench",
+  "approvedOn": "2026-09-24",
+  "approvedBy": "Garen J. Torikian (express finish)"
+}

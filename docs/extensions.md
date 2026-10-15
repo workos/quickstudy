@@ -4,7 +4,7 @@ Quickstudy separates product content from execution. A consumer supplies
 `PROMPT.md` with YAML frontmatter, a default TypeScript `EVAL.ts` scorer, an
 optional local fixture, and experiment modules using `defineExperiment`.
 Other datasets require conversion to this format. Metadata is closed to id,
-suite, product, framework/frameworks, local, and topics; adding arbitrary
+suite, product, framework/frameworks, suites, local, and topics; adding arbitrary
 metadata fields requires a harness change. Runtime kinds are host/container.
 There is no general backend plugin API.
 

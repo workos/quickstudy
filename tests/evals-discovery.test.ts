@@ -110,7 +110,7 @@ describe("eval discovery", () => {
   test("suite outside the closed set is rejected", () => {
     const root = makeRoot();
     writeEval(root, "bad-suite", { frontmatter: "---\nid: bad-suite\nsuite: production\n---\n" });
-    expect(() => discoverEvals(root)).toThrow(/"suite" must be one of: benchmark, regression, other/);
+    expect(() => discoverEvals(root)).toThrow(/"suite" must be one of: benchmark, regression, smoke, other/);
   });
 
   test("an empty task body is rejected", () => {
@@ -252,6 +252,40 @@ describe("eval discovery", () => {
     const root = makeRoot();
     writeEval(root, "real-name", { frontmatter: variantFrontmatter("alias", ["x"]) });
     expect(() => discoverEvals(root)).toThrow(/expanded eval id "alias-x" must equal "<dirname>-<framework>" \("real-name-x"\)/);
+  });
+
+  test("suites: retiers the named variants and leaves the rest on suite:", () => {
+    const root = makeRoot();
+    writeEval(root, "multi", {
+      frontmatter: `---\nid: multi\nsuite: benchmark\nframeworks:\n  - alpha\n  - beta\nsuites:\n  beta: smoke\n---\n`,
+    });
+    const evals = discoverEvals(root);
+    expect(evals.map((e) => [e.metadata.id, e.metadata.suite])).toEqual([
+      ["multi-alpha", "benchmark"],
+      ["multi-beta", "smoke"],
+    ]);
+  });
+
+  test("suites: needs frameworks:, names only listed frameworks, and uses the closed suite set", () => {
+    const root = makeRoot();
+    writeEval(root, "single", { frontmatter: `---\nid: single\nsuite: benchmark\nsuites:\n  alpha: smoke\n---\n` });
+    expect(() => discoverEvals(root)).toThrow(/"suites" requires "frameworks"/);
+    const stranger = makeRoot();
+    writeEval(stranger, "multi", {
+      frontmatter: `---\nid: multi\nsuite: benchmark\nframeworks:\n  - alpha\nsuites:\n  gamma: smoke\n---\n`,
+    });
+    expect(() => discoverEvals(stranger)).toThrow(/"suites" names framework "gamma", which is not in "frameworks"/);
+    const unknown = makeRoot();
+    writeEval(unknown, "multi", {
+      frontmatter: `---\nid: multi\nsuite: benchmark\nframeworks:\n  - alpha\nsuites:\n  alpha: headline\n---\n`,
+    });
+    expect(() => discoverEvals(unknown)).toThrow(/"suites" entry for "alpha" must be one of: benchmark, regression, smoke, other/);
+  });
+
+  test("smoke is a suite of its own", () => {
+    const root = makeRoot();
+    writeEval(root, "saturated", { frontmatter: `---\nid: saturated\nsuite: smoke\n---\n` });
+    expect(discoverEvals(root)[0]!.metadata.suite).toBe("smoke");
   });
 
   test("importEvalScorer validates the default export is a function", async () => {

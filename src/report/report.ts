@@ -40,6 +40,7 @@ import {
   type ScorerHealth,
 } from "./scorer-health.ts";
 import { collectExperimentAggregate, compareLeaderboard, type ExperimentAggregate } from "./aggregate.ts";
+import { HEADLINE_SUITES } from "../evals/types.ts";
 
 export type { EvalBand, ExperimentRole, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
 export type { ExperimentAggregate } from "./aggregate.ts";
@@ -53,7 +54,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 11;
+export const REPORT_SCHEMA_VERSION = 12;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -134,7 +135,7 @@ export interface ReportExperiment {
    */
   sdk_recall?: ReportRecall;
   /**
-   * Leaderboard row over benchmark-suite attempts. Optional on the wire:
+   * Leaderboard row over headline-suite (benchmark + regression) attempts. Optional on the wire:
    * absent in schema_version < 9 artifacts; readers must tolerate absence.
    */
   aggregate?: ExperimentAggregate;
@@ -727,7 +728,11 @@ function renderLeaderboard(experiments: ReportExperiment[]): string[] {
   });
   const widths = header.map((title, i) => Math.max(title.length, ...rows.map((row) => row[i]!.length)));
   const format = (cells: string[]): string => `  ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join("  ").trimEnd()}`;
-  return ["leaderboard (benchmark suite, sorted by discriminating pass rate; controls last):", format(header), ...rows.map(format)];
+  return [
+    `leaderboard (headline suites ${HEADLINE_SUITES.join(" + ")}, sorted by discriminating pass rate; controls last):`,
+    format(header),
+    ...rows.map(format),
+  ];
 }
 
 /** Render the report as plain text. Renders FROM the JSON, never the store. */

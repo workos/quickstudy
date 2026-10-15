@@ -2,17 +2,18 @@
  * Per-experiment leaderboard aggregate — one row per experiment, derived from
  * the same attempts and (banded) pairs as the rest of the report.
  *
- * Every number is restricted to benchmark-suite attempts, so regression and
- * other suites never move the headline row. Telemetry follows the report's
- * rule: sums and means cover only attempts that reported a value, and are
- * null (never 0) when none did.
+ * Every number is restricted to headline-suite attempts (HEADLINE_SUITES:
+ * benchmark and regression), so smoke and other suites never move the
+ * headline row. Telemetry follows the report's rule: sums and means cover
+ * only attempts that reported a value, and are null (never 0) when none did.
  */
+import { isHeadlineSuite } from "../evals/types.ts";
 import type { AttemptRecord } from "../store/db.ts";
 import type { RunCostEstimate } from "./costs.ts";
 import type { ReportExperiment, ReportPair } from "./report.ts";
 
 export interface ExperimentAggregate {
-  /** Benchmark-suite attempts of this experiment (every status). */
+  /** Headline-suite attempts of this experiment (every status). */
   attempts: number;
   completed: number;
   passed: number;
@@ -21,11 +22,11 @@ export interface ExperimentAggregate {
   errors: number;
   /** Attempts whose agent phase hit the timeout limit (graded timeouts are also completed). */
   timeouts: number;
-  /** passed / (passed + failed) over benchmark-suite pairs; null when nothing scored. */
+  /** passed / (passed + failed) over headline-suite pairs; null when nothing scored. */
   pass_rate_all: number | null;
   /** Same, restricted to evals whose band is "discriminating". */
   pass_rate_discriminating: number | null;
-  /** Discriminating benchmark evals where this experiment scored at least one attempt. */
+  /** Discriminating headline evals where this experiment scored at least one attempt. */
   discriminating_evals: number;
   /** Numerator and denominator of pass_rate_discriminating. */
   discriminating_passed: number;
@@ -67,14 +68,14 @@ export function collectExperimentAggregate(
   experimentId: string,
   costEstimate?: RunCostEstimate,
 ): ExperimentAggregate {
-  const mine = attempts.filter((a) => a.experimentId === experimentId && a.suite === "benchmark");
+  const mine = attempts.filter((a) => a.experimentId === experimentId && isHeadlineSuite(a.suite));
   const completed = mine.filter((a) => a.status === "completed");
   const passed = completed.filter((a) => a.result?.passed).length;
 
-  const benchmarkPairs = pairs.filter((p) => p.experiment_id === experimentId && p.suite === "benchmark");
-  const scoredAll = sum(benchmarkPairs.map((p) => p.scored));
-  const passedAll = sum(benchmarkPairs.map((p) => p.passed));
-  const discriminating = benchmarkPairs.filter((p) => p.band === "discriminating" && p.scored > 0);
+  const headlinePairs = pairs.filter((p) => p.experiment_id === experimentId && isHeadlineSuite(p.suite));
+  const scoredAll = sum(headlinePairs.map((p) => p.scored));
+  const passedAll = sum(headlinePairs.map((p) => p.passed));
+  const discriminating = headlinePairs.filter((p) => p.band === "discriminating" && p.scored > 0);
   const discScored = sum(discriminating.map((p) => p.scored));
   const discPassed = sum(discriminating.map((p) => p.passed));
 
