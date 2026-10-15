@@ -64,14 +64,19 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
     );
   }
   const rows = [...experiments].sort(compareLeaderboard);
-  const gate = typeof report.pass_gate === "number" ? report.pass_gate : 0.8;
+  // A report from before schema 13 has aggregates but no gate or per-pass
+  // figures: it sorts by pass rate and says so, rather than promising an
+  // order its data cannot carry.
+  const gated = typeof report.pass_gate === "number";
+  const gate = gated ? report.pass_gate : 0;
   return (
-    <div className="card" data-testid="leaderboard">
+    <div className="card" data-testid="leaderboard" data-gated={gated || undefined}>
       <div className="head">
         <h3>Which experiment is best?</h3>
         <span className="muted">
-          headline suites (benchmark + regression) · pass rate is a gate (≥ {Math.round(gate * 100)}%), not a rank ·
-          ordered by time-to-pass, then cost-to-pass; controls last
+          {gated
+            ? `headline suites (benchmark + regression) · pass rate is a gate (≥ ${Math.round(gate * 100)}%), not a rank · ordered by time-to-pass, then cost-to-pass; controls last`
+            : "sorted by pass rate on discriminating evals; controls last (regenerate the report for the gate and per-pass columns)"}
         </span>
       </div>
       <div className="body">
@@ -79,9 +84,9 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
           <thead>
             <tr>
               <th>Experiment</th>
-              <th>Gate</th>
-              <th>Cost/pass</th>
-              <th>Time/pass</th>
+              {gated && <th>Gate</th>}
+              {gated && <th>Cost/pass</th>}
+              {gated && <th>Time/pass</th>}
               <th>Pass rate (all · discriminating)</th>
               <th>Agent time (median)</th>
               <th>Tokens/run (in)</th>
@@ -111,15 +116,21 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
                       </span>
                     )}
                   </td>
-                  <td>
-                    <GateCell experiment={experiment} gate={gate} />
-                  </td>
-                  <td data-testid="leaderboard-cost-per-pass" title="reported cost over the attempts that reported it, divided by their passes">
-                    {agg?.cost_per_pass_usd === null || agg?.cost_per_pass_usd === undefined ? "—" : fmtUsd(agg.cost_per_pass_usd)}
-                  </td>
-                  <td data-testid="leaderboard-time-per-pass" title="agent time over the scored attempts that recorded it, divided by their passes">
-                    {fmtMs(agg?.agent_ms_per_pass ?? null)}
-                  </td>
+                  {gated && (
+                    <td>
+                      <GateCell experiment={experiment} gate={gate} />
+                    </td>
+                  )}
+                  {gated && (
+                    <td data-testid="leaderboard-cost-per-pass" title="reported cost over the attempts that reported it, divided by their passes">
+                      {agg?.cost_per_pass_usd === null || agg?.cost_per_pass_usd === undefined ? "—" : fmtUsd(agg.cost_per_pass_usd)}
+                    </td>
+                  )}
+                  {gated && (
+                    <td data-testid="leaderboard-time-per-pass" title="agent time over the scored attempts that recorded it, divided by their passes">
+                      {fmtMs(agg?.agent_ms_per_pass ?? null)}
+                    </td>
+                  )}
                   <td data-testid="leaderboard-pass">
                     <PassCell experiment={experiment} />
                   </td>
