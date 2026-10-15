@@ -196,14 +196,41 @@ export async function readAppLogTail(exec: ProbeExecFn, lines = 40): Promise<str
 }
 
 /** Kill the backgrounded dev server (process group first, pid as fallback). */
+/**
+ * Every process in the app's process group, read from /proc so no `ps`,
+ * `pkill` or external `kill` is needed. dash's builtin `kill` rejects a
+ * negative pid ("Illegal number"), so `kill -- -<pgid>` only ever worked
+ * under bash and busybox; on the Debian-based sandbox images it failed and
+ * the fallback signalled the group leader alone.
+ */
+const GROUP_MEMBERS_SH =
+  // After the ")" that closes the command name, /proc/<pid>/stat reads
+  // "<state> <ppid> <pgrp> …"; a zombie (state Z) is dead and only unreaped.
+  'members() { for d in /proc/[0-9]*; do [ -r "$d/stat" ] || continue; ' +
+  'set -- $(sed "s/^.*) //" "$d/stat" 2>/dev/null); ' +
+  '[ "$3" = "$pid" ] && [ "$1" != "Z" ] && echo "${d#/proc/}"; done; }; ' +
+  // Without /proc (a host runtime on macOS) fall back to the shell's group kill.
+  'signal() { if [ -d /proc/self ]; then m=$(members); [ -n "$m" ] || return 1; kill -s "$1" $m 2>/dev/null; ' +
+  'else kill -s "$1" -- "-$pid" 2>/dev/null; fi; }; ' +
+  'alive() { if [ -d /proc/self ]; then [ -n "$(members)" ]; else kill -0 -- "-$pid" 2>/dev/null; fi; }; ';
+
 export async function stopBackgroundApp(exec: ProbeExecFn): Promise<void> {
+  // SIGTERM the group, give it five seconds, then SIGKILL whatever is left.
+  // Dev servers that fork a worker outlive a TERM to the leader: Next.js's
+  // `start-server` child stayed bound to the port after `npm run dev` exited,
+  // so the next probe booted on another port while the stale server answered
+  // the probe's requests (500s on routes it had never compiled).
   await exec(
     [
       "sh",
       "-c",
-      `pid="$(cat ${APP_PID_PATH} 2>/dev/null)"; [ -z "$pid" ] || kill -TERM -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true`,
+      `pid="$(cat ${APP_PID_PATH} 2>/dev/null)"; [ -n "$pid" ] || exit 0; ` +
+        GROUP_MEMBERS_SH +
+        'signal TERM || kill -s TERM "$pid" 2>/dev/null || true; ' +
+        'i=0; while [ "$i" -lt 10 ] && alive; do sleep 0.5; i=$((i + 1)); done; ' +
+        'signal KILL || kill -s KILL "$pid" 2>/dev/null || true',
     ],
-    { timeoutMs: 10_000 },
+    { timeoutMs: 20_000 },
   );
 }
 
