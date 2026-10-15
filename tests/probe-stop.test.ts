@@ -46,17 +46,43 @@ describe("stopBackgroundApp", () => {
       await Bun.write(script, 'trap "" TERM\nsh -c \'trap "" TERM; sleep 300\' &\nwait\n');
       await startAppInBackground(realExec, `sh ${script}`);
       const pid = (await Bun.file(APP_PID_PATH).text()).trim();
-      expect(pid).toMatch(/^\d+$/);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      // Group members by /proc, the way the stop itself finds them.
+      // Live group members by /proc, the way the stop itself finds them (zombies excluded).
       const members = async () =>
-        (await realExec(["sh", "-c", `for d in /proc/[0-9]*; do pg=$(sed "s/^.*) //" "$d/stat" 2>/dev/null | cut -d" " -f3); [ "$pg" = "${pid}" ] && echo "\${d#/proc/}"; done`])).stdout.trim().split("\n").filter(Boolean);
-      expect((await members()).length).toBeGreaterThanOrEqual(2);
+        (
+          await realExec([
+            "sh",
+            "-c",
+            `for d in /proc/[0-9]*; do set -- $(sed "s/^.*) //" "$d/stat" 2>/dev/null); [ "$3" = "${pid}" ] && [ "$1" != "Z" ] && echo "\${d#/proc/}"; done; true`,
+          ])
+        ).stdout
+          .trim()
+          .split("\n")
+          .filter(Boolean);
+      const settle = async (): Promise<string[]> => {
+        const deadline = Date.now() + 5_000;
+        let left = await members();
+        while (left.length > 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          left = await members();
+        }
+        return left;
+      };
+      try {
+        expect(pid).toMatch(/^\d+$/);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect((await members()).length).toBeGreaterThanOrEqual(2);
 
-      const started = Date.now();
-      await stopBackgroundApp(realExec);
-      expect(Date.now() - started).toBeLessThan(15_000);
-      expect(await members()).toEqual([]);
+        const started = Date.now();
+        await stopBackgroundApp(realExec);
+        expect(Date.now() - started).toBeLessThan(15_000);
+        // SIGKILL does not wait for the exit to land; give the kernel a moment.
+        expect(await settle()).toEqual([]);
+      } finally {
+        // Whatever the assertions did, leave no stubborn group or script behind.
+        const left = await members();
+        if (left.length > 0) await realExec(["sh", "-c", `kill -s KILL ${left.join(" ")} 2>/dev/null; true`]);
+        await realExec(["rm", "-f", script, APP_PID_PATH]);
+      }
     },
     30_000,
   );

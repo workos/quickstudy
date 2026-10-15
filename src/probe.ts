@@ -204,9 +204,11 @@ export async function readAppLogTail(exec: ProbeExecFn, lines = 40): Promise<str
  * the fallback signalled the group leader alone.
  */
 const GROUP_MEMBERS_SH =
+  // After the ")" that closes the command name, /proc/<pid>/stat reads
+  // "<state> <ppid> <pgrp> …"; a zombie (state Z) is dead and only unreaped.
   'members() { for d in /proc/[0-9]*; do [ -r "$d/stat" ] || continue; ' +
-  'pg=$(sed "s/^.*) //" "$d/stat" 2>/dev/null | cut -d" " -f3); ' +
-  '[ "$pg" = "$pid" ] && echo "${d#/proc/}"; done; }; ' +
+  'set -- $(sed "s/^.*) //" "$d/stat" 2>/dev/null); ' +
+  '[ "$3" = "$pid" ] && [ "$1" != "Z" ] && echo "${d#/proc/}"; done; }; ' +
   // Without /proc (a host runtime on macOS) fall back to the shell's group kill.
   'signal() { if [ -d /proc/self ]; then m=$(members); [ -n "$m" ] || return 1; kill -s "$1" $m 2>/dev/null; ' +
   'else kill -s "$1" -- "-$pid" 2>/dev/null; fi; }; ' +
