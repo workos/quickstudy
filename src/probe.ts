@@ -197,13 +197,21 @@ export async function readAppLogTail(exec: ProbeExecFn, lines = 40): Promise<str
 
 /** Kill the backgrounded dev server (process group first, pid as fallback). */
 export async function stopBackgroundApp(exec: ProbeExecFn): Promise<void> {
+  // SIGTERM the group, give it five seconds, then SIGKILL whatever is left.
+  // Dev servers that fork a worker outlive a TERM: Next.js's `start-server`
+  // child stayed bound to the port after `next dev` handled the signal, so
+  // the next probe booted on another port while the stale server answered
+  // the probe's requests (500s on routes it had never compiled).
   await exec(
     [
       "sh",
       "-c",
-      `pid="$(cat ${APP_PID_PATH} 2>/dev/null)"; [ -z "$pid" ] || kill -TERM -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true`,
+      `pid="$(cat ${APP_PID_PATH} 2>/dev/null)"; [ -n "$pid" ] || exit 0; ` +
+        `kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; ` +
+        `i=0; while [ "$i" -lt 10 ] && kill -0 -- "-$pid" 2>/dev/null; do sleep 0.5; i=$((i + 1)); done; ` +
+        `kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true`,
     ],
-    { timeoutMs: 10_000 },
+    { timeoutMs: 20_000 },
   );
 }
 
