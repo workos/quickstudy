@@ -38,8 +38,11 @@ describe("stopBackgroundApp", () => {
     "a server that ignores SIGTERM is gone after stop",
     async () => {
       // A process group that traps TERM and keeps a child alive, like a dev
-      // server whose worker outlives the parent.
-      await startAppInBackground(realExec, `sh -c 'trap "" TERM; sh -c "trap \\"\\" TERM; sleep 300" & wait'`);
+      // server whose worker outlives the parent. A script file keeps the
+      // start command free of quotes (startAppInBackground wraps it in `sh -c '…'`).
+      const script = `/tmp/quickstudy-stubborn-${process.pid}.sh`;
+      await Bun.write(script, 'trap "" TERM\nsh -c \'trap "" TERM; sleep 300\' &\nwait\n');
+      await startAppInBackground(realExec, `sh ${script}`);
       const pid = (await Bun.file(APP_PID_PATH).text()).trim();
       expect(pid).toMatch(/^\d+$/);
       await new Promise((resolve) => setTimeout(resolve, 300));
