@@ -1,0 +1,133 @@
+<!doctype html>
+<!--
+  Implementation-notes shell — copied VERBATIM by execute-spec on the first logged entry.
+  This file is the single owner of the implementation-notes format. Do not restate its
+  structure or styles elsewhere; change the format here and every future phase inherits it.
+  Copier substitutes: 6 (phase number, twice), prove-the-bench, 2026-09-24, Report honesty: Compare n-notice, diagnosis clusters, last-marker excerpts —
+  then deletes the example entry and appends real ones inside <main class="doc-content">.
+-->
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Implementation Notes — Phase 6</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f3;
+        --fg: #191b1d;
+        --muted: #50555a;
+        --border: #dededf;
+        --accent: #2b46c7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131417;
+          --fg: #e9e9e4;
+          --muted: #a8aaa6;
+          --border: #2d3036;
+          --accent: #93a7ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .doc-header { border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; }
+      .doc-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      .doc-meta { margin: 0; color: var(--muted); font-size: 0.875rem; }
+      .note-entry { border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+      .note-entry h3 { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--accent); }
+      .note-entry dl { margin: 0; }
+      .note-entry dt { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 0.75rem; }
+      .note-entry dt:first-child { margin-top: 0; }
+      .note-entry dd { margin: 0.15rem 0 0; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+        padding: 0.1em 0.3em;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="doc-header">
+      <h1>Implementation Notes — Phase 6</h1>
+      <p class="doc-meta">prove-the-bench · 2026-09-24 · Report honesty: Compare n-notice, diagnosis clusters, last-marker excerpts</p>
+    </header>
+    <main class="doc-content">
+      <section class="note-entry">
+        <h3>Seed — trials-1 run would become the default run</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec seeds the n1 run with <code>seedRun({ trials: 1, idSalt: "n1" })</code>. It would share <code>SEED_STARTED_AT</code> with the sweep and get a later ULID, so the export (sorted by <code>started_at</code> desc, then id desc) would list it first, making it the default run and breaking the positional <code>runIds()</code> in e2e.</dd>
+          <dt>Decision</dt>
+          <dd>Added <code>SeedOptions.startedAt?</code> (finish = start + 1h) and seeded n1 at <code>2026-07-18</code>, older than the cell-states run. Meta order stays sweep, cell-states, n1; <code>runIds()</code> now returns <code>{ sweep, cellStates, n1 }</code> and asserts three runs.</dd>
+          <dt>Alternative</dt>
+          <dd>Rewrite <code>runIds()</code> to resolve runs by trials; rejected because the n1 run would still become the app's default view.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Seed — idSalt is redundant for uniqueness</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec's Failure Modes row says <code>idSalt</code> prevents duplicate ids in one DB. <code>seedIdBase</code> already advances a per-db invocation counter with a 1,000,000 ms stride, so a second <code>seedRun</code> already mints distinct ids.</dd>
+          <dt>Decision</dt>
+          <dd>Kept <code>idSalt</code> as specified, but mixed it into the leading four entropy bytes via a pure FNV-1a hash (the counter lives in the trailing bytes). Unsalted streams, including the sweep, are byte-identical to before, and regen stays deterministic.</dd>
+          <dt>Alternative</dt>
+          <dd>Add the salt to the time base; rejected because an offset below the stride could overlap the next invocation's stream.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Compare — what "an arm with nothing scored" means</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec says the notice fires when a compared group has an eval where some arm has <code>scored === 0</code>. <code>countArms</code> never creates a zero entry, and the seeded sweep includes a regression eval that only the docs arms run, so a literal "missing arm" rule fired on the 3-trial sweep.</dd>
+          <dt>Decision</dt>
+          <dd>An eval counts as shared only when every group member has at least one attempt (any status) on it; the notice fires when such an eval has a member with no completed attempt. The notice also renders only when the run has at least one compared group, since "per-arm counts are listed" is otherwise false. Verified with an ad-hoc check: shared plus nothing scored fires, one-arm-only does not, trials 1 fires the trials sentence, and withheld-only groups show nothing.</dd>
+          <dt>Alternative</dt>
+          <dd>Treat every dash in a listed row as nothing scored; rejected because it flags suites scoped to one treatment, which were never planned for the other arms.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Diagnosis — report loading and copied Markdown order</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec says to load the report for clustering, and Error Handling says a missing report falls back to per-eval clusters. <code>loadReport</code> throws on a missing, invalid or offline report. The spec is silent on the copy-all Markdown order.</dd>
+          <dt>Decision</dt>
+          <dd>A second <code>useAsync</code> wraps <code>loadReport(runId).then(r =&gt; r.pairs, () =&gt; null)</code>, so any failure degrades to <code>null</code>. The view waits for both loads to avoid re-laying out. <code>diagnosisMarkdown</code> still orders by <code>DIAGNOSIS_TARGETS</code>, so copied Markdown can differ from the on-screen cluster order. Cluster headings pluralize ("1 arm", "2 findings") instead of printing "arm(s)".</dd>
+          <dt>Alternative</dt>
+          <dd>Render clusters immediately with <code>null</code> pairs and re-cluster when the report arrives; rejected because the headings would jump.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Validation — dev-data check and working-tree drift</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec's validation command <code>bun run ui:dev-data &amp;&amp; git diff --quiet -- ui/dev-data</code> assumes the regenerated data is already committed. This phase must leave changes unstaged, so the check cannot pass as written. Separately, a sibling phase's uncommitted change in the same tree (<code>src/manifest.ts</code>, the <code>solution</code> field) is picked up by regen, and its untracked <code>tests/oracle.test.ts</code> currently fails <code>tsc --noEmit</code>.</dd>
+          <dt>Decision</dt>
+          <dd>Checked determinism instead: regenerated twice and <code>diff -r</code> found no differences. The committed dev-data will include <code>"solution": null</code> in manifests if regenerated with the sibling's change present. Re-run <code>bun run ui:dev-data</code> after both phases land. <code>tsc -p ui</code> passes, and the root pass has no errors outside <code>tests/oracle.test.ts</code>.</dd>
+          <dt>Alternative</dt>
+          <dd>Stash the sibling's changes to regenerate cleanly; rejected because it would touch another stage's work in progress.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Docs — two paragraphs instead of one</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec asks for "one paragraph on clustering and on the notice" in <code>docs/concepts.md</code>.</dd>
+          <dt>Decision</dt>
+          <dd>Added one short paragraph on the notice in "Treatments and comparison groups", and one on clustering and last-marker excerpt windows after the diagnose paragraph. Each topic sits where a reader looks for it.</dd>
+          <dt>Alternative</dt>
+          <dd>Write a single combined paragraph; rejected because the two topics live in different sections.</dd>
+        </dl>
+      </section>
+    </main>
+  </body>
+</html>

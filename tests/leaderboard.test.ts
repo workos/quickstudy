@@ -128,7 +128,8 @@ describe("aggregate", () => {
     // passes, and the discriminating subset, so both filters moved together.
     for (const experiment of withRegression.experiments ?? []) {
       const agg = experiment.aggregate!;
-      const before = plain.experiments?.find((e) => e.experiment_id === experiment.experiment_id)?.aggregate!;
+      const before = (plain.experiments ?? []).find((e) => e.experiment_id === experiment.experiment_id)?.aggregate;
+      if (before === undefined) throw new Error(`no plain aggregate for ${experiment.experiment_id}`);
       const mine = regressionPairs.filter((p) => p.experiment_id === experiment.experiment_id);
       const scored = sum(mine.map((p) => p.scored));
       const passed = sum(mine.map((p) => p.passed));
@@ -217,6 +218,7 @@ describe("aggregate", () => {
       median_agent_ms: null, agent_time_attempts: 0,
       mean_tokens_in: null, mean_tokens_out: null, token_attempts: 0,
       cost_usd: null, cost_attempts: 0,
+      cost_per_pass_usd: null, agent_ms_per_pass: null, clears_gate: null,
     });
   });
 

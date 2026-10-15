@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  Implementation-notes shell — copied VERBATIM by execute-spec on the first logged entry.
+  This file is the single owner of the implementation-notes format. Do not restate its
+  structure or styles elsewhere; change the format here and every future phase inherits it.
+  Copier substitutes: 2 (phase number, twice), prove-the-bench, 2026-09-24, Graded checks and SDK recall —
+  then deletes the example entry and appends real ones inside <main class="doc-content">.
+-->
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Implementation Notes — Phase 2</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f3;
+        --fg: #191b1d;
+        --muted: #50555a;
+        --border: #dededf;
+        --accent: #2b46c7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131417;
+          --fg: #e9e9e4;
+          --muted: #a8aaa6;
+          --border: #2d3036;
+          --accent: #93a7ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .doc-header { border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; }
+      .doc-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      .doc-meta { margin: 0; color: var(--muted); font-size: 0.875rem; }
+      .note-entry { border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+      .note-entry h3 { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--accent); }
+      .note-entry dl { margin: 0; }
+      .note-entry dt { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 0.75rem; }
+      .note-entry dt:first-child { margin-top: 0; }
+      .note-entry dd { margin: 0.15rem 0 0; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+        padding: 0.1em 0.3em;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="doc-header">
+      <h1>Implementation Notes — Phase 2</h1>
+      <p class="doc-meta">prove-the-bench · 2026-09-24 · Graded checks and SDK recall</p>
+    </header>
+    <main class="doc-content">
+      <section class="note-entry">
+        <h3>Stale rebuild — rebuild on any schema mismatch</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec says rebuild when <code>stored.schema_version !== REPORT_SCHEMA_VERSION</code>; the old resolveReport comment promised to preserve fields a newer producer may add.</dd>
+          <dt>Decision</dt>
+          <dd>Followed the spec literally (<code>!==</code>), so a newer stored report is rebuilt at the current schema; updated the comment to say the bundled UI reads the shape it knows. For a stale report with <code>cost_estimate</code>, its pricing snapshot is reused (spec Failure Modes). The verbatim-embed test marker now carries the current <code>schema_version</code>.</dd>
+          <dt>Alternative</dt>
+          <dd>Rebuild only when older or missing (<code>&lt;</code>), keeping forward-compat verbatim copying.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Diagnose — ungraded checks excluded from failedChecks</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec is silent; <code>src/diagnose/select.ts</code> lists every check with passed &lt; total as a failed check, so seeded docs/cli pairs would feed <code>sdk-wired</code> misses into diagnosis prompts as failures.</dd>
+          <dt>Decision</dt>
+          <dd>Filter <code>graded !== false</code> in failedChecks (one predicate, tested in graded-checks). Ungraded checks never enter pass/fail, so they should not be presented as failure evidence.</dd>
+          <dt>Alternative</dt>
+          <dd>Leave select.ts untouched and accept the leakage.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Report UI — new SDK recall card</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec mentions an "experiments card" in Report.tsx; none exists.</dd>
+          <dt>Decision</dt>
+          <dd>Added a card modelled on the surface-usage card (testid <code>sdk-recall</code>), one row per experiment reading <code>SDK recall r/a</code> or <code>n/a</code> (absent field in older snapshots, or null rate). Added a tiny <code>.tag</code> CSS class.</dd>
+          <dt>Alternative</dt>
+          <dd>A column in the pairs table (recall is per experiment, not per pair).</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>E2E — graded-only count asserted as 9/9</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec example says <code>3/3 checks</code>, but the Heatmap sub-text sums checks across a pair's completed trials.</dd>
+          <dt>Decision</dt>
+          <dd>Asserted <code>9/9 checks</code> on the sweep run's auth-nextjs × claude-docs cell (3 trials × 3 graded; 9/12 if ungraded were counted), plus the ungraded tag in its drill-down and in the report pairs table.</dd>
+          <dt>Alternative</dt>
+          <dd>Seeding a one-trial cell to get a literal 3/3.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Validation — dev-data drift check vs unstaged changes</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The spec's <code>git diff --quiet -- ui/dev-data</code> check assumes regenerated data is already committed; this build must leave all changes unstaged, so the command cannot pass until the commit stage lands the regenerated files.</dd>
+          <dt>Decision</dt>
+          <dd>Regenerated dev data, then regenerated again and <code>diff -r</code>'d the two trees: identical (deterministic, no drift). New snapshot directories are registered with <code>git add -N</code>.</dd>
+          <dt>Alternative</dt>
+          <dd>Staging dev-data to satisfy the literal command (forbidden by the engine overrides).</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>ReportCheck.graded — required in the type, tolerant at read</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec declares <code>graded: boolean</code> as required; older hosted report snapshots lack it.</dd>
+          <dt>Decision</dt>
+          <dd>Kept it required on the TS type (the builder always sets it), documented absence in schema &lt; 7, and every reader uses <code>graded !== false</code> so absence reads as graded. <code>ReportExperiment.sdk_recall</code> is optional on the wire with the same note.</dd>
+          <dt>Alternative</dt>
+          <dd>Making <code>graded</code> optional in the type.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Docs — example check name is snake_case</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Seed data uses kebab-case <code>sdk-wired</code>; writing-an-eval.md tells authors to use stable snake_case names.</dd>
+          <dt>Decision</dt>
+          <dd>The doc example uses <code>sdk_wired</code> to match the doc's own naming rule; seed data keeps <code>sdk-wired</code> per spec.</dd>
+          <dt>Alternative</dt>
+          <dd>Using kebab-case in the doc against its own convention.</dd>
+        </dl>
+      </section>
+    </main>
+  </body>
+</html>

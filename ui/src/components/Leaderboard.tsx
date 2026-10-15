@@ -1,9 +1,9 @@
 /**
  * Per-experiment leaderboard: one row per experiment from the report's
  * `experiments[].aggregate` (headline suites: benchmark + regression), controls after the agent
- * experiments, then sorted by pass rate on
- * discriminating evals. Reports written before the aggregate existed get a
- * one-line "regenerate" note instead of a partial table.
+ * experiments, arms that clear the pass gate first, then ordered by
+ * time-to-pass and cost-to-pass. Reports written before the aggregate existed
+ * get a one-line "regenerate" note instead of a partial table.
  */
 
 import type { ReactNode } from "react";
@@ -31,6 +31,17 @@ function PassCell({ experiment }: { experiment: ReportExperiment }): ReactNode {
   return `${all} · ${agg.discriminating_passed}/${agg.discriminating_scored}`;
 }
 
+function GateCell({ experiment, gate }: { experiment: ReportExperiment; gate: number }): ReactNode {
+  const agg = experiment.aggregate;
+  if (agg === undefined || agg.clears_gate === null || agg.clears_gate === undefined) return "—";
+  const label = `pass rate ${agg.clears_gate ? "at or above" : "below"} ${Math.round(gate * 100)}%`;
+  return (
+    <span className={agg.clears_gate ? "tag" : "tag muted"} data-testid="leaderboard-gate" title={label}>
+      {agg.clears_gate ? "clears" : "below"}
+    </span>
+  );
+}
+
 function CostCell({ experiment }: { experiment: ReportExperiment }): ReactNode {
   const agg = experiment.aggregate;
   if (agg === undefined || agg.attempts === 0) return "—";
@@ -53,17 +64,24 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
     );
   }
   const rows = [...experiments].sort(compareLeaderboard);
+  const gate = typeof report.pass_gate === "number" ? report.pass_gate : 0.8;
   return (
     <div className="card" data-testid="leaderboard">
       <div className="head">
         <h3>Which experiment is best?</h3>
-        <span className="muted">headline suites (benchmark + regression) · sorted by pass rate on discriminating evals; controls last</span>
+        <span className="muted">
+          headline suites (benchmark + regression) · pass rate is a gate (≥ {Math.round(gate * 100)}%), not a rank ·
+          ordered by time-to-pass, then cost-to-pass; controls last
+        </span>
       </div>
       <div className="body">
         <table className="data">
           <thead>
             <tr>
               <th>Experiment</th>
+              <th>Gate</th>
+              <th>Cost/pass</th>
+              <th>Time/pass</th>
               <th>Pass rate (all · discriminating)</th>
               <th>Agent time (median)</th>
               <th>Tokens/run (in)</th>
@@ -92,6 +110,15 @@ export function Leaderboard({ report, runId }: LeaderboardProps): ReactNode {
                         {experiment.role === "positive-control" ? "positive control" : "negative control"}
                       </span>
                     )}
+                  </td>
+                  <td>
+                    <GateCell experiment={experiment} gate={gate} />
+                  </td>
+                  <td data-testid="leaderboard-cost-per-pass" title="reported cost over the attempts that reported it, divided by their passes">
+                    {agg?.cost_per_pass_usd === null || agg?.cost_per_pass_usd === undefined ? "—" : fmtUsd(agg.cost_per_pass_usd)}
+                  </td>
+                  <td data-testid="leaderboard-time-per-pass" title="agent time over the scored attempts that recorded it, divided by their passes">
+                    {fmtMs(agg?.agent_ms_per_pass ?? null)}
                   </td>
                   <td data-testid="leaderboard-pass">
                     <PassCell experiment={experiment} />

@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  Implementation-notes shell — copied VERBATIM by execute-spec on the first logged entry.
+  This file is the single owner of the implementation-notes format. Do not restate its
+  structure or styles elsewhere; change the format here and every future phase inherits it.
+  Copier substitutes: 1 (phase number, twice), prove-the-bench, 2026-09-24, Outcome taxonomy and agent timestamps —
+  then deletes the example entry and appends real ones inside <main class="doc-content">.
+-->
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Implementation Notes — Phase 1</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f3;
+        --fg: #191b1d;
+        --muted: #50555a;
+        --border: #dededf;
+        --accent: #2b46c7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131417;
+          --fg: #e9e9e4;
+          --muted: #a8aaa6;
+          --border: #2d3036;
+          --accent: #93a7ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .doc-header { border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; }
+      .doc-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      .doc-meta { margin: 0; color: var(--muted); font-size: 0.875rem; }
+      .note-entry { border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+      .note-entry h3 { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--accent); }
+      .note-entry dl { margin: 0; }
+      .note-entry dt { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 0.75rem; }
+      .note-entry dt:first-child { margin-top: 0; }
+      .note-entry dd { margin: 0.15rem 0 0; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+        padding: 0.1em 0.3em;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="doc-header">
+      <h1>Implementation Notes — Phase 1</h1>
+      <p class="doc-meta">prove-the-bench · 2026-09-24 · Outcome taxonomy and agent timestamps</p>
+    </header>
+    <main class="doc-content">
+      <section class="note-entry">
+        <h3>Error-kind classification — container provision keeps its return</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec step 2 says to wrap the provision block and <code>throw new StageFailure("environment", e)</code>.</dd>
+          <dt>Decision</dt>
+          <dd>The provision catch already runs a teardown and <em>returns</em> an error disposition; it now returns <code>errorKind: "environment"</code> instead. The container IIFE catch (which the spec does not mention) also maps <code>errorKindOf(err)</code>, since every in-IIFE StageFailure lands there, not in the outer loop.</dd>
+          <dt>Alternative</dt>
+          <dd>Throwing from the provision catch would skip the existing teardown-then-return path.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Error-kind classification — inStage helper and exported errorKindOf</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec asks for wrapping each stage boundary with <code>StageFailure</code>, and a unit test of the outer mapping with a bare Error.</dd>
+          <dt>Decision</dt>
+          <dd>Added a tiny <code>inStage(kind, fn)</code> wrapper (preserves an inner StageFailure) and exported <code>StageFailure</code> + <code>errorKindOf</code> so the harness mapping is unit-testable. Host adapter throws are re-thrown as <code>StageFailure("agent")</code> so the outer catch keeps writing the error artifact.</dd>
+          <dt>Alternative</dt>
+          <dd>Inline try/catch at every site; returning a disposition directly from the host catch (would duplicate the writeError call).</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>UI badges — timedOut KPI vs incomplete banner</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec: <code>timedOut</code> count includes graded timeouts. It was only consumed by <code>incompleteReason</code>, which would then blame graded (complete) timeouts for an incomplete run.</dd>
+          <dt>Decision</dt>
+          <dd>Kept <code>totals.timedOut</code> per spec and rendered it as a gray “N timed out” KPI badge when &gt; 0; the banner now gets a separate <code>unscoredTimedOut</code> (legacy incomplete timeouts only).</dd>
+          <dt>Alternative</dt>
+          <dd>Passing the inflated count to the banner (misleading; negative otherIncomplete).</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Existing tests and docs flipped by the new timeout semantics</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec lists neither the runner/docker tests that asserted <code>incomplete</code> on timeout nor <code>docs/extensions.md</code> / <code>docs/publishing-a-benchmark.md</code>.</dd>
+          <dt>Decision</dt>
+          <dd>Updated those assertions to completed + <code>limitHit: "timeout"</code>. The retry test now produces its unfinished row with an adapter throw (error) since timeouts are no longer unfinished. Docker-gated tests were edited but could not run locally (no daemon). Fixed the two contradicting doc sentences.</dd>
+          <dt>Alternative</dt>
+          <dd>Leaving stale docs/tests.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Error-kind tests — unpreparable local/ fixture</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Spec experiment (c): an eval whose <code>localDir</code> points at a missing path. The run manifest hashes <code>localDir</code> before any attempt, so a missing path aborts the whole run.</dd>
+          <dt>Decision</dt>
+          <dd>Used a <code>local/</code> with a chmod-000 <code>node_modules</code> dir: the identity hash skips it, the workspace copy cannot read it → environment. Skipped when running as root.</dd>
+          <dt>Alternative</dt>
+          <dd>A getter/stack hack on <code>localDir</code>.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Validation — dev-data git-clean check</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>The command <code>bun run ui:dev-data &amp;&amp; git diff --quiet -- ui/dev-data</code> can only pass once the regenerated data is committed; this stage must not commit.</dd>
+          <dt>Decision</dt>
+          <dd>Verified the generator is deterministic (two regenerations produce byte-identical trees). The regenerated tree also picks up pre-existing drift at HEAD (<code>run_paths</code>/<code>snapshots/</code>, <code>incomplete</code> flags in meta.json) — all of <code>ui/dev-data</code> must be committed, including the new untracked snapshot dirs.</dd>
+          <dt>Alternative</dt>
+          <dd>Staging dev-data to satisfy the check (violates the leave-unstaged override).</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Codebase surprise — pre-existing failing test</h3>
+        <dl>
+          <dt>Context</dt>
+          <dd>Full <code>bun test</code> shows one failure: “mcp auth: v3 runner fail-fast … credentials file is absent”.</dd>
+          <dt>Decision</dt>
+          <dd>Reproduced with all changes stashed; it is environmental (local credentials file present), not caused by this phase. Not in the spec’s validation list.</dd>
+          <dt>Alternative</dt>
+          <dd>n/a</dd>
+        </dl>
+      </section>
+    </main>
+  </body>
+</html>

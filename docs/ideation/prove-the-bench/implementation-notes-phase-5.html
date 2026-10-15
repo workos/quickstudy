@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+  Implementation-notes shell — copied VERBATIM by execute-spec on the first logged entry.
+  This file is the single owner of the implementation-notes format. Do not restate its
+  structure or styles elsewhere; change the format here and every future phase inherits it.
+  Copier substitutes: 5 (phase number, twice), prove-the-bench, 2026-09-24, Per-experiment leaderboard —
+  then deletes the example entry and appends real ones inside <main class="doc-content">.
+-->
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Implementation Notes — Phase 5</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f3;
+        --fg: #191b1d;
+        --muted: #50555a;
+        --border: #dededf;
+        --accent: #2b46c7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131417;
+          --fg: #e9e9e4;
+          --muted: #a8aaa6;
+          --border: #2d3036;
+          --accent: #93a7ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .doc-header { border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 2rem; }
+      .doc-header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+      .doc-meta { margin: 0; color: var(--muted); font-size: 0.875rem; }
+      .note-entry { border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+      .note-entry h3 { margin: 0 0 0.75rem; font-size: 1.05rem; color: var(--accent); }
+      .note-entry dl { margin: 0; }
+      .note-entry dt { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-top: 0.75rem; }
+      .note-entry dt:first-child { margin-top: 0; }
+      .note-entry dd { margin: 0.15rem 0 0; }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+        padding: 0.1em 0.3em;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="doc-header">
+      <h1>Implementation Notes — Phase 5</h1>
+      <p class="doc-meta">prove-the-bench · 2026-09-24 · Per-experiment leaderboard</p>
+    </header>
+    <main class="doc-content">
+            <section class="note-entry">
+        <h3>Added discriminating passed/scored counts</h3>
+        <dl>
+          <dt>Context</dt><dd>The spec&#39;s <code>ExperimentAggregate</code> has only rates, but the pass cell renders <code>11/17 · 6/6</code>.</dd>
+          <dt>Decision</dt><dd>Added <code>discriminating_passed</code> and <code>discriminating_scored</code>. <code>discriminating_evals</code> counts distinct benchmark evals with band <code>discriminating</code> where this experiment scored at least one attempt.</dd>
+          <dt>Alternative</dt><dd>Render percentages instead of counts.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Benchmark filter applies to every aggregate field</h3>
+        <dl>
+          <dt>Context</dt><dd>The spec says the pass rate is over benchmark pairs, but it is silent on counts, time, tokens and cost.</dd>
+          <dt>Decision</dt><dd>Every field (counts, median, tokens, cost, estimated) uses benchmark-suite attempts only, so one <code>attempts</code> denominator covers the whole row. SDK recall stays all-suite (the existing Phase 2 value). Documented in <code>docs/concepts.md</code>.</dd>
+          <dt>Alternative</dt><dd>Filter only the pass rates, which would mix denominators within a row.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Cost/run shows the mean per reporting attempt</h3>
+        <dl>
+          <dt>Context</dt><dd>The column header is "Cost/run", but the example <code>$1.99 · 12/17 reported</code> is ambiguous between a total and a mean.</dd>
+          <dt>Decision</dt><dd>The UI shows <code>cost_usd / cost_attempts</code> (and the estimated mean) per run. The text renderer shows the total with its counts, matching the run-wide telemetry line.</dd>
+          <dt>Alternative</dt><dd>Show the total cost in the UI cell.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>Comparator lives in aggregate.ts</h3>
+        <dl>
+          <dt>Context</dt><dd>The UI needs the sort, but <code>report.ts</code> imports <code>node:fs</code>. A runtime import from it would pull Node modules into the Vite bundle.</dd>
+          <dt>Decision</dt><dd><code>compareLeaderboard</code> lives in <code>src/report/aggregate.ts</code>, which has only type imports. <code>report.ts</code> re-exports it.</dd>
+          <dt>Alternative</dt><dd>Duplicate the sort in the UI.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>e2e asserts "reported", not "not reported"</h3>
+        <dl>
+          <dt>Context</dt><dd>The spec&#39;s playground says codex rows read <code>not reported</code>, but the seed gives every completed attempt <code>costUsd: 0.11</code>, and <code>invariants-v3</code> pins that value.</dd>
+          <dt>Decision</dt><dd>The e2e asserts <code>9/9 reported</code> / <code>8/9 reported</code>. The unit tests cover null cost (<code>cost_attempts: 0</code>) and the text renderer covers <code>not reported (0/N)</code>.</dd>
+          <dt>Alternative</dt><dd>Change the seed costs, which would break the pinned invariants.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>fmtTokens changed in place</h3>
+        <dl>
+          <dt>Context</dt><dd><code>fmtTokens</code> already existed and printed <code>512.0k</code>.</dd>
+          <dt>Decision</dt><dd>A trailing <code>.0</code> is now stripped (<code>512k</code>, <code>1M</code>), and fractional values below 1000 round (means can be fractional). The existing cases still pass.</dd>
+          <dt>Alternative</dt><dd>Add a second formatter.</dd>
+        </dl>
+      </section>
+      <section class="note-entry">
+        <h3>The dev-data validation command conflicts with the unstaged-diff rule</h3>
+        <dl>
+          <dt>Context</dt><dd><code>git diff --quiet -- ui/dev-data &amp;&amp; test -z "$(git status --porcelain -- ui/dev-data)"</code> can only pass once regenerated dev data is committed. The workflow requires leaving changes unstaged.</dd>
+          <dt>Decision</dt><dd>Verified determinism instead: hashed every file after one regeneration, regenerated again, and got identical hashes.</dd>
+          <dt>Alternative</dt><dd>Stage or commit the dev data, which the engine forbids.</dd>
+        </dl>
+      </section>
+    </main>
+  </body>
+</html>
