@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/workos/quickstudy/compare/v0.6.1...v0.7.0) (2026-10-15)
+
+
+### Features
+
+* **diagnose:** skip control pairs ([#27](https://github.com/workos/quickstudy/issues/27)) ([e475d8d](https://github.com/workos/quickstudy/commit/e475d8dad9ed26f702585ed4d33ca7bfecf220b1))
+
 ## [0.6.1](https://github.com/workos/quickstudy/compare/v0.6.0...v0.6.1) (2026-10-14)
 
 
