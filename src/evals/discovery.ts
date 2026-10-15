@@ -44,7 +44,7 @@ export function discoverEvals(root: string): LoadedEval[] {
     const promptPath = join(dir, "PROMPT.md");
     if (!existsSync(promptPath)) continue;
 
-    const { metadata, promptBody, frameworks, local } = parsePrompt(readFileSync(promptPath, "utf8"), promptPath);
+    const { metadata, promptBody, frameworks, local, suites } = parsePrompt(readFileSync(promptPath, "utf8"), promptPath);
 
     const scorerPath = join(dir, "EVAL.ts");
     if (!existsSync(scorerPath)) {
@@ -132,7 +132,9 @@ export function discoverEvals(root: string): LoadedEval[] {
       }
       collected.push({
         loaded: {
-          metadata: { ...metadata, id: `${metadata.id}-${framework}`, framework },
+          // A `suites:` entry retiers one variant (a saturated django port can be
+          // smoke while the nextjs port stays benchmark) without renaming its id.
+          metadata: { ...metadata, suite: suites?.[framework] ?? metadata.suite, id: `${metadata.id}-${framework}`, framework },
           dir,
           promptPath,
           promptBody,

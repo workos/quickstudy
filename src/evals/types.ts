@@ -5,9 +5,21 @@
  * plain TypeScript handed an {@link EvalContext} over the finished workspace.
  */
 
-/** Closed set of eval suites. `regression` never moves headline scores. */
-export const EVAL_SUITES = ["benchmark", "regression", "other"] as const;
+/**
+ * Closed set of eval suites. `benchmark` and `regression` are the headline
+ * suites: the leaderboard aggregates count both. `smoke` holds evals every
+ * arm solves — run to catch breakage, never moving the headline. `other` is
+ * anything else outside the headline.
+ */
+export const EVAL_SUITES = ["benchmark", "regression", "smoke", "other"] as const;
 export type EvalSuite = (typeof EVAL_SUITES)[number];
+
+/** The suites whose attempts count toward the leaderboard aggregates. */
+export const HEADLINE_SUITES: readonly EvalSuite[] = ["benchmark", "regression"];
+
+export function isHeadlineSuite(suite: string): boolean {
+  return (HEADLINE_SUITES as readonly string[]).includes(suite);
+}
 
 /** PROMPT.md frontmatter. New fields require a proven filtering/reporting use case. */
 export interface EvalMetadata {

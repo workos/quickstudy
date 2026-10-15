@@ -47,18 +47,21 @@ eval × experiment  →  isolated attempt  →  agent works  →  scorer checks 
 An eval is one directory under the evals root (default `evals/`):
 
 - **`PROMPT.md`** — YAML frontmatter (`id`, `suite`, and optional `product`,
-  `framework`, `topics`) followed by the task prompt the agent receives
-  verbatim.
+  `framework`, `frameworks`, `suites`, `local`, `topics`) followed by the
+  task prompt the agent receives verbatim.
 - **`EVAL.ts`** — a default-exported **scorer**: plain TypeScript that
   receives the finished workspace and returns named pass/fail **checks**.
 - **`local/`** (optional) — the starting state copied into the attempt's
   workspace before the agent begins.
 
 There is no registry and no special dialect: the scorer is ordinary code, and
-every eval is self-contained. The `suite` field separates headline
-**benchmark** evals from **regression** and **other** evals, which never move
-headline scores. [Writing an eval](./writing-an-eval.md) is the authoring
-reference.
+every eval is self-contained. The `suite` field tiers evals: **benchmark**
+and **regression** are the headline suites the leaderboard counts; **smoke**
+holds evals every arm solves, run to catch breakage but never moving the
+headline; **other** is anything else outside it. A framework-expanded eval can
+retier one variant with `suites:` (a saturated port goes to smoke while the
+rest stay benchmark). [Writing an eval](./writing-an-eval.md) is the
+authoring reference.
 
 ## Experiments: HOW attempts run
 
@@ -236,13 +239,13 @@ the matrix banner and the text report's `suspect:` lines display.
 
 Each entry in `report.json`'s `experiments[]` carries an `aggregate`: one
 leaderboard row per experiment, rendered as a table above the matrix and in
-the text report. Every number in it except SDK recall counts **benchmark-suite
-attempts only**, so regression evals never move the ranking. That is why the
-row's `cost_usd` can be lower than the run-wide `telemetry.cost_usd`. Its
-columns and their denominators:
+the text report. Every number in it except SDK recall counts **headline-suite
+attempts only** (benchmark and regression), so smoke and other evals never
+move the ranking. That is why the row's `cost_usd` can be lower than the
+run-wide `telemetry.cost_usd`. Its columns and their denominators:
 
 - **Pass rate (all · discriminating)**: `passed / scored` over the
-  experiment's benchmark pairs, then the same over only the evals whose band
+  experiment's headline pairs, then the same over only the evals whose band
   is `discriminating` (`discriminating_passed / discriminating_scored`).
   Incomplete and errored attempts count in `attempts` but never in `scored`.
   The discriminating rate is null when the experiment scored no
@@ -330,7 +333,7 @@ exactly what a negative control should do.
 | **pair**            | One eval × experiment combination — the report's row unit (a *cell* in the UI).              |
 | **run**             | One `quickstudy run`, all pairs and trials, under one run id.                                |
 | **manifest**        | The immutable content-addressed identity record written before attempts start.               |
-| **suite**           | Eval class: `benchmark` (headline), `regression`, or `other`.                                |
+| **suite**           | Eval tier: `benchmark` and `regression` (headline), `smoke` (saturated, outside it), `other`. |
 
 Next: [Getting started](./getting-started.md) ·
 [Writing an eval](./writing-an-eval.md)

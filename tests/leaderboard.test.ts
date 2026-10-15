@@ -118,13 +118,36 @@ describe("aggregate", () => {
     expect(order).toEqual(["claude-docs", "codex-cli", "claude-cli", "codex-docs", "codex-mcp", "claude-mcp"]);
   });
 
-  test("regression-suite attempts never move any aggregate", () => {
+  test("regression-suite attempts count toward the aggregate; smoke-suite attempts never do", () => {
     const plain = seededReport(false);
     const withRegression = seededReport(true);
-    const aggregates = (report: ReportJson) => (report.experiments ?? []).map((e) => [e.experiment_id, e.aggregate]);
-    expect(aggregates(withRegression)).toEqual(aggregates(plain));
-    // The run-wide telemetry does include the regression attempts.
-    expect(withRegression.telemetry.cost_attempts).toBeGreaterThan(plain.telemetry.cost_attempts);
+    const regressionPairs = (withRegression.pairs ?? []).filter((p) => p.suite === "regression");
+    expect(regressionPairs.length).toBeGreaterThan(0);
+    const sum = (values: number[]) => values.reduce((n, v) => n + v, 0);
+    // Every arm's row grows by exactly its regression pairs: attempts, scored,
+    // passes, and the discriminating subset, so both filters moved together.
+    for (const experiment of withRegression.experiments ?? []) {
+      const agg = experiment.aggregate!;
+      const before = plain.experiments?.find((e) => e.experiment_id === experiment.experiment_id)?.aggregate!;
+      const mine = regressionPairs.filter((p) => p.experiment_id === experiment.experiment_id);
+      const scored = sum(mine.map((p) => p.scored));
+      const passed = sum(mine.map((p) => p.passed));
+      expect(agg.attempts - before.attempts).toBe(sum(mine.map((p) => p.total)));
+      expect(agg.passed + agg.failed).toBe(before.passed + before.failed + scored);
+      expect(agg.passed).toBe(before.passed + passed);
+      expect(agg.pass_rate_all).toBeCloseTo((before.passed + passed) / (before.passed + before.failed + scored), 10);
+      const discriminating = mine.filter((p) => p.band === "discriminating");
+      expect(agg.discriminating_scored).toBe(before.discriminating_scored + sum(discriminating.map((p) => p.scored)));
+      expect(agg.discriminating_passed).toBe(before.discriminating_passed + sum(discriminating.map((p) => p.passed)));
+    }
+    expect((withRegression.pairs ?? []).some((p) => p.suite === "regression" && p.band === "discriminating")).toBe(true);
+    // Smoke stays outside the headline: the row ignores it entirely.
+    const x = aggregateOf(
+      [pass("split", "x"), fail("split", "x"), pass("saturated", "x", { suite: "smoke" }), pass("saturated", "x", { suite: "smoke" })],
+      "x",
+    );
+    expect(x.attempts).toBe(2);
+    expect(x.pass_rate_all).toBe(0.5);
   });
 
   test("a solved-by-all eval is excluded from the discriminating subset", () => {
