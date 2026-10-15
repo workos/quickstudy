@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/workos/quickstudy/compare/v0.7.0...v0.8.0) (2026-10-15)
+
+
+### Features
+
+* **evals:** smoke tier, per-framework suites, regression in the headline ([#29](https://github.com/workos/quickstudy/issues/29)) ([1905244](https://github.com/workos/quickstudy/commit/1905244be50643feb10227d73d13df14ab037e8d))
+* **report:** lead with cost-to-pass and time-to-pass; pass rate gates ([#31](https://github.com/workos/quickstudy/issues/31)) ([020fb90](https://github.com/workos/quickstudy/commit/020fb9099b551b07cadc2712b8ef57e5831dd1c9))
+
 ## [0.7.0](https://github.com/workos/quickstudy/compare/v0.6.1...v0.7.0) (2026-10-15)
 
 
