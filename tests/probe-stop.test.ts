@@ -28,10 +28,12 @@ describe("stopBackgroundApp", () => {
     expect(commands).toHaveLength(1);
     const script = commands[0]![2]!;
     expect(script).toContain(`cat ${APP_PID_PATH}`);
-    expect(script).toContain('kill -TERM -- "-$pid"');
-    expect(script).toContain('kill -0 -- "-$pid"');
-    expect(script).toContain('kill -KILL -- "-$pid"');
-    expect(script.indexOf("kill -TERM")).toBeLessThan(script.indexOf("kill -KILL"));
+    // The group is enumerated from /proc: dash's builtin kill cannot signal a
+    // negative pid, so `kill -- -<pgid>` is only the no-/proc fallback.
+    expect(script).toContain("/proc/[0-9]*");
+    expect(script).toContain("signal TERM");
+    expect(script).toContain("signal KILL");
+    expect(script.indexOf("signal TERM")).toBeLessThan(script.indexOf("signal KILL"));
   });
 
   test.skipIf(Bun.which("setsid") === null)(
@@ -46,12 +48,15 @@ describe("stopBackgroundApp", () => {
       const pid = (await Bun.file(APP_PID_PATH).text()).trim();
       expect(pid).toMatch(/^\d+$/);
       await new Promise((resolve) => setTimeout(resolve, 300));
-      expect((await realExec(["sh", "-c", `kill -0 -- "-${pid}"`])).exitCode).toBe(0);
+      // Group members by /proc, the way the stop itself finds them.
+      const members = async () =>
+        (await realExec(["sh", "-c", `for d in /proc/[0-9]*; do pg=$(sed "s/^.*) //" "$d/stat" 2>/dev/null | cut -d" " -f3); [ "$pg" = "${pid}" ] && echo "\${d#/proc/}"; done`])).stdout.trim().split("\n").filter(Boolean);
+      expect((await members()).length).toBeGreaterThanOrEqual(2);
 
       const started = Date.now();
       await stopBackgroundApp(realExec);
       expect(Date.now() - started).toBeLessThan(15_000);
-      expect((await realExec(["sh", "-c", `kill -0 -- "-${pid}"`])).exitCode).not.toBe(0);
+      expect(await members()).toEqual([]);
     },
     30_000,
   );
