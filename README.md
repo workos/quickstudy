@@ -130,10 +130,11 @@ preflight key probe at it:
 | Agent  | Overrides                                        | How the CLI gets them                                                                  |
 | ------ | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_CUSTOM_HEADERS` | env, read natively by Claude Code (and by the `diagnose` analyst)                      |
-| codex  | `OPENAI_BASE_URL`                                | rendered into `config.toml` as a custom model provider (codex ignores the env var)     |
+| codex  | `OPENAI_BASE_URL`, `OPENAI_CUSTOM_HEADERS`       | rendered into `config.toml` as a custom model provider (`base_url`, `http_headers`); codex has no env channel for either |
 
-`ANTHROPIC_CUSTOM_HEADERS` is `Name: Value` lines and is redacted from
-artifacts like a key. With Cloudflare AI Gateway holding the provider keys,
+The `*_CUSTOM_HEADERS` bundles are `Name: Value` lines and are redacted from
+artifacts like a key; a `cf-aig-metadata` line is how a gateway attributes
+the traffic per app. With Cloudflare AI Gateway holding the provider keys,
 the gateway token *is* the API key:
 
 ```bash
@@ -142,7 +143,11 @@ export ANTHROPIC_API_KEY=<gateway token>
 export ANTHROPIC_CUSTOM_HEADERS="cf-aig-authorization: Bearer <gateway token>"
 export OPENAI_BASE_URL=https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/openai
 export OPENAI_API_KEY=<gateway token>
+export OPENAI_CUSTOM_HEADERS='cf-aig-metadata: {"app":"my-evals"}'
 ```
+
+Leave every override unset and both agents run vendor-direct against
+api.anthropic.com and api.openai.com — nothing is rendered, nothing changes.
 
 ## How it works
 

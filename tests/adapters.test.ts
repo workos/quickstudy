@@ -194,12 +194,40 @@ describe("endpoint overrides (LLM gateway routing)", () => {
     });
   });
 
-  test("codex: declares its override; the probe follows OPENAI_BASE_URL", () => {
+  test("codex: declares its overrides; the probe follows OPENAI_BASE_URL and carries the custom headers", () => {
     const adapter = new CodexAdapter("codex", { model: "m", reasoning: "r" });
-    expect(adapter.optionalHostEnv).toEqual(["OPENAI_BASE_URL"]);
-    expect(adapter.keyProbe({ OPENAI_API_KEY: "k" }).url).toBe("https://api.openai.com/v1/models");
-    expect(adapter.keyProbe({ OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://gateway.example/v1/acct/gw/openai" }).url)
-      .toBe("https://gateway.example/v1/acct/gw/openai/models");
+    expect(adapter.optionalHostEnv).toEqual(["OPENAI_BASE_URL", "OPENAI_CUSTOM_HEADERS"]);
+    expect(adapter.keyProbe({ OPENAI_API_KEY: "k" })).toEqual({
+      url: "https://api.openai.com/v1/models",
+      headers: { Authorization: "Bearer k" },
+    });
+    const probe = adapter.keyProbe({
+      OPENAI_API_KEY: "k",
+      OPENAI_BASE_URL: "https://gateway.example/v1/acct/gw/openai",
+      OPENAI_CUSTOM_HEADERS: 'cf-aig-metadata: {"app":"evals"}',
+    });
+    expect(probe.url).toBe("https://gateway.example/v1/acct/gw/openai/models");
+    expect(probe.headers).toEqual({ "cf-aig-metadata": '{"app":"evals"}', Authorization: "Bearer k" });
+  });
+
+  test("codex: OPENAI_CUSTOM_HEADERS lands on the custom provider as http_headers; alone it keeps the vendor endpoint", () => {
+    const adapter = new CodexAdapter("codex", { model: "m", reasoning: "r" });
+    const base = "https://gateway.example/v1/acct/gw/openai";
+    const bundle = 'cf-aig-metadata: {"app":"evals"}\nx-team: dax';
+
+    const both = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_BASE_URL: base, OPENAI_CUSTOM_HEADERS: bundle } })[CODEX_CONFIG_PATH] as string;
+    expect(both).toContain(`base_url = ${JSON.stringify(base)}`);
+    // JSON escapes double as TOML basic-string escapes, so the JSON metadata value survives verbatim.
+    expect(both).toContain('http_headers = { "cf-aig-metadata" = "{\\"app\\":\\"evals\\"}", "x-team" = "dax" }');
+
+    const headersOnly = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_CUSTOM_HEADERS: bundle } })[CODEX_CONFIG_PATH] as string;
+    expect(headersOnly).toContain('base_url = "https://api.openai.com/v1"');
+    expect(headersOnly).toContain("http_headers = {");
+
+    // A base URL alone renders no http_headers line; nothing set renders nothing.
+    const baseOnly = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_BASE_URL: base } })[CODEX_CONFIG_PATH] as string;
+    expect(baseOnly).not.toContain("http_headers");
+    expect(adapter.setupFiles(ctxFor("none"))).toEqual({});
   });
 
   test("codex: an OPENAI_BASE_URL override renders as a custom model provider, ahead of any MCP table", () => {
