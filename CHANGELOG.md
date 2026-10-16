@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/workos/quickstudy/compare/v0.9.0...v0.10.0) (2026-10-16)
+
+
+### Features
+
+* **codex:** OPENAI_CUSTOM_HEADERS via the custom provider's http_headers ([#36](https://github.com/workos/quickstudy/issues/36)) ([6596106](https://github.com/workos/quickstudy/commit/6596106ef48346d8bd306f582e5ed6b3065cc1dc))
+
 ## [0.9.0](https://github.com/workos/quickstudy/compare/v0.8.1...v0.9.0) (2026-10-16)
 
 
