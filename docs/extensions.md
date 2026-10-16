@@ -110,8 +110,11 @@ native web tools do not prohibit explicit shell paths or package-local alternati
 
 `run --concurrency N --seed VALUE` uses a reproducible seeded dispatch order; default
 concurrency is 1 and seed is `0`. Trial coordinates never depend on completion order.
-Runtime `capacity: {key, limit}` shares a capacity bound across arms. CPU, memory,
-Docker sidecars and provider limits determine a suitable concurrency.
+Runtime `capacity: {key, limit}` shares a capacity bound across arms. A resolver,
+`capacity: (metadata) => {key, limit} | undefined`, decides per eval, so an eval
+that consumes no pooled resource answers `undefined` and never waits for a slot;
+unlike the static form, a resolver is not part of the experiment's identity. CPU,
+memory, Docker sidecars and provider limits determine a suitable concurrency.
 
 `run --resume RUN_ID` inherits the recorded selection, roots, budgets, seed and
 policy and verifies v4 identity. Completed failures are skipped exactly like passes.

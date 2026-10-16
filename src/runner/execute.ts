@@ -36,6 +36,7 @@ import { EchoAdapter } from "../adapters/echo.ts";
 import { OracleAdapter, OracleContainerAdapter } from "../adapters/oracle.ts";
 import { validEvalResult } from "../evals/result.ts";
 import { importEvalScorer } from "../evals/discovery.ts";
+import { resolveRuntimeCapacity } from "./capacity.ts";
 import { deadline, StageTimeoutError } from "./deadline.ts";
 import { scoreInWorker } from "./score-worker.ts";
 import { prepWorkspaceSource } from "./workspace-source.ts";
@@ -616,7 +617,10 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
         `attempt ${attemptId} (${entry.evalId} × ${entry.experimentId} trial ${entry.trialIndex + 1}): ` +
           `${disposition.status}${disposition.result ? ` — ${disposition.result.passed ? "passed" : "failed"}` : ""}`,
       );
-    }, { ...(options.signal ? { signal: options.signal } : {}), capacity: (entry) => experimentsById.get(entry.experimentId)?.runtime.capacity });
+    }, {
+      ...(options.signal ? { signal: options.signal } : {}),
+      capacity: (entry) => resolveRuntimeCapacity(experimentsById.get(entry.experimentId)?.runtime, evalsById.get(entry.evalId)?.metadata),
+    });
 
     const current = activeAttempts(store.listAttempts(runId));
     summary.passed = current.filter((a) => a.status === "completed" && a.result?.passed).length;
