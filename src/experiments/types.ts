@@ -6,8 +6,15 @@
  * manifest), so nothing may mutate it after definition.
  */
 
+import type { EvalMetadata } from "../evals/types.ts";
 import type { SurfaceUsageConfig } from "../surface-usage.ts";
 import type { RuntimeCapabilities } from "../runtime/types.ts";
+
+/** A shared scarce resource: the scheduler lets at most `limit` attempts hold `key` at once. */
+export interface RuntimeCapacity {
+  key: string;
+  limit: number;
+}
 
 /** Which agent executes the attempt, plus the identity fields recorded in the manifest. */
 export interface AgentSpec {
@@ -35,8 +42,13 @@ export interface Runtime extends RuntimeCapabilities {
   kind: "host" | "container";
   /** Shared observation targets, independent of which surfaces this arm offers. */
   observationTargets?: SurfaceUsageConfig;
-  /** Shared scarce resource pool; scheduler waits instead of starting doomed jobs. */
-  capacity?: { key: string; limit: number };
+  /**
+   * Shared scarce resource pool; the scheduler waits instead of starting
+   * doomed jobs. A resolver decides per eval, so an eval that consumes no
+   * pooled resource can answer `undefined` and never hold a slot. The static
+   * form is identity; a resolver, like every capability function, is not.
+   */
+  capacity?: RuntimeCapacity | ((metadata: EvalMetadata) => RuntimeCapacity | undefined);
   /** Explicit environment fields the declared treatment may vary in a comparison.
    * Images and lifecycle budgets can never be exempted. All group members must
    * declare the same fields. Source/config identity still changes per attempt.

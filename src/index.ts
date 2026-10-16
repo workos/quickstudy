@@ -18,7 +18,7 @@ export type {
 } from "./evals/types.ts";
 export { EVAL_SUITES } from "./evals/types.ts";
 export { defineExperiment } from "./experiments/types.ts";
-export type { AgentSpec, Experiment, LoadedExperiment, Runtime } from "./experiments/types.ts";
+export type { AgentSpec, Experiment, LoadedExperiment, Runtime, RuntimeCapacity } from "./experiments/types.ts";
 export type {
   ProvisionedEnvironment,
   RuntimeCapabilities,
