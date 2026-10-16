@@ -196,7 +196,8 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
       runtime: contentHash({
         kind: experiment.runtime.kind,
         ...(files ? { workspaceFiles: workspaceFilesIdentity(files) } : {}),
-        capacity: experiment.runtime.capacity ?? null,
+        // A capacity resolver is a capability function: per-eval, never identity.
+        capacity: typeof experiment.runtime.capacity === "function" ? null : (experiment.runtime.capacity ?? null),
         observationTargets: experiment.runtime.observationTargets ?? null,
         treatmentPolicyFields: [...(experiment.runtime.treatmentPolicyFields ?? [])].sort(),
         image: experiment.runtime.image ?? null,
