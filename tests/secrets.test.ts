@@ -4,6 +4,8 @@ import {
   collectProviderKeys,
   endpointHosts,
   endpointUrl,
+  expandSecretEnv,
+  headerBundleSecrets,
   hostSecretEnv,
   InvalidProviderKeyError,
   isSecretEnvName,
@@ -201,6 +203,39 @@ describe("endpoint overrides", () => {
       ANTHROPIC_BASE_URL: "https://g.example",
       PATH: "/bin",
     });
-    expect(Object.keys(env)).toEqual(["ANTHROPIC_CUSTOM_HEADERS"]);
+    expect(Object.keys(env)).toContain("ANTHROPIC_CUSTOM_HEADERS");
+    expect(Object.keys(env)).not.toContain("ANTHROPIC_BASE_URL");
+    expect(Object.keys(env)).not.toContain("PATH");
+  });
+});
+
+describe("header bundle credentials", () => {
+  const BUNDLE = 'cf-aig-authorization: Bearer cf-gateway-token-123\ncf-aig-metadata: {"app":"evals"}';
+
+  test("headerBundleSecrets targets credential headers and their bare bearer tokens, not metadata", () => {
+    expect(headerBundleSecrets("ANTHROPIC_CUSTOM_HEADERS", BUNDLE)).toEqual({
+      "ANTHROPIC_CUSTOM_HEADERS[cf-aig-authorization]": "Bearer cf-gateway-token-123",
+      "ANTHROPIC_CUSTOM_HEADERS[cf-aig-authorization]:credential": "cf-gateway-token-123",
+    });
+    expect(headerBundleSecrets("H", "x-api-key: sk-plain-key-value")).toEqual({ "H[x-api-key]": "sk-plain-key-value" });
+  });
+
+  test("a transcript that prints only the gateway token is still scrubbed", () => {
+    const secretEnv = expandSecretEnv({ ANTHROPIC_API_KEY: "sk-ant-provider-key-9", ANTHROPIC_CUSTOM_HEADERS: BUNDLE });
+    const text = "curl -H 'Authorization: Bearer cf-gateway-token-123' and later just cf-gateway-token-123";
+    const redacted = redactSecrets(text, secretEnv);
+    expect(redacted).not.toContain("cf-gateway-token-123");
+    expect(redacted).toContain("[REDACTED:ANTHROPIC_CUSTOM_HEADERS[cf-aig-authorization]");
+    // The whole bundle still redacts as one when echoed verbatim.
+    expect(redactSecrets(`env: ${BUNDLE}`, secretEnv)).toBe("env: [REDACTED:ANTHROPIC_CUSTOM_HEADERS]");
+  });
+
+  test("hostSecretEnv expands bundles it finds on the host", () => {
+    const env = hostSecretEnv({ ANTHROPIC_CUSTOM_HEADERS: BUNDLE, ANTHROPIC_BASE_URL: "https://g.example", PATH: "/bin" });
+    expect(Object.keys(env).sort()).toEqual([
+      "ANTHROPIC_CUSTOM_HEADERS",
+      "ANTHROPIC_CUSTOM_HEADERS[cf-aig-authorization]",
+      "ANTHROPIC_CUSTOM_HEADERS[cf-aig-authorization]:credential",
+    ]);
   });
 });

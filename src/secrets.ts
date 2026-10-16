@@ -209,6 +209,36 @@ export function isSecretEnvName(name: string): boolean {
   return /key|token|password|secret|credential|header/i.test(name);
 }
 
+/** Header names whose values are credentials (`cf-aig-authorization`, `x-api-key`, …). */
+const SECRET_HEADER = /auth|key|token|secret|credential|password/i;
+
+/**
+ * The redaction targets inside one header bundle (an env var holding `Name:
+ * Value` lines): each credential header's full value, plus the bare
+ * credential behind a `Bearer`/`Basic`/`Token` scheme — a transcript that
+ * prints only the token, not the whole bundle, must still be scrubbed. Keys
+ * name the bundle and header so the redaction marker says what was removed.
+ */
+export function headerBundleSecrets(bundleName: string, bundle: string): Record<string, string> {
+  const derived: Record<string, string> = {};
+  for (const [header, value] of Object.entries(parseHeaderLines(bundle))) {
+    if (!SECRET_HEADER.test(header)) continue;
+    derived[`${bundleName}[${header}]`] = value;
+    const scheme = /^(?:Bearer|Basic|Token)\s+(\S+)$/i.exec(value);
+    if (scheme?.[1] !== undefined) derived[`${bundleName}[${header}]:credential`] = scheme[1];
+  }
+  return derived;
+}
+
+/** A secret env map plus the credentials carried inside any header bundle it holds. */
+export function expandSecretEnv(env: Record<string, string>): Record<string, string> {
+  const expanded = { ...env };
+  for (const [name, value] of Object.entries(env)) {
+    if (/header/i.test(name)) Object.assign(expanded, headerBundleSecrets(name, value));
+  }
+  return expanded;
+}
+
 /** Values shorter than this are never redacted (they would shred ordinary text). */
 const MIN_REDACTABLE_LENGTH = 6;
 
@@ -226,7 +256,9 @@ export function redactSecrets(text: string, env: Record<string, string>): string
   return redacted;
 }
 
-/** Provider/judge secret env only; ordinary PATH and workspace values are evidence. */
+/** Provider/judge secret env only (header-bundle credentials included); ordinary PATH and workspace values are evidence. */
 export function hostSecretEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
-  return Object.fromEntries(Object.entries(env).filter(([name, value]) => isSecretEnvName(name) && typeof value === "string")) as Record<string, string>;
+  return expandSecretEnv(
+    Object.fromEntries(Object.entries(env).filter(([name, value]) => isSecretEnvName(name) && typeof value === "string")) as Record<string, string>,
+  );
 }

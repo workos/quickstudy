@@ -25,6 +25,7 @@ import {
   inspectAttemptLabel,
   inspectMounts,
   listAttemptContainers,
+  splitAttemptEnv,
   startMcpSidecar,
 } from "../src/isolation/docker.ts";
 import { MCP_PROXY_IMAGE } from "../src/isolation/images.ts";
@@ -623,6 +624,46 @@ describeMcpSidecar("mcp auth-proxy sidecar", () => {
         await sidecar.teardown();
       }
       expect(await sidecar.isRunning()).toBeFalse();
+    },
+    LIFECYCLE_TIMEOUT,
+  );
+});
+
+describe("attempt env channels (no daemon required)", () => {
+  test("single-line values become env-file lines; multi-line values ride the CLI environment by name", () => {
+    const { envFileLines, inherited } = splitAttemptEnv({
+      PROVIDER_KEY: "sk-plain",
+      BUNDLE: "cf-aig-authorization: Bearer tok\ncf-aig-metadata: {\"app\":\"x\"}",
+    });
+    expect(envFileLines).toEqual(["PROVIDER_KEY=sk-plain"]);
+    expect(inherited).toEqual({ BUNDLE: "cf-aig-authorization: Bearer tok\ncf-aig-metadata: {\"app\":\"x\"}" });
+  });
+
+  test("an invalid variable name is refused before anything is written", () => {
+    expect(() => splitAttemptEnv({ "BAD-NAME": "x" })).toThrow(/invalid environment variable name/);
+  });
+});
+
+describeDocker("multi-line env delivery", () => {
+  test(
+    "a newline-separated header bundle reaches the container intact",
+    async () => {
+      const fixtureDir = makeFixture();
+      const resultsDir = mkdtempSync(join(tmpdir(), "quickstudy-results-"));
+      const bundle = 'cf-aig-authorization: Bearer multi-line-token\ncf-aig-metadata: {"app":"test"}';
+      const container = await createAttemptContainer({
+        image: TEST_IMAGE,
+        env: { QS_PLAIN: "plain-value", QS_BUNDLE: bundle },
+        resultsDir,
+        attemptId: `test-${Date.now()}-multiline-env`,
+        fixtureDir,
+      });
+      try {
+        expect((await container.execInWorkspace(["printenv", "QS_BUNDLE"])).stdout).toBe(`${bundle}\n`);
+        expect((await container.execInWorkspace(["printenv", "QS_PLAIN"])).stdout).toBe("plain-value\n");
+      } finally {
+        await container.teardown();
+      }
     },
     LIFECYCLE_TIMEOUT,
   );

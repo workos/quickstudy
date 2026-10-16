@@ -27,6 +27,13 @@ export interface PairEnvironment {
   /** Runtime text prepended to the eval prompt for this pair (null = prompt verbatim). */
   promptPreamble: string | null;
   budgets: LifecycleBudgets;
+  /**
+   * The agent's endpoint overrides in force (non-secret base URLs, e.g.
+   * OPENAI_BASE_URL → an LLM gateway route), recorded in full so a changed
+   * route changes identity and a resume cannot mix routes. Absent when the
+   * agent runs vendor-direct — such pairs hash exactly as before.
+   */
+  endpoints?: Record<string, string>;
 }
 
 /** The prompt an agent receives: the runtime's preamble (if any), a blank line, the eval's verbatim body. */
@@ -43,6 +50,8 @@ export function resolvePairEnvironments(options: {
   images?: Record<string, RuntimeImageIdentity>;
   egressProxy?: boolean;
   adapterHosts?: Record<string, readonly string[]>;
+  /** Per experiment: the agent's non-secret endpoint overrides (see PairEnvironment.endpoints). */
+  adapterEndpoints?: Record<string, Record<string, string>>;
   budgets?: Partial<LifecycleBudgets>;
   mcpHashes?: Record<string, string>;
   imageTags?: Record<string, string>;
@@ -77,6 +86,10 @@ export function resolvePairEnvironments(options: {
           return text === "" ? null : text;
         })(),
         budgets: { ...budgets },
+        ...(() => {
+          const endpoints = options.adapterEndpoints?.[experiment.id];
+          return endpoints !== undefined && Object.keys(endpoints).length > 0 ? { endpoints: { ...endpoints } } : {};
+        })(),
       };
     }
   return pairs;

@@ -70,7 +70,7 @@ import { attemptIdentityHash, buildRunManifest, type RunManifest, type RuntimeIm
 import { isMovingModelAlias } from "../model-identity.ts";
 import type { AttemptPlan } from "../plan.ts";
 import type { ProvisionedEnvironment, RuntimeProvisionContext } from "../runtime/types.ts";
-import { collectOptionalHostEnv, collectProviderKeys, endpointHosts, hostSecretEnv, isSecretEnvName, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
+import { collectOptionalHostEnv, collectProviderKeys, endpointHosts, headerBundleSecrets, hostSecretEnv, isSecretEnvName, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
 import { ArtifactsStore } from "../store/artifacts.ts";
 import { activeAttempts, type ErrorKind, type NewAttempt, type ResultsStore, type RunConfig } from "../store/db.ts";
 import { acquireRunLock } from "./run-lock.ts";
@@ -458,9 +458,22 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       const scorer = await importEvalScorer(loaded.scorerPath);
       if (scorer.identity) scorerIdentities[loaded.metadata.id] = scorer.identity;
     }
+    // Each agent's endpoint overrides set on the host: the non-secret base
+    // URLs join the pair environment (identity), their hosts join the egress
+    // allowlist — but only under the proxy, where the allowlist is live and an
+    // IP-literal gateway is refused loudly by design; without it the list is
+    // inert and an IP-literal override must not stop the run.
+    const overridesByExperiment = new Map([...containerAgents].map(([id, adapter]) => [id, collectOptionalHostEnv([adapter])] as const));
+    const adapterEndpoints = Object.fromEntries([...overridesByExperiment].flatMap(([id, overrides]) => {
+      const endpoints = Object.fromEntries(Object.entries(overrides).filter(([name]) => !isSecretEnvName(name)));
+      return Object.keys(endpoints).length > 0 ? [[id, endpoints] as const] : [];
+    }));
     const pairs = resolvePairEnvironments({ ...options, images, imageTags: imageTagsByPair,
-      // Vendor defaults plus the host of any endpoint override (an LLM gateway) set on the host.
-      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, [...(adapter.egressHosts ?? []), ...endpointHosts(collectOptionalHostEnv([adapter]))]])),
+      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, [
+        ...(adapter.egressHosts ?? []),
+        ...(options.egressProxy ? endpointHosts(overridesByExperiment.get(id) ?? {}) : []),
+      ]])),
+      adapterEndpoints,
       budgets: { ...options.budgets, agentMs: options.attemptTimeoutMs ?? options.budgets?.agentMs ?? attemptTimeoutMs },
       mcpHashes: Object.fromEntries([...declaredByExperiment].map(([id, servers]) => [id, hashString(canonicalJson(servers))])),
     });
@@ -819,9 +832,14 @@ async function runContainerAttemptV3(
         Object.assign(secretEnv, providerKeys);
         // The overrides ride the same channel; only the secret-named ones
         // feed redaction — a base URL in a transcript is diagnostic, a
-        // bearer header is not.
+        // bearer header is not. A header bundle's credentials are targets of
+        // their own: a transcript that prints just the token is still scrubbed.
         Object.assign(env, overrides);
-        for (const [name, value] of Object.entries(overrides)) if (isSecretEnvName(name)) secretEnv[name] = value;
+        for (const [name, value] of Object.entries(overrides)) {
+          if (!isSecretEnvName(name)) continue;
+          secretEnv[name] = value;
+          Object.assign(secretEnv, headerBundleSecrets(name, value));
+        }
       }
       if (egress) {
         const proxyEnv = egress.sidecar.proxyEnv();
