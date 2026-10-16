@@ -823,7 +823,6 @@ async function runContainerAttemptV3(
       // Endpoint overrides set on the host for this agent (gateway base URLs
       // and the headers they need) — see ContainerAgentAdapter.optionalHostEnv.
       const overrides = agentAdapter !== undefined ? collectOptionalHostEnv([agentAdapter]) : {};
-      const publicOverrides = Object.fromEntries(Object.entries(overrides).filter(([name]) => !isSecretEnvName(name)));
       if (agentAdapter !== undefined) {
         // The agent's provider keys, validated at run preflight — injected
         // at create via the 0600 env-file channel, never argv.
@@ -902,9 +901,10 @@ async function runContainerAttemptV3(
             trialIndex: entry.trialIndex,
             ...(rewrittenServers !== undefined ? { mcpServers: rewrittenServers } : {}),
             webPolicy: environment?.webPolicy ?? "native-web-blocked",
-            // Never the keys or header bundles: adapters whose CLI wants a
-            // config-file entry (codex's model provider) render from here.
-            ...(Object.keys(publicOverrides).length > 0 ? { overrides: publicOverrides } : {}),
+            // The adapter's own overrides (never the provider keys): a CLI
+            // that wants a config-file entry (codex's model provider and its
+            // http_headers) renders them from here, inside the container.
+            ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
           await inStage("environment", async () => {

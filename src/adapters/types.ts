@@ -133,10 +133,12 @@ export interface ContainerAttemptContext {
   /** The runtime's native web-tool policy (default: blocked). */
   webPolicy: WebPolicy;
   /**
-   * The adapter's endpoint overrides that are set on the host (its
-   * `optionalHostEnv` minus secret-named entries — never provider keys or
-   * header bundles), for a CLI that takes a config-file entry rather than an
-   * env var. Absent when none are set.
+   * The adapter's own endpoint overrides that are set on the host (every
+   * `optionalHostEnv` value, header bundles included — never the provider
+   * keys), for a CLI that takes a config-file entry rather than an env var.
+   * Anything rendered from these is written inside the attempt container
+   * only, the same boundary the env already crosses. Absent when none are
+   * set.
    */
   overrides?: Readonly<Record<string, string>>;
 }
