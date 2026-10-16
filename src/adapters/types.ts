@@ -132,6 +132,13 @@ export interface ContainerAttemptContext {
   mcpServers?: Readonly<Record<string, McpServerConfig>>;
   /** The runtime's native web-tool policy (default: blocked). */
   webPolicy: WebPolicy;
+  /**
+   * The adapter's endpoint overrides that are set on the host (its
+   * `optionalHostEnv` minus secret-named entries — never provider keys or
+   * header bundles), for a CLI that takes a config-file entry rather than an
+   * env var. Absent when none are set.
+   */
+  overrides?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -153,10 +160,11 @@ export interface ContainerAgentAdapter {
   /** Command used during preflight to record the executable's exact version. */
   versionCommand?: readonly string[];
   /**
-   * Cheap authenticated request composed from the collected provider keys,
-   * probed at run preflight so a present-but-rejected key aborts BEFORE any
-   * container spend. A 401/403 response stops the run; network failures only
-   * warn — an unreachable probe must not gate a run the agent might complete.
+   * Cheap authenticated request composed from the collected provider keys
+   * (plus any `optionalHostEnv` overrides that are set), probed at run
+   * preflight so a present-but-rejected key aborts BEFORE any container
+   * spend. A 401/403 response stops the run; network failures only warn — an
+   * unreachable probe must not gate a run the agent might complete.
    */
   keyProbe?(env: Record<string, string>): { url: string; headers: Record<string, string> };
   /**
@@ -164,6 +172,15 @@ export interface ContainerAgentAdapter {
    * (shared provider keys — see src/secrets.ts).
    */
   requiredHostEnv: readonly string[];
+  /**
+   * Host env vars forwarded into the container when set, never required:
+   * endpoint overrides such as a vendor base URL that routes the CLI through
+   * an LLM gateway or proxy, and the custom headers that gateway needs. A
+   * value that is an absolute URL also adds its host to the egress allowlist
+   * and retargets the key probe; secret-named values (headers carrying a
+   * bearer token) are redacted from artifacts like provider keys.
+   */
+  optionalHostEnv?: readonly string[];
   /**
    * Hosts this agent's CLI must reach (its LLM/vendor endpoints) — the
    * harness-default layer of the egress allowlist when the run uses the

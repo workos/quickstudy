@@ -59,15 +59,20 @@ export interface ExecResult {
   timedOut: boolean;
 }
 
-/** Run `docker <args>`, capturing output. Never throws for non-zero exits. */
+/**
+ * Run `docker <args>`, capturing output. Never throws for non-zero exits.
+ * `env` is added to the docker CLI's own environment — the channel for
+ * values named on argv by `-e KEY` alone.
+ */
 async function runDocker(
   args: string[],
-  opts: { timeoutMs?: number; stdin?: string } = {},
+  opts: { timeoutMs?: number; stdin?: string; env?: Record<string, string> } = {},
 ): Promise<ExecResult> {
   const proc = Bun.spawn(["docker", ...args], {
     stdin: opts.stdin === undefined ? "ignore" : Buffer.from(opts.stdin),
     stdout: "pipe",
     stderr: "pipe",
+    ...(opts.env !== undefined ? { env: { ...process.env, ...opts.env } } : {}),
   });
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -87,7 +92,10 @@ async function runDocker(
 }
 
 /** Run `docker <args>` and throw a DockerError on non-zero exit. */
-async function mustDocker(args: string[], opts: { timeoutMs?: number; stdin?: string } = {}): Promise<ExecResult> {
+async function mustDocker(
+  args: string[],
+  opts: { timeoutMs?: number; stdin?: string; env?: Record<string, string> } = {},
+): Promise<ExecResult> {
   const result = await runDocker(args, opts);
   if (result.exitCode !== 0) throw new DockerError(args, result.exitCode, result.stderr);
   return result;
@@ -198,36 +206,55 @@ export interface AttemptContainer {
  * fixture into /workspace. On any failure the partial container is removed
  * before the error propagates — a failed create never leaks a container.
  */
+/**
+ * Route an attempt's env between its two argv-free channels. Single-line
+ * values become env-file lines; a value that itself contains newlines (a
+ * `Name: Value` header bundle) cannot be expressed in a line-based env-file,
+ * so it rides the docker CLI's own environment instead, named on argv by
+ * `-e KEY` alone — the CLI forwards the value intact and argv never shows it.
+ */
+export function splitAttemptEnv(env: Record<string, string>): { envFileLines: string[]; inherited: Record<string, string> } {
+  const envFileLines: string[] = [];
+  const inherited: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`invalid environment variable name "${key}"`);
+    if (value.includes("\n")) inherited[key] = value;
+    else envFileLines.push(`${key}=${value}`);
+  }
+  return { envFileLines, inherited };
+}
+
 export async function createAttemptContainer(opts: CreateAttemptContainerOptions): Promise<AttemptContainer> {
   // Secrets travel via a transient env-file, not argv (argv is visible in
-  // host process listings while `docker run` executes).
+  // host process listings while `docker run` executes); multi-line values
+  // take the CLI-environment channel (see splitAttemptEnv).
   const envDir = await mkdtemp(join(tmpdir(), "quickstudy-env-"));
   const envFile = join(envDir, "attempt.env");
-  const lines = Object.entries(opts.env).map(([key, value]) => {
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`invalid environment variable name "${key}"`);
-    if (value.includes("\n")) throw new Error(`environment variable "${key}" contains a newline`);
-    return `${key}=${value}`;
-  });
-  await writeFile(envFile, lines.join("\n") + (lines.length > 0 ? "\n" : ""), { mode: 0o600 });
+  const { envFileLines, inherited } = splitAttemptEnv(opts.env);
+  await writeFile(envFile, envFileLines.join("\n") + (envFileLines.length > 0 ? "\n" : ""), { mode: 0o600 });
 
   let id: string;
   try {
-    const created = await mustDocker([
-      "run",
-      "-d",
-      "--label",
-      `${ATTEMPT_LABEL}=${opts.attemptId}`,
-      "--env-file",
-      envFile,
-      "-v",
-      `${resolve(opts.resultsDir)}:${CONTAINER_RESULTS}`,
-      "-w",
-      CONTAINER_WORKSPACE,
-      ...(opts.network !== undefined ? ["--network", opts.network] : []),
-      opts.image,
-      "sleep",
-      "infinity",
-    ]);
+    const created = await mustDocker(
+      [
+        "run",
+        "-d",
+        "--label",
+        `${ATTEMPT_LABEL}=${opts.attemptId}`,
+        "--env-file",
+        envFile,
+        ...Object.keys(inherited).flatMap((key) => ["-e", key]),
+        "-v",
+        `${resolve(opts.resultsDir)}:${CONTAINER_RESULTS}`,
+        "-w",
+        CONTAINER_WORKSPACE,
+        ...(opts.network !== undefined ? ["--network", opts.network] : []),
+        opts.image,
+        "sleep",
+        "infinity",
+      ],
+      { env: inherited },
+    );
     id = created.stdout.trim();
   } catch (err) {
     // `docker run` can fail AFTER creating the container (start failure) —

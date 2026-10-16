@@ -118,6 +118,32 @@ experiment module — changing them changes the experiment's identity, by
 design. See the benchmark repository's `examples/weekly-sweep.yml` for what
 a full scheduled sweep costs and looks like in CI.
 
+### Routing through an LLM gateway
+
+The vendor CLIs and the diagnosis analyst all honor endpoint overrides, so a
+gateway or proxy (Cloudflare AI Gateway, LiteLLM, a corporate egress) is an
+env change, not a code change. Each adapter declares its overrides
+(`optionalHostEnv`); the harness forwards them into attempt containers only
+when set, adds a base URL's host to the egress allowlist, and points the
+preflight key probe at it:
+
+| Agent  | Overrides                                        | How the CLI gets them                                                                  |
+| ------ | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| claude | `ANTHROPIC_BASE_URL`, `ANTHROPIC_CUSTOM_HEADERS` | env, read natively by Claude Code (and by the `diagnose` analyst)                      |
+| codex  | `OPENAI_BASE_URL`                                | rendered into `config.toml` as a custom model provider (codex ignores the env var)     |
+
+`ANTHROPIC_CUSTOM_HEADERS` is `Name: Value` lines and is redacted from
+artifacts like a key. With Cloudflare AI Gateway holding the provider keys,
+the gateway token *is* the API key:
+
+```bash
+export ANTHROPIC_BASE_URL=https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/anthropic
+export ANTHROPIC_API_KEY=<gateway token>
+export ANTHROPIC_CUSTOM_HEADERS="cf-aig-authorization: Bearer <gateway token>"
+export OPENAI_BASE_URL=https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/openai
+export OPENAI_API_KEY=<gateway token>
+```
+
 ## How it works
 
 Every attempt is one point in a 2-D plan:
@@ -181,7 +207,9 @@ failing pair's harness-selected evidence (per-check tallies, transcript
 excerpts, egress denials) to a structured LLM call and writes `diagnosis.json`
 beside `report.json` — findings are evidence-linked hypotheses, never
 verdicts, keeping the report itself attribution-free. Requires
-`ANTHROPIC_API_KEY`; the UI renders the result as a Diagnosis view.
+`ANTHROPIC_API_KEY` (and follows the claude adapter's gateway overrides, see
+[Routing through an LLM gateway](#routing-through-an-llm-gateway)); the UI
+renders the result as a Diagnosis view.
 
 ## Writing evals
 

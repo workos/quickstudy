@@ -59,6 +59,12 @@ export const INVENTORY: InventoryEntry[] = [
   },
   {
     doc: "README.md",
+    match: "export ANTHROPIC_BASE_URL=https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/anthropic",
+    classification: "placeholder",
+    note: "LLM gateway routing: env exports with <account>/<gateway>/<gateway token> placeholders",
+  },
+  {
+    doc: "README.md",
     match: "quickstudy validate",
     classification: "needs-keys",
     note: "full repository cross-product: paid agent calls; final UI command is a long-running server",
