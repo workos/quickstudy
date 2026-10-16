@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/workos/quickstudy/compare/v0.8.1...v0.9.0) (2026-10-16)
+
+
+### Features
+
+* **adapters:** endpoint overrides for routing through an LLM gateway ([#34](https://github.com/workos/quickstudy/issues/34)) ([3e16298](https://github.com/workos/quickstudy/commit/3e162983f930b0d10b66002df5fd043021d0083d))
+
 ## [0.8.1](https://github.com/workos/quickstudy/compare/v0.8.0...v0.8.1) (2026-10-15)
 
 
