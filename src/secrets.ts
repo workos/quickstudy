@@ -48,6 +48,12 @@ export interface ProviderKeyRequirement {
   name: string;
   /** Host env var names the adapter requires. */
   requiredHostEnv: readonly string[];
+  /**
+   * Host env var names forwarded when set and never required: endpoint
+   * overrides (a vendor base URL that routes the CLI through an LLM gateway
+   * or proxy) and the custom headers such a gateway needs.
+   */
+  optionalHostEnv?: readonly string[];
 }
 
 /** One preflight probe: a cheap authenticated GET a provider will 401 on a bad key. */
@@ -128,6 +134,81 @@ export function collectProviderKeys(
   return keys;
 }
 
+/**
+ * Read every OPTIONAL host env var the adapters declare (see
+ * `ProviderKeyRequirement.optionalHostEnv`). Absent or empty variables are
+ * simply not forwarded — an empty `ANTHROPIC_BASE_URL=` from a CI template
+ * must not reach a CLI that would treat "" as a base URL.
+ */
+export function collectOptionalHostEnv(
+  requirements: readonly ProviderKeyRequirement[],
+  hostEnv: Record<string, string | undefined> = process.env,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const requirement of requirements) {
+    for (const envVar of requirement.optionalHostEnv ?? []) {
+      const value = hostEnv[envVar];
+      if (value !== undefined && value !== "") env[envVar] = value;
+    }
+  }
+  return env;
+}
+
+/**
+ * Hostnames of every forwarded value that is an absolute http(s) URL — the
+ * endpoints an override points at, which the egress allowlist must admit
+ * alongside the adapter's vendor defaults. Non-URL values (header lines)
+ * contribute nothing.
+ */
+export function endpointHosts(env: Record<string, string>): string[] {
+  const hosts: string[] = [];
+  for (const value of Object.values(env)) {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      continue;
+    }
+    if ((url.protocol === "https:" || url.protocol === "http:") && url.hostname !== "") hosts.push(url.hostname);
+  }
+  return hosts;
+}
+
+/**
+ * `<base>/<path>` for a probe: the override when set (trailing slashes
+ * tolerated — gateways document both forms), else the vendor's own base.
+ */
+export function endpointUrl(override: string | undefined, vendorBase: string, path: string): string {
+  const base = override !== undefined && override !== "" ? override : vendorBase;
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+/**
+ * Parse `Name: Value` header lines (newline-separated — the format Claude
+ * Code reads from ANTHROPIC_CUSTOM_HEADERS). Blank lines and lines without a
+ * colon are skipped; the first colon splits name from value.
+ */
+export function parseHeaderLines(text: string | undefined): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of (text ?? "").split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const name = line.slice(0, colon).trim();
+    const value = line.slice(colon + 1).trim();
+    if (name !== "") headers[name] = value;
+  }
+  return headers;
+}
+
+/**
+ * Does an env var NAME look secret-bearing? Keys, tokens, passwords,
+ * credentials — and header bundles, which carry a gateway's bearer token.
+ * Endpoint URLs deliberately do not match: they are diagnostic, not secret.
+ */
+export function isSecretEnvName(name: string): boolean {
+  return /key|token|password|secret|credential|header/i.test(name);
+}
+
 /** Values shorter than this are never redacted (they would shred ordinary text). */
 const MIN_REDACTABLE_LENGTH = 6;
 
@@ -147,5 +228,5 @@ export function redactSecrets(text: string, env: Record<string, string>): string
 
 /** Provider/judge secret env only; ordinary PATH and workspace values are evidence. */
 export function hostSecretEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
-  return Object.fromEntries(Object.entries(env).filter(([name, value]) => /key|token|password|secret|credential/i.test(name) && typeof value === "string")) as Record<string, string>;
+  return Object.fromEntries(Object.entries(env).filter(([name, value]) => isSecretEnvName(name) && typeof value === "string")) as Record<string, string>;
 }

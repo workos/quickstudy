@@ -14,6 +14,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
+import { parseHeaderLines } from "./secrets.ts";
 
 /** One structured-output request. `schema` is a JSON Schema object. */
 export interface StructuredRequest {
@@ -47,16 +48,23 @@ export class ModelOutputError extends Error {
 const API_MAX_RETRIES = 3;
 
 /**
- * Anthropic-backed client. Reuses ANTHROPIC_API_KEY from the environment;
- * transport-level retries are the SDK's (429/5xx/connection errors).
+ * Anthropic-backed client. Reuses ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL
+ * from the environment (the SDK reads both), plus ANTHROPIC_CUSTOM_HEADERS
+ * (`Name: Value` lines — Claude Code's convention) as default headers, so the
+ * analyst takes the same route as the agent CLI when both are pointed at an
+ * LLM gateway. Transport-level retries are the SDK's (429/5xx/connection
+ * errors).
  */
 export class AnthropicModelClient implements StructuredModelClient {
   private readonly client: Anthropic;
   private lastResolvedModel: string | null = null;
 
-  constructor(options: { apiKey?: string } = {}) {
+  constructor(options: { apiKey?: string; baseURL?: string; defaultHeaders?: Record<string, string> } = {}) {
+    const defaultHeaders = options.defaultHeaders ?? parseHeaderLines(process.env["ANTHROPIC_CUSTOM_HEADERS"]);
     this.client = new Anthropic({
       ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
+      ...(options.baseURL !== undefined ? { baseURL: options.baseURL } : {}),
+      ...(Object.keys(defaultHeaders).length > 0 ? { defaultHeaders } : {}),
       maxRetries: API_MAX_RETRIES,
     });
   }

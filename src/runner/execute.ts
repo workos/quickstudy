@@ -70,7 +70,7 @@ import { attemptIdentityHash, buildRunManifest, type RunManifest, type RuntimeIm
 import { isMovingModelAlias } from "../model-identity.ts";
 import type { AttemptPlan } from "../plan.ts";
 import type { ProvisionedEnvironment, RuntimeProvisionContext } from "../runtime/types.ts";
-import { collectProviderKeys, hostSecretEnv, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
+import { collectOptionalHostEnv, collectProviderKeys, endpointHosts, hostSecretEnv, isSecretEnvName, redactSecrets, validateProviderKeys, type ProviderKeyProbe } from "../secrets.ts";
 import { ArtifactsStore } from "../store/artifacts.ts";
 import { activeAttempts, type ErrorKind, type NewAttempt, type ResultsStore, type RunConfig } from "../store/db.ts";
 import { acquireRunLock } from "./run-lock.ts";
@@ -402,7 +402,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
     probesByAdapter.set(adapter.name, {
       name: adapter.name,
       envVars: adapter.requiredHostEnv,
-      ...adapter.keyProbe(collectProviderKeys([adapter])),
+      ...adapter.keyProbe({ ...collectProviderKeys([adapter]), ...collectOptionalHostEnv([adapter]) }),
     });
   }
   await validateProviderKeys([...probesByAdapter.values()], { log });
@@ -459,7 +459,8 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       if (scorer.identity) scorerIdentities[loaded.metadata.id] = scorer.identity;
     }
     const pairs = resolvePairEnvironments({ ...options, images, imageTags: imageTagsByPair,
-      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, adapter.egressHosts ?? []])),
+      // Vendor defaults plus the host of any endpoint override (an LLM gateway) set on the host.
+      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, [...(adapter.egressHosts ?? []), ...endpointHosts(collectOptionalHostEnv([adapter]))]])),
       budgets: { ...options.budgets, agentMs: options.attemptTimeoutMs ?? options.budgets?.agentMs ?? attemptTimeoutMs },
       mcpHashes: Object.fromEntries([...declaredByExperiment].map(([id, servers]) => [id, hashString(canonicalJson(servers))])),
     });
@@ -806,12 +807,21 @@ async function runContainerAttemptV3(
         // every auth block and pointed authed servers at the proxy sidecar.
         env["QUICKSTUDY_MCP_SERVERS"] = JSON.stringify(rewrittenServers);
       }
+      // Endpoint overrides set on the host for this agent (gateway base URLs
+      // and the headers they need) — see ContainerAgentAdapter.optionalHostEnv.
+      const overrides = agentAdapter !== undefined ? collectOptionalHostEnv([agentAdapter]) : {};
+      const publicOverrides = Object.fromEntries(Object.entries(overrides).filter(([name]) => !isSecretEnvName(name)));
       if (agentAdapter !== undefined) {
         // The agent's provider keys, validated at run preflight — injected
         // at create via the 0600 env-file channel, never argv.
         const providerKeys = collectProviderKeys([agentAdapter]);
         Object.assign(env, providerKeys);
         Object.assign(secretEnv, providerKeys);
+        // The overrides ride the same channel; only the secret-named ones
+        // feed redaction — a base URL in a transcript is diagnostic, a
+        // bearer header is not.
+        Object.assign(env, overrides);
+        for (const [name, value] of Object.entries(overrides)) if (isSecretEnvName(name)) secretEnv[name] = value;
       }
       if (egress) {
         const proxyEnv = egress.sidecar.proxyEnv();
@@ -874,6 +884,9 @@ async function runContainerAttemptV3(
             trialIndex: entry.trialIndex,
             ...(rewrittenServers !== undefined ? { mcpServers: rewrittenServers } : {}),
             webPolicy: environment?.webPolicy ?? "native-web-blocked",
+            // Never the keys or header bundles: adapters whose CLI wants a
+            // config-file entry (codex's model provider) render from here.
+            ...(Object.keys(publicOverrides).length > 0 ? { overrides: publicOverrides } : {}),
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
           await inStage("environment", async () => {

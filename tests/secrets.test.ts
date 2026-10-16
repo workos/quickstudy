@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import {
+  collectOptionalHostEnv,
   collectProviderKeys,
+  endpointHosts,
+  endpointUrl,
+  hostSecretEnv,
   InvalidProviderKeyError,
+  isSecretEnvName,
   MissingProviderKeyError,
+  parseHeaderLines,
   redactSecrets,
   validateProviderKeys,
   type ProviderKeyProbe,
@@ -141,4 +147,60 @@ describe("validateProviderKeys", () => {
 
 afterEach(() => {
   delete process.env["QS_TEST_NEVER_SET_KEY"];
+});
+
+describe("endpoint overrides", () => {
+  const CLAUDE = {
+    name: "claude",
+    requiredHostEnv: ["ANTHROPIC_API_KEY"],
+    optionalHostEnv: ["ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS"],
+  } as const;
+
+  test("collectOptionalHostEnv forwards set overrides and drops absent or empty ones", () => {
+    expect(collectOptionalHostEnv([CLAUDE], {})).toEqual({});
+    expect(collectOptionalHostEnv([CLAUDE], { ANTHROPIC_BASE_URL: "", ANTHROPIC_CUSTOM_HEADERS: "a: b" })).toEqual({
+      ANTHROPIC_CUSTOM_HEADERS: "a: b",
+    });
+    // An adapter that declares no overrides forwards nothing, whatever the host has.
+    expect(collectOptionalHostEnv([{ name: "x", requiredHostEnv: [] }], { ANTHROPIC_BASE_URL: "https://g.example" })).toEqual({});
+  });
+
+  test("endpointHosts takes the host of every absolute http(s) URL and ignores everything else", () => {
+    expect(
+      endpointHosts({
+        ANTHROPIC_BASE_URL: "https://gateway.ai.cloudflare.com/v1/acct/gw/anthropic",
+        ANTHROPIC_CUSTOM_HEADERS: "cf-aig-authorization: Bearer tok",
+        OPENAI_BASE_URL: "http://localhost:8080/openai",
+        JUNK: "not a url",
+      }),
+    ).toEqual(["gateway.ai.cloudflare.com", "localhost"]);
+    expect(endpointHosts({ OTHER: "ftp://files.example/x" })).toEqual([]);
+  });
+
+  test("endpointUrl prefers a set override, tolerating trailing and leading slashes", () => {
+    expect(endpointUrl(undefined, "https://api.anthropic.com", "v1/models")).toBe("https://api.anthropic.com/v1/models");
+    expect(endpointUrl("", "https://api.anthropic.com", "v1/models")).toBe("https://api.anthropic.com/v1/models");
+    expect(endpointUrl("https://g.example/anthropic/", "https://api.anthropic.com", "/v1/models")).toBe(
+      "https://g.example/anthropic/v1/models",
+    );
+  });
+
+  test("parseHeaderLines reads Name: Value lines, splitting on the first colon", () => {
+    expect(parseHeaderLines(undefined)).toEqual({});
+    expect(parseHeaderLines('cf-aig-authorization: Bearer tok\r\n\nno-colon\n: empty-name\ncf-aig-metadata: {"a":1}')).toEqual({
+      "cf-aig-authorization": "Bearer tok",
+      "cf-aig-metadata": '{"a":1}',
+    });
+  });
+
+  test("header bundles count as secrets (they carry a bearer); base URLs do not", () => {
+    expect(isSecretEnvName("ANTHROPIC_CUSTOM_HEADERS")).toBeTrue();
+    expect(isSecretEnvName("ANTHROPIC_BASE_URL")).toBeFalse();
+    const env = hostSecretEnv({
+      ANTHROPIC_CUSTOM_HEADERS: "cf-aig-authorization: Bearer tok",
+      ANTHROPIC_BASE_URL: "https://g.example",
+      PATH: "/bin",
+    });
+    expect(Object.keys(env)).toEqual(["ANTHROPIC_CUSTOM_HEADERS"]);
+  });
 });

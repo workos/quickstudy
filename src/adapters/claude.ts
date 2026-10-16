@@ -14,6 +14,7 @@
  */
 
 import type { McpServerConfig } from "../isolation/mcp.ts";
+import { endpointUrl, parseHeaderLines } from "../secrets.ts";
 import { parseClaudeStream } from "./parse.ts";
 import type { AttemptMetrics, ContainerAgentAdapter, ContainerAttemptContext } from "./types.ts";
 
@@ -39,9 +40,20 @@ export class ClaudeCodeAdapter implements ContainerAgentAdapter {
   readonly versionCommand = ["claude", "--version"] as const;
   readonly requiredHostEnv = ["ANTHROPIC_API_KEY"] as const;
   /**
+   * Endpoint overrides, forwarded only when set. ANTHROPIC_BASE_URL routes
+   * the CLI (and the key probe) through an Anthropic-compatible gateway —
+   * e.g. Cloudflare AI Gateway's `/anthropic` endpoint, where the gateway
+   * token doubles as ANTHROPIC_API_KEY; ANTHROPIC_CUSTOM_HEADERS (`Name:
+   * Value` lines) carries whatever else that gateway wants, such as
+   * `cf-aig-authorization` or `cf-aig-metadata`. Claude Code reads both
+   * natively, so no flag changes.
+   */
+  readonly optionalHostEnv = ["ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS"] as const;
+  /**
    * Egress-proxy allowlist (harness-default layer). Claude Code documents
    * corporate-proxy support via HTTPS_PROXY/HTTP_PROXY; api.anthropic.com is
-   * the LLM endpoint, statsig/sentry are its telemetry (allowed so denial
+   * the default LLM endpoint (an ANTHROPIC_BASE_URL override adds its own
+   * host at run time), statsig/sentry are its telemetry (allowed so denial
    * logs stay signal, not noise). Verified live by the egress-proxy regression
    * check (`bun scripts/dev-attempt.ts --experiment <id> --egress-proxy`).
    */
@@ -66,8 +78,12 @@ export class ClaudeCodeAdapter implements ContainerAgentAdapter {
 
   keyProbe(env: Record<string, string>): { url: string; headers: Record<string, string> } {
     return {
-      url: "https://api.anthropic.com/v1/models",
-      headers: { "x-api-key": env["ANTHROPIC_API_KEY"] ?? "", "anthropic-version": "2023-06-01" },
+      url: endpointUrl(env["ANTHROPIC_BASE_URL"], "https://api.anthropic.com", "v1/models"),
+      headers: {
+        ...parseHeaderLines(env["ANTHROPIC_CUSTOM_HEADERS"]),
+        "x-api-key": env["ANTHROPIC_API_KEY"] ?? "",
+        "anthropic-version": "2023-06-01",
+      },
     };
   }
 
