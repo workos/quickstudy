@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.10.0](https://github.com/workos/quickstudy/compare/v0.9.0...v0.10.0) (2026-10-16)
+
+
+### Features
+
+* **codex:** OPENAI_CUSTOM_HEADERS via the custom provider's http_headers ([#36](https://github.com/workos/quickstudy/issues/36)) ([6596106](https://github.com/workos/quickstudy/commit/6596106ef48346d8bd306f582e5ed6b3065cc1dc))
+
+## [0.9.0](https://github.com/workos/quickstudy/compare/v0.8.1...v0.9.0) (2026-10-16)
+
+
+### Features
+
+* **adapters:** endpoint overrides for routing through an LLM gateway ([#34](https://github.com/workos/quickstudy/issues/34)) ([3e16298](https://github.com/workos/quickstudy/commit/3e162983f930b0d10b66002df5fd043021d0083d))
+
+## [0.8.1](https://github.com/workos/quickstudy/compare/v0.8.0...v0.8.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **probe:** signal the app's group through /proc, not a negative pid ([#32](https://github.com/workos/quickstudy/issues/32)) ([1820860](https://github.com/workos/quickstudy/commit/1820860b2b82c640ed84834c5e173c180d89ab4d))
+
+## [0.8.0](https://github.com/workos/quickstudy/compare/v0.7.0...v0.8.0) (2026-10-15)
+
+
+### Features
+
+* **evals:** smoke tier, per-framework suites, regression in the headline ([#29](https://github.com/workos/quickstudy/issues/29)) ([1905244](https://github.com/workos/quickstudy/commit/1905244be50643feb10227d73d13df14ab037e8d))
+* **report:** lead with cost-to-pass and time-to-pass; pass rate gates ([#31](https://github.com/workos/quickstudy/issues/31)) ([020fb90](https://github.com/workos/quickstudy/commit/020fb9099b551b07cadc2712b8ef57e5831dd1c9))
+
+## [0.7.0](https://github.com/workos/quickstudy/compare/v0.6.1...v0.7.0) (2026-10-15)
+
+
+### Features
+
+* **diagnose:** skip control pairs ([#27](https://github.com/workos/quickstudy/issues/27)) ([e475d8d](https://github.com/workos/quickstudy/commit/e475d8dad9ed26f702585ed4d33ca7bfecf220b1))
+
+## [0.6.1](https://github.com/workos/quickstudy/compare/v0.6.0...v0.6.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **proxy:** flush the tunnel before closing the peer ([#25](https://github.com/workos/quickstudy/issues/25)) ([c147619](https://github.com/workos/quickstudy/commit/c147619c6ffd5837ac35b0d98eae3574c58d26cd))
+
 ## [0.6.0](https://github.com/workos/quickstudy/compare/v0.5.0...v0.6.0) (2026-10-14)
 
 

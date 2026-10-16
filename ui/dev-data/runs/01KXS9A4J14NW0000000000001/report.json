@@ -1,5 +1,5 @@
 {
-  "schema_version": 11,
+  "schema_version": 13,
   "generated_at": "2026-07-20T02:00:00.000Z",
   "run": {
     "id": "01KXS9A4J14NW0000000000001",
@@ -209,7 +209,10 @@
         "mean_tokens_out": 1209,
         "token_attempts": 3,
         "cost_usd": 0.33,
-        "cost_attempts": 3
+        "cost_attempts": 3,
+        "cost_per_pass_usd": 0.11,
+        "agent_ms_per_pass": 82900,
+        "clears_gate": true
       }
     },
     {
@@ -247,7 +250,10 @@
         "mean_tokens_out": 1207,
         "token_attempts": 3,
         "cost_usd": 0.33,
-        "cost_attempts": 3
+        "cost_attempts": 3,
+        "cost_per_pass_usd": 0.11,
+        "agent_ms_per_pass": 82700,
+        "clears_gate": true
       }
     },
     {
@@ -285,7 +291,10 @@
         "mean_tokens_out": 1208,
         "token_attempts": 3,
         "cost_usd": 0.33,
-        "cost_attempts": 3
+        "cost_attempts": 3,
+        "cost_per_pass_usd": null,
+        "agent_ms_per_pass": null,
+        "clears_gate": false
       }
     },
     {
@@ -323,7 +332,10 @@
         "mean_tokens_out": 1212,
         "token_attempts": 3,
         "cost_usd": 0.33,
-        "cost_attempts": 3
+        "cost_attempts": 3,
+        "cost_per_pass_usd": 0.11,
+        "agent_ms_per_pass": 83200,
+        "clears_gate": true
       }
     },
     {
@@ -361,7 +373,10 @@
         "mean_tokens_out": 1210,
         "token_attempts": 3,
         "cost_usd": 0.33,
-        "cost_attempts": 3
+        "cost_attempts": 3,
+        "cost_per_pass_usd": 0.11,
+        "agent_ms_per_pass": 83000,
+        "clears_gate": true
       }
     },
     {
@@ -399,7 +414,10 @@
         "mean_tokens_out": 1211,
         "token_attempts": 3,
         "cost_usd": 0.33,
-        "cost_attempts": 3
+        "cost_attempts": 3,
+        "cost_per_pass_usd": null,
+        "agent_ms_per_pass": null,
+        "clears_gate": false
       }
     }
   ],
@@ -1602,5 +1620,6 @@
       "01KXS9A4JK4NW000000000000K"
     ]
   },
-  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 1 planned trial — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that recorded at least one ungraded check of kind \"sdk\" (an ungraded check with no kind counts as \"sdk\") and recalled are those whose ungraded \"sdk\" checks all passed. Ungraded checks of any other kind are tallied and shown but never enter SDK recall. Ungraded checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every scored attempt of an eval under every arm while another check in the same attempts passed: a statement about the instrument, not about any treatment. Control experiments — an oracle that applies each eval's reference solution, a no-op that changes nothing — are reported alongside the agent experiments and tagged as controls wherever they appear; bands and scorer health are decided over the agent experiments only, and controls are ranked after every agent experiment."
+  "methodology": "Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored attempts are counted separately and never enter that denominator. Each pair has 1 planned trial — at these counts the raw counts are the honest statement, so comparison groups render per-arm counts only: no intervals, no estimates, no attribution. A group whose members differ beyond their declared treatment has its comparison withheld and the differing components are listed instead; its raw per-experiment results remain visible. Per-pair pass@k and pass^k restate the same scored counts: pass@k is the fraction of size-k subsets of that pair's scored trials containing at least one pass, and pass^k is (passed/scored)^k, the all-pass rate for k with-replacement draws from those trials. Both describe this run's trials only — no wider claim. Telemetry (cost, tokens, surface usage) is summed only over attempts that reported it and shown as unavailable — never zero — when none did. SDK recall is reported per experiment as recalled / attempts, where attempts are the scored attempts that recorded at least one ungraded check of kind \"sdk\" (an ungraded check with no kind counts as \"sdk\") and recalled are those whose ungraded \"sdk\" checks all passed. Ungraded checks of any other kind are tallied and shown but never enter SDK recall. Ungraded checks are recorded and tallied but never enter pass/fail. Scorer health lists checks that failed in every scored attempt of an eval under every arm while another check in the same attempts passed: a statement about the instrument, not about any treatment. Control experiments — an oracle that applies each eval's reference solution, a no-op that changes nothing — are reported alongside the agent experiments and tagged as controls wherever they appear; bands and scorer health are decided over the agent experiments only, and controls are ranked after every agent experiment. Pass rate is a gate, not a rank: an experiment whose headline pass rate is below 80% is listed after every experiment that clears it, and the experiments that clear it are ordered by time-to-pass (agent time summed over the scored attempts that recorded it, divided by the passes among them) and then cost-to-pass (reported cost summed over the attempts that reported it, divided by the passes among them) — what one success took, failures included. Both are null, never zero, where nothing was recorded.",
+  "pass_gate": 0.8
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ClaudeCodeAdapter, CLAUDE_MCP_CONFIG_PATH } from "../src/adapters/claude.ts";
-import { CodexAdapter, CODEX_CONFIG_PATH } from "../src/adapters/codex.ts";
+import { CodexAdapter, CODEX_CONFIG_PATH, CODEX_GATEWAY_PROVIDER } from "../src/adapters/codex.ts";
 import { parseClaudeStream, parseCodexStream, parseJsonlLines } from "../src/adapters/parse.ts";
 import type { ContainerAttemptContext } from "../src/adapters/types.ts";
 
@@ -171,5 +171,85 @@ describe("codex adapter", () => {
     expect(adapter.requiredHostEnv).toEqual(["OPENAI_API_KEY"]);
     expect(adapter.parseStream(stream("codex-turns.jsonl")).turns).toBe(2);
     expect(adapter.parseStream(stream("codex-legacy.jsonl")).tokensIn).toBe(3000);
+  });
+});
+
+describe("endpoint overrides (LLM gateway routing)", () => {
+  test("claude: declares its overrides; the probe follows ANTHROPIC_BASE_URL and carries the custom headers", () => {
+    const adapter = new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r" });
+    expect(adapter.optionalHostEnv).toEqual(["ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS"]);
+    expect(adapter.keyProbe({ ANTHROPIC_API_KEY: "k" }).url).toBe("https://api.anthropic.com/v1/models");
+
+    const probe = adapter.keyProbe({
+      ANTHROPIC_API_KEY: "cf-token",
+      ANTHROPIC_BASE_URL: "https://gateway.example/v1/acct/gw/anthropic/",
+      ANTHROPIC_CUSTOM_HEADERS: 'cf-aig-authorization: Bearer cf-token\ncf-aig-metadata: {"app":"evals"}',
+    });
+    expect(probe.url).toBe("https://gateway.example/v1/acct/gw/anthropic/v1/models");
+    expect(probe.headers).toEqual({
+      "cf-aig-authorization": "Bearer cf-token",
+      "cf-aig-metadata": '{"app":"evals"}',
+      "x-api-key": "cf-token",
+      "anthropic-version": "2023-06-01",
+    });
+  });
+
+  test("codex: declares its overrides; the probe follows OPENAI_BASE_URL and carries the custom headers", () => {
+    const adapter = new CodexAdapter("codex", { model: "m", reasoning: "r" });
+    expect(adapter.optionalHostEnv).toEqual(["OPENAI_BASE_URL", "OPENAI_CUSTOM_HEADERS"]);
+    expect(adapter.keyProbe({ OPENAI_API_KEY: "k" })).toEqual({
+      url: "https://api.openai.com/v1/models",
+      headers: { Authorization: "Bearer k" },
+    });
+    const probe = adapter.keyProbe({
+      OPENAI_API_KEY: "k",
+      OPENAI_BASE_URL: "https://gateway.example/v1/acct/gw/openai",
+      OPENAI_CUSTOM_HEADERS: 'cf-aig-metadata: {"app":"evals"}',
+    });
+    expect(probe.url).toBe("https://gateway.example/v1/acct/gw/openai/models");
+    expect(probe.headers).toEqual({ "cf-aig-metadata": '{"app":"evals"}', Authorization: "Bearer k" });
+  });
+
+  test("codex: OPENAI_CUSTOM_HEADERS lands on the custom provider as http_headers; alone it keeps the vendor endpoint", () => {
+    const adapter = new CodexAdapter("codex", { model: "m", reasoning: "r" });
+    const base = "https://gateway.example/v1/acct/gw/openai";
+    const bundle = 'cf-aig-metadata: {"app":"evals"}\nx-team: dax';
+
+    const both = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_BASE_URL: base, OPENAI_CUSTOM_HEADERS: bundle } })[CODEX_CONFIG_PATH] as string;
+    expect(both).toContain(`base_url = ${JSON.stringify(base)}`);
+    // JSON escapes double as TOML basic-string escapes, so the JSON metadata value survives verbatim.
+    expect(both).toContain('http_headers = { "cf-aig-metadata" = "{\\"app\\":\\"evals\\"}", "x-team" = "dax" }');
+
+    const headersOnly = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_CUSTOM_HEADERS: bundle } })[CODEX_CONFIG_PATH] as string;
+    expect(headersOnly).toContain('base_url = "https://api.openai.com/v1"');
+    expect(headersOnly).toContain("http_headers = {");
+
+    // A base URL alone renders no http_headers line; nothing set renders nothing.
+    const baseOnly = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_BASE_URL: base } })[CODEX_CONFIG_PATH] as string;
+    expect(baseOnly).not.toContain("http_headers");
+    expect(adapter.setupFiles(ctxFor("none"))).toEqual({});
+  });
+
+  test("codex: an OPENAI_BASE_URL override renders as a custom model provider, ahead of any MCP table", () => {
+    const adapter = new CodexAdapter("codex", { model: "m", reasoning: "r" });
+    const base = "https://gateway.example/v1/acct/gw/openai";
+
+    const files = adapter.setupFiles({ ...ctxFor("none"), overrides: { OPENAI_BASE_URL: base } });
+    expect(Object.keys(files)).toEqual([CODEX_CONFIG_PATH]);
+    const toml = files[CODEX_CONFIG_PATH] as string;
+    // codex 0.149 ignores the env var; the provider entry is what routes it.
+    expect(toml.startsWith(`model_provider = ${JSON.stringify(CODEX_GATEWAY_PROVIDER)}`)).toBeTrue();
+    expect(toml).toContain(`[model_providers.${CODEX_GATEWAY_PROVIDER}]`);
+    expect(toml).toContain(`base_url = ${JSON.stringify(base)}`);
+    expect(toml).toContain('env_key = "OPENAI_API_KEY"');
+    expect(toml).toContain('wire_api = "responses"');
+
+    // TOML: the top-level key stays first; the provider table precedes the MCP tables.
+    const withMcp = adapter.setupFiles({ ...ctxFor("mcp"), overrides: { OPENAI_BASE_URL: base } })[CODEX_CONFIG_PATH] as string;
+    expect(withMcp.indexOf("model_provider = ")).toBe(0);
+    expect(withMcp.indexOf("[model_providers.")).toBeLessThan(withMcp.indexOf("[mcp_servers.acme]"));
+
+    // Other overrides (or none) change nothing.
+    expect(adapter.setupFiles({ ...ctxFor("none"), overrides: { ANTHROPIC_BASE_URL: base } })).toEqual({});
   });
 });

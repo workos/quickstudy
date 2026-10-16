@@ -33,11 +33,13 @@ export interface ParsedPrompt {
   promptBody: string;
   /** `frameworks:` variant list — discovery expands one eval per entry. */
   frameworks?: string[];
+  /** Per-framework suite overrides (`suites:`); variants not named keep `suite`. */
+  suites?: Record<string, EvalSuite>;
   /** `local:` shared starting-state root, relative to the eval directory. */
   local?: string;
 }
 
-const KNOWN_KEYS = ["id", "suite", "product", "framework", "frameworks", "local", "topics"] as const;
+const KNOWN_KEYS = ["id", "suite", "product", "framework", "frameworks", "suites", "local", "topics"] as const;
 
 /** Framework tokens become id suffixes (`<dirname>-<fw>`), so they must be kebab-case. */
 const FRAMEWORK_TOKEN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -137,6 +139,41 @@ export function parsePrompt(source: string, file: string): ParsedPrompt {
     }
     frameworks = tokens;
   }
+  let suites: Record<string, EvalSuite> | undefined;
+  if (fm["suites"] !== undefined) {
+    const value = fm["suites"];
+    if (frameworks === undefined) {
+      throw new EvalLoadError(
+        file,
+        keyLine("suites"),
+        `"suites" requires "frameworks" — it overrides the suite per framework variant`,
+      );
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new EvalLoadError(file, keyLine("suites"), `"suites" must be a mapping of framework token to suite`);
+    }
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      throw new EvalLoadError(file, keyLine("suites"), `"suites" must name at least one framework`);
+    }
+    for (const [token, suiteValue] of entries) {
+      if (!frameworks.includes(token)) {
+        throw new EvalLoadError(
+          file,
+          keyLine("suites"),
+          `"suites" names framework ${JSON.stringify(token)}, which is not in "frameworks"`,
+        );
+      }
+      if (typeof suiteValue !== "string" || !(EVAL_SUITES as readonly string[]).includes(suiteValue)) {
+        throw new EvalLoadError(
+          file,
+          keyLine("suites"),
+          `"suites" entry for ${JSON.stringify(token)} must be one of: ${EVAL_SUITES.join(", ")} (got ${JSON.stringify(suiteValue)})`,
+        );
+      }
+    }
+    suites = value as Record<string, EvalSuite>;
+  }
   let local: string | undefined;
   if (fm["local"] !== undefined) {
     const value = fm["local"];
@@ -185,6 +222,7 @@ export function parsePrompt(source: string, file: string): ParsedPrompt {
     metadata,
     promptBody,
     ...(frameworks !== undefined ? { frameworks } : {}),
+    ...(suites !== undefined ? { suites } : {}),
     ...(local !== undefined ? { local } : {}),
   };
 }

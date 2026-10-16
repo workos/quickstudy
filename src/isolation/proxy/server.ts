@@ -252,13 +252,28 @@ function dialUpstream(client: Socket, host: string, port: number, ready: (upstre
   });
 }
 
-/** Bidirectional tunnel wiring shared by CONNECT and plain forwards. */
+/**
+ * Bidirectional tunnel wiring shared by CONNECT and plain forwards.
+ *
+ * `pipe()` already ends the destination once the source ends — after the
+ * buffered bytes have flushed. Destroying the client on the upstream's
+ * `close` threw that buffer away: an upstream that closes right after a
+ * large response (a registry tarball) left the client with a truncated body
+ * and an ECONNRESET, so `npm install` through the proxy failed at random.
+ * So the upstream's close only ENDS the client (flush, then FIN). The other
+ * direction stays a destroy: a client that is gone will never read what the
+ * upstream still has to say, and a merely ended upstream would sit paused
+ * and half-open until the origin gave up.
+ */
 function pipeBoth(client: Socket, upstream: Socket): void {
   client.pipe(upstream);
   upstream.pipe(client);
-  client.on("close", () => upstream.destroy());
-  upstream.on("close", () => client.destroy());
   client.on("error", () => upstream.destroy());
+  upstream.on("error", () => client.destroy());
+  client.on("close", () => upstream.destroy());
+  upstream.on("close", () => {
+    if (!client.writableEnded) client.end();
+  });
 }
 
 /** CONNECT host:port — the HTTPS path. The tunnel is opaque to the proxy. */

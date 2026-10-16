@@ -96,8 +96,8 @@ test.describe("served mode: three routes render with data", () => {
     ]);
     const first = page.getByTestId("leaderboard-row-claude-docs");
     await expect(first).toContainText("model-a-1");
-    await expect(first.getByTestId("leaderboard-pass")).toHaveText("9/9 · 9/9");
-    await expect(first.getByTestId("leaderboard-cost")).toContainText("9/9 reported");
+    await expect(first.getByTestId("leaderboard-pass")).toHaveText("9/12 · 9/12");
+    await expect(first.getByTestId("leaderboard-cost")).toContainText("12/12 reported");
     await expect(page.getByTestId("leaderboard-row-codex-cli").getByTestId("leaderboard-cost")).toContainText("8/9 reported");
   });
 

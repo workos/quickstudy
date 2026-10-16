@@ -29,7 +29,14 @@ import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
 
 const ALL = "all";
-const SUITES = ["benchmark", "regression", "other"] as const;
+const SUITES = ["benchmark", "regression", "smoke", "other"] as const;
+
+/** What a non-benchmark suite badge says on hover. */
+const SUITE_TITLES: Record<string, string> = {
+  regression: "Narrow checks on known failure modes; a headline suite alongside benchmark.",
+  smoke: "Evals every arm solves; run to catch breakage, never in the headline scores.",
+  other: "Outside the headline scores.",
+};
 
 interface MatrixProps {
   meta: DataMeta;
@@ -509,11 +516,11 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
         <div className="head">
           <h3>
             Pass rate per eval × experiment
-            {suite === "regression" && (
+            {suite !== "benchmark" && (
               <>
                 {" "}
-                <StatBadge tone="amber" title="Known failure modes — tracked separately from benchmark results.">
-                  regression suite
+                <StatBadge tone="amber" title={SUITE_TITLES[suite] ?? ""}>
+                  {suite} suite
                 </StatBadge>
               </>
             )}

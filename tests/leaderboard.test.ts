@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { seedRun } from "../scripts/seed-run.ts";
 import { exportSite } from "../src/export.ts";
 import { attemptIdentityHash, type RunManifest } from "../src/manifest.ts";
-import { collectExperimentAggregate, median } from "../src/report/aggregate.ts";
+import { collectExperimentAggregate, median, type ExperimentAggregate } from "../src/report/aggregate.ts";
 import { parsePricing, type Pricing } from "../src/report/costs.ts";
 import {
   buildReport,
@@ -118,13 +118,37 @@ describe("aggregate", () => {
     expect(order).toEqual(["claude-docs", "codex-cli", "claude-cli", "codex-docs", "codex-mcp", "claude-mcp"]);
   });
 
-  test("regression-suite attempts never move any aggregate", () => {
+  test("regression-suite attempts count toward the aggregate; smoke-suite attempts never do", () => {
     const plain = seededReport(false);
     const withRegression = seededReport(true);
-    const aggregates = (report: ReportJson) => (report.experiments ?? []).map((e) => [e.experiment_id, e.aggregate]);
-    expect(aggregates(withRegression)).toEqual(aggregates(plain));
-    // The run-wide telemetry does include the regression attempts.
-    expect(withRegression.telemetry.cost_attempts).toBeGreaterThan(plain.telemetry.cost_attempts);
+    const regressionPairs = (withRegression.pairs ?? []).filter((p) => p.suite === "regression");
+    expect(regressionPairs.length).toBeGreaterThan(0);
+    const sum = (values: number[]) => values.reduce((n, v) => n + v, 0);
+    // Every arm's row grows by exactly its regression pairs: attempts, scored,
+    // passes, and the discriminating subset, so both filters moved together.
+    for (const experiment of withRegression.experiments ?? []) {
+      const agg = experiment.aggregate!;
+      const before = (plain.experiments ?? []).find((e) => e.experiment_id === experiment.experiment_id)?.aggregate;
+      if (before === undefined) throw new Error(`no plain aggregate for ${experiment.experiment_id}`);
+      const mine = regressionPairs.filter((p) => p.experiment_id === experiment.experiment_id);
+      const scored = sum(mine.map((p) => p.scored));
+      const passed = sum(mine.map((p) => p.passed));
+      expect(agg.attempts - before.attempts).toBe(sum(mine.map((p) => p.total)));
+      expect(agg.passed + agg.failed).toBe(before.passed + before.failed + scored);
+      expect(agg.passed).toBe(before.passed + passed);
+      expect(agg.pass_rate_all).toBeCloseTo((before.passed + passed) / (before.passed + before.failed + scored), 10);
+      const discriminating = mine.filter((p) => p.band === "discriminating");
+      expect(agg.discriminating_scored).toBe(before.discriminating_scored + sum(discriminating.map((p) => p.scored)));
+      expect(agg.discriminating_passed).toBe(before.discriminating_passed + sum(discriminating.map((p) => p.passed)));
+    }
+    expect((withRegression.pairs ?? []).some((p) => p.suite === "regression" && p.band === "discriminating")).toBe(true);
+    // Smoke stays outside the headline: the row ignores it entirely.
+    const x = aggregateOf(
+      [pass("split", "x"), fail("split", "x"), pass("saturated", "x", { suite: "smoke" }), pass("saturated", "x", { suite: "smoke" })],
+      "x",
+    );
+    expect(x.attempts).toBe(2);
+    expect(x.pass_rate_all).toBe(0.5);
   });
 
   test("a solved-by-all eval is excluded from the discriminating subset", () => {
@@ -194,6 +218,7 @@ describe("aggregate", () => {
       median_agent_ms: null, agent_time_attempts: 0,
       mean_tokens_in: null, mean_tokens_out: null, token_attempts: 0,
       cost_usd: null, cost_attempts: 0,
+      cost_per_pass_usd: null, agent_ms_per_pass: null, clears_gate: null,
     });
   });
 
@@ -238,12 +263,85 @@ describe("aggregate", () => {
     }
     const without = buildReport({ store, runId: "run", resultsDir: root }).experiments![0]!.aggregate!;
     expect("estimated_cost_usd" in without).toBeFalse();
+    expect("estimated_cost_per_pass_usd" in without).toBeFalse();
     expect(without.cost_usd).toBe(0.25);
+    // Reported cost over the one priced attempt, which passed: the ratio is the cost itself.
+    expect(without.cost_per_pass_usd).toBe(0.25);
     expect(without.cost_attempts).toBe(1);
     const priced = buildReport({ store, runId: "run", resultsDir: root, pricing: parsePricing(PRICING) }).experiments![0]!.aggregate!;
     expect(priced.estimated_attempts).toBe(1);
     expect(priced.estimated_cost_usd).toBeCloseTo(0.00545, 10);
+    // One estimated attempt, and it passed: the estimate per pass equals the estimate.
+    expect(priced.estimated_cost_per_pass_usd).toBeCloseTo(0.00545, 10);
     store.close();
+  });
+});
+
+describe("cost-to-pass, time-to-pass and the gate", () => {
+  const costed = (evalId: string, exp: string, passed: boolean, costUsd: number | null, ms: number | null) =>
+    attempt(evalId, exp, {
+      result: { passed, checks: [] },
+      costUsd,
+      ...(ms === null ? {} : stamped(ms)),
+    });
+
+  test("each ratio divides its own total by the passes among the attempts that reported it", () => {
+    const x = aggregateOf(
+      [
+        costed("e1", "x", true, 1.0, 100_000), // priced and stamped, passed
+        costed("e2", "x", false, 0.5, 50_000), // priced and stamped, failed — still spent
+        costed("e3", "x", true, null, null), // passed with no telemetry: not in either ratio
+        costed("e1", "y", false, 2, 10_000),
+      ],
+      "x",
+    );
+    expect(x.cost_usd).toBe(1.5);
+    expect(x.cost_per_pass_usd).toBe(1.5); // $1.50 over the one priced pass
+    expect(x.agent_ms_per_pass).toBe(150_000); // 150 s over the one stamped pass
+    expect(x.pass_rate_all).toBeCloseTo(2 / 3, 10);
+    expect(x.clears_gate).toBe(false);
+  });
+
+  test("the ratios are null, never zero, when nothing reported or nothing that reported passed", () => {
+    const silent = aggregateOf([pass("e", "x"), fail("e", "x")], "x");
+    expect(silent.cost_per_pass_usd).toBeNull();
+    expect(silent.agent_ms_per_pass).toBeNull();
+    const spentAndFailed = aggregateOf([costed("e", "x", false, 3, 30_000), pass("e", "x")], "x");
+    expect(spentAndFailed.cost_usd).toBe(3);
+    expect(spentAndFailed.cost_per_pass_usd).toBeNull();
+    expect(spentAndFailed.agent_ms_per_pass).toBeNull();
+  });
+
+  test("the gate is pass_rate_all at or above 80%, null with nothing scored", () => {
+    const four = aggregateOf([pass("a", "x"), pass("b", "x"), pass("c", "x"), pass("d", "x"), fail("e", "x")], "x");
+    expect(four.pass_rate_all).toBe(0.8);
+    expect(four.clears_gate).toBe(true);
+    const three = aggregateOf([pass("a", "x"), pass("b", "x"), pass("c", "x"), fail("d", "x"), fail("e", "x")], "x");
+    expect(three.clears_gate).toBe(false);
+    expect(aggregateOf([attempt("a", "x", { status: "error" })], "x").clears_gate).toBeNull();
+    const strict = collectExperimentAggregate([pass("a", "x"), fail("b", "x")], collectPairs([pass("a", "x"), fail("b", "x")]), "x", undefined, 0.5);
+    expect(strict.clears_gate).toBe(true);
+  });
+
+  test("the order: gate first, then time-to-pass, then cost-to-pass, with pass rate only as a tie-break", () => {
+    const row = (id: string, agg: Partial<ExperimentAggregate>, role?: string) =>
+      ({ experiment_id: id, ...(role ? { role } : {}), aggregate: { pass_rate_all: 1, pass_rate_discriminating: 1, ...agg } }) as unknown as ReportExperiment;
+    const rows = [
+      row("slow-cheap", { clears_gate: true, agent_ms_per_pass: 200_000, cost_per_pass_usd: 1, pass_rate_discriminating: 0.9 }),
+      row("perfect-but-below", { clears_gate: false, agent_ms_per_pass: 10_000, cost_per_pass_usd: 0.1, pass_rate_discriminating: 1, pass_rate_all: 0.5 }),
+      row("fast-pricey", { clears_gate: true, agent_ms_per_pass: 100_000, cost_per_pass_usd: 5, pass_rate_discriminating: 0.8 }),
+      row("fast-unpriced", { clears_gate: true, agent_ms_per_pass: 100_000, cost_per_pass_usd: null, pass_rate_discriminating: 1 }),
+      row("untimed", { clears_gate: true, agent_ms_per_pass: null, cost_per_pass_usd: 0.01, pass_rate_discriminating: 1 }),
+      row("oracle", { clears_gate: true, agent_ms_per_pass: 1, cost_per_pass_usd: 0 }, "positive-control"),
+    ];
+    expect([...rows].sort(compareLeaderboard).map((e) => e.experiment_id)).toEqual([
+      "fast-pricey", // clears; fastest; priced before the unpriced tie
+      "fast-unpriced", // same time, no dollars: after the priced arm
+      "slow-cheap", // clears; slower
+      "untimed", // clears; no time recorded sorts after every timed arm
+      "perfect-but-below", // the best discriminating rate, but below the gate
+      "oracle", // controls last whatever their figures
+    ]);
   });
 });
 

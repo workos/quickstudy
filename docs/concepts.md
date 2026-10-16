@@ -47,18 +47,21 @@ eval × experiment  →  isolated attempt  →  agent works  →  scorer checks 
 An eval is one directory under the evals root (default `evals/`):
 
 - **`PROMPT.md`** — YAML frontmatter (`id`, `suite`, and optional `product`,
-  `framework`, `topics`) followed by the task prompt the agent receives
-  verbatim.
+  `framework`, `frameworks`, `suites`, `local`, `topics`) followed by the
+  task prompt the agent receives verbatim.
 - **`EVAL.ts`** — a default-exported **scorer**: plain TypeScript that
   receives the finished workspace and returns named pass/fail **checks**.
 - **`local/`** (optional) — the starting state copied into the attempt's
   workspace before the agent begins.
 
 There is no registry and no special dialect: the scorer is ordinary code, and
-every eval is self-contained. The `suite` field separates headline
-**benchmark** evals from **regression** and **other** evals, which never move
-headline scores. [Writing an eval](./writing-an-eval.md) is the authoring
-reference.
+every eval is self-contained. The `suite` field tiers evals: **benchmark**
+and **regression** are the headline suites the leaderboard counts; **smoke**
+holds evals every arm solves, run to catch breakage but never moving the
+headline; **other** is anything else outside it. A framework-expanded eval can
+retier one variant with `suites:` (a saturated port goes to smoke while the
+rest stay benchmark). [Writing an eval](./writing-an-eval.md) is the
+authoring reference.
 
 ## Experiments: HOW attempts run
 
@@ -239,13 +242,23 @@ the matrix banner and the text report's `suspect:` lines display.
 
 Each entry in `report.json`'s `experiments[]` carries an `aggregate`: one
 leaderboard row per experiment, rendered as a table above the matrix and in
-the text report. Every number in it except SDK recall counts **benchmark-suite
-attempts only**, so regression evals never move the ranking. That is why the
-row's `cost_usd` can be lower than the run-wide `telemetry.cost_usd`. Its
-columns and their denominators:
+the text report. Every number in it except SDK recall counts **headline-suite
+attempts only** (benchmark and regression), so smoke and other evals never
+move the ranking. That is why the row's `cost_usd` can be lower than the
+run-wide `telemetry.cost_usd`. Its columns and their denominators:
 
+- **Gate**: whether the all-eval pass rate is at or above the report's
+  `pass_gate` (0.8). Pass rate is a gate, not a rank: arms that clear it are
+  ordered by the two columns below; arms below it are listed after them.
+- **Cost/pass**: reported cost summed over the attempts that reported it,
+  divided by the passes among those attempts — what one success cost with
+  the failures included. `null` (shown as a dash) when nothing reported cost
+  or none of it passed.
+- **Time/pass**: agent time summed over the scored attempts that recorded
+  both stamps, divided by the passes among them. Every adapter records agent
+  time, so this is the primary order; cost follows it.
 - **Pass rate (all · discriminating)**: `passed / scored` over the
-  experiment's benchmark pairs, then the same over only the evals whose band
+  experiment's headline pairs, then the same over only the evals whose band
   is `discriminating` (`discriminating_passed / discriminating_scored`).
   Incomplete and errored attempts count in `attempts` but never in `scored`.
   The discriminating rate is null when the experiment scored no
@@ -262,11 +275,10 @@ columns and their denominators:
 - **SDK recall**: the same `sdk_recall` the report already states per
   experiment, over every suite.
 
-Rows sort by discriminating pass rate (nulls last), then the all-eval pass
-rate, then experiment id. Unavailable values render as "—", never 0. A report
-written before the leaderboard existed (`schema_version` < 9) shows a
-one-line note to regenerate it with `quickstudy report <run-id>`. `export`
-rebuilds such stored reports automatically.
+Rows list the agent experiments before the controls; among the agents, those
+that clear the gate come first, ordered by time-to-pass ascending, then
+cost-to-pass ascending (unpriced arms after priced ones), with the
+discriminating and all-eval pass rates as tie-breaks.
 
 For missing Codex dollar telemetry, `report --pricing <file>` can calculate
 [retrospective token-cost estimates](./cost-estimates.md) from saved transcripts
@@ -278,6 +290,10 @@ When you want hypotheses about **why** pairs failed, `quickstudy diagnose
 model call and writes `diagnosis.json` beside `report.json`. Findings are
 evidence-linked hypotheses — the conservative no-attribution stance of the
 report is preserved by keeping diagnosis a separate, clearly-labeled layer.
+Control arms are never diagnosed: the oracle passes and the no-op fails by
+construction, so a model asked about them only reports a "broken harness";
+the report's scorer-health callout watches the oracle instead. Those pairs
+count toward `pairs_skipped` alongside passing-only pairs.
 
 The Diagnosis view clusters findings by eval and by the graded checks that
 failed on the cited pairs (joined from the run's `report.json`), largest
@@ -329,7 +345,7 @@ exactly what a negative control should do.
 | **pair**            | One eval × experiment combination — the report's row unit (a *cell* in the UI).              |
 | **run**             | One `quickstudy run`, all pairs and trials, under one run id.                                |
 | **manifest**        | The immutable content-addressed identity record written before attempts start.               |
-| **suite**           | Eval class: `benchmark` (headline), `regression`, or `other`.                                |
+| **suite**           | Eval tier: `benchmark` and `regression` (headline), `smoke` (saturated, outside it), `other`. |
 
 Next: [Getting started](./getting-started.md) ·
 [Writing an eval](./writing-an-eval.md)

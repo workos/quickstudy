@@ -17,7 +17,7 @@ keys**. If a term is unfamiliar, [Concepts](./concepts.md) defines it.
 | ------------------------- | -------------------------------------------------------------------- |
 | **[Bun](https://bun.sh)** | only to build the binary or run from source                          |
 | **Docker**                | only to run _real_ agents in isolated containers                     |
-| **API keys**              | only for real LLM agents (`ANTHROPIC_API_KEY`, …)                    |
+| **API keys**              | only for real LLM agents (`ANTHROPIC_API_KEY`, …); a gateway additionally needs its base URL, with the gateway token as the key variable — see the README |
 
 The keyless act needs none of Docker, keys, or network — the `echo` agent
 runs the full run → score → persist pipeline on the host.

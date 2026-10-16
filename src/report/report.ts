@@ -39,7 +39,8 @@ import {
   type ExperimentRole,
   type ScorerHealth,
 } from "./scorer-health.ts";
-import { collectExperimentAggregate, compareLeaderboard, type ExperimentAggregate } from "./aggregate.ts";
+import { collectExperimentAggregate, compareLeaderboard, DEFAULT_PASS_GATE, type ExperimentAggregate } from "./aggregate.ts";
+import { HEADLINE_SUITES } from "../evals/types.ts";
 
 export type { EvalBand, ExperimentRole, ScorerHealth, ScorerHealthSuspect } from "./scorer-health.ts";
 export type { ExperimentAggregate } from "./aggregate.ts";
@@ -53,7 +54,7 @@ export class ReportError extends Error {
   }
 }
 
-export const REPORT_SCHEMA_VERSION = 11;
+export const REPORT_SCHEMA_VERSION = 13;
 
 /**
  * Substrings that must never appear in generated report prose: at n≤5 trials
@@ -69,7 +70,7 @@ export function findBannedLanguage(text: string): string[] {
 }
 
 /** Methodology is generated prose — it must itself pass the language guard. */
-export function methodologyNote(trials: number): string {
+export function methodologyNote(trials: number, passGate: number = DEFAULT_PASS_GATE): string {
   return (
     `Pass rates are per eval × experiment pair: passed / (passed + failed). Incomplete and errored ` +
     `attempts are counted separately and never enter that denominator. Each pair has ${trials} planned ` +
@@ -88,7 +89,12 @@ export function methodologyNote(trials: number): string {
     `about the instrument, not about any treatment. Control experiments — an oracle that applies each eval's ` +
     `reference solution, a no-op that changes nothing — are reported alongside the agent experiments and ` +
     `tagged as controls wherever they appear; bands and scorer health are decided over the agent experiments ` +
-    `only, and controls are ranked after every agent experiment.`
+    `only, and controls are ranked after every agent experiment. Pass rate is a gate, not a rank: an experiment ` +
+    `whose headline pass rate is below ${Math.round(passGate * 100)}% is listed after every ` +
+    `experiment that clears it, and the experiments that clear it are ordered by time-to-pass (agent time summed ` +
+    `over the scored attempts that recorded it, divided by the passes among them) and then cost-to-pass (reported ` +
+    `cost summed over the attempts that reported it, divided by the passes among them) — what one success took, ` +
+    `failures included. Both are null, never zero, where nothing was recorded.`
   );
 }
 
@@ -134,7 +140,7 @@ export interface ReportExperiment {
    */
   sdk_recall?: ReportRecall;
   /**
-   * Leaderboard row over benchmark-suite attempts. Optional on the wire:
+   * Leaderboard row over headline-suite (benchmark + regression) attempts. Optional on the wire:
    * absent in schema_version < 9 artifacts; readers must tolerate absence.
    */
   aggregate?: ExperimentAggregate;
@@ -310,6 +316,8 @@ export interface ReportJson {
   /** v6: empty denial logs are observed zero; absent logs are unavailable. */
   egress_observation?: { available: string[]; unavailable: string[] };
   methodology: string;
+  /** The pass-rate gate the leaderboard order applies (see methodology). */
+  pass_gate: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +462,7 @@ function roleOf(run: RunRecord, experimentId: string): ExperimentRole {
 }
 
 /** The run's control experiments, from the roles it recorded. */
-function controlExperiments(run: RunRecord): Set<string> {
+export function controlExperiments(run: RunRecord): Set<string> {
   return new Set(run.config.experimentIds.filter((id) => roleOf(run, id) !== "agent"));
 }
 
@@ -652,7 +660,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
   const scorerHealth = collectScorerHealth(attempts, pairs, controls);
   const costEstimate = options.pricing === undefined ? undefined : estimateRunCosts(run, attempts, options.resultsDir, options.pricing);
 
-  const methodology = methodologyNote(run.config.trials) + (costEstimate === undefined ? "" :
+  const methodology = methodologyNote(run.config.trials, DEFAULT_PASS_GATE) + (costEstimate === undefined ? "" :
     " Optional token-cost estimates supplement reported cost using the supplied pricing snapshot. They cover only the selected attempts, not superseded retries, tool fees, diagnosis or infrastructure, and are not billing records.");
   const banned = findBannedLanguage(methodology);
   if (banned.length > 0) {
@@ -695,6 +703,7 @@ export function buildReport(options: BuildReportOptions): ReportJson {
       unavailable: attempts.filter((a) => !existsSync(join(options.resultsDir, runId, a.id, "egress-denials.log"))).map((a) => a.id),
     },
     methodology,
+    pass_gate: DEFAULT_PASS_GATE,
   };
 }
 
@@ -707,12 +716,15 @@ function pct(rate: number | null): string {
 }
 
 function renderLeaderboard(experiments: ReportExperiment[]): string[] {
-  const header = ["experiment", "model", "pass (all/disc)", "agent median", "tokens in", "cost", "recall"];
+  const header = ["experiment", "model", "gate", "$/pass", "time/pass", "pass (all/disc)", "agent median", "tokens in", "cost", "recall"];
   const rows = [...experiments].sort(compareLeaderboard).map((experiment) => {
     const agg = experiment.aggregate;
     const model = experiment.agent.model === "unspecified" ? "unpinned" : experiment.agent.model;
     const reasoning = experiment.agent.reasoning === "unspecified" ? "" : ` · ${experiment.agent.reasoning}`;
-    if (!agg) return [experiment.experiment_id, `${model}${reasoning}`, "n/a", "n/a", "n/a", "n/a", "n/a"];
+    if (!agg) return [experiment.experiment_id, `${model}${reasoning}`, "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a"];
+    const gate = agg.clears_gate === null ? "n/a" : agg.clears_gate ? "clears" : "below";
+    const perPass = agg.cost_per_pass_usd === null ? "n/a" : `$${agg.cost_per_pass_usd.toFixed(2)}`;
+    const timePerPass = agg.agent_ms_per_pass === null ? "n/a" : `${(agg.agent_ms_per_pass / 1000).toFixed(1)}s`;
     const all = agg.pass_rate_all === null ? "n/a" : `${agg.passed}/${agg.passed + agg.failed}`;
     const disc = agg.pass_rate_discriminating === null ? "n/a" : `${agg.discriminating_passed}/${agg.discriminating_scored}`;
     const time = agg.median_agent_ms === null ? "n/a" : `${(agg.median_agent_ms / 1000).toFixed(1)}s (${agg.agent_time_attempts})`;
@@ -723,11 +735,16 @@ function renderLeaderboard(experiments: ReportExperiment[]): string[] {
     const recall = experiment.sdk_recall;
     const recallText = recall && recall.rate !== null ? `${recall.recalled}/${recall.attempts}` : "n/a";
     const id = (experiment.role ?? "agent") === "agent" ? experiment.experiment_id : `${experiment.experiment_id} (control)`;
-    return [id, `${model}${reasoning}`, `${all} · ${disc}`, time, tokens, cost, recallText];
+    return [id, `${model}${reasoning}`, gate, perPass, timePerPass, `${all} · ${disc}`, time, tokens, cost, recallText];
   });
   const widths = header.map((title, i) => Math.max(title.length, ...rows.map((row) => row[i]!.length)));
   const format = (cells: string[]): string => `  ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join("  ").trimEnd()}`;
-  return ["leaderboard (benchmark suite, sorted by discriminating pass rate; controls last):", format(header), ...rows.map(format)];
+  return [
+    `leaderboard (headline suites ${HEADLINE_SUITES.join(" + ")}; gate: pass rate ≥ ${Math.round(DEFAULT_PASS_GATE * 100)}%; ` +
+      `ordered by time-to-pass, then cost-to-pass; controls last):`,
+    format(header),
+    ...rows.map(format),
+  ];
 }
 
 /** Render the report as plain text. Renders FROM the JSON, never the store. */

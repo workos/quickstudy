@@ -265,3 +265,28 @@ test("resolver images, enforced network policy and budgets change affected attem
   const historical = { ...original, manifestVersion: "v3" as const };
   expect(attemptIdentityHash(plan, historical)).not.toBe(attemptIdentityHash(plan, original));
 });
+
+test("endpoint overrides are part of the pair environment: a changed gateway route changes identity; none leaves it untouched", async () => {
+  const { resolvePairEnvironments } = await import("../src/execution-policy.ts");
+  const fixture = makeFixture();
+  const evals = discoverEvals(fixture.evalsRoot);
+  const experiments = loadExperiments(fixture.experimentsRoot);
+  experiments[0]!.experiment = { ...experiments[0]!.experiment, runtime: { kind: "container", image: "test:image" } };
+  const images = { "test:image": { tag: "test:image", id: "sha256:a", repoDigests: [] } };
+  const make = (adapterEndpoints?: Record<string, Record<string, string>>) =>
+    buildRunManifest({ evals, experiments, images, harness: HARNESS, pairs: resolvePairEnvironments({ evals, experiments, images, adapterEndpoints }) });
+  const plan = { evalId: "hello", experimentId: "echo-x", trialIndex: 0 };
+
+  const direct = make();
+  expect(Object.values(direct.pairs!)[0]).not.toHaveProperty("endpoints");
+  expect(make({ "echo-x": {} }).hash).toBe(direct.hash);
+
+  const teamA = make({ "echo-x": { OPENAI_BASE_URL: "https://gateway.example/team-a/openai" } });
+  const teamB = make({ "echo-x": { OPENAI_BASE_URL: "https://gateway.example/team-b/openai" } });
+  expect(Object.values(teamA.pairs!)[0]!.endpoints).toEqual({ OPENAI_BASE_URL: "https://gateway.example/team-a/openai" });
+  // Same host, different route: the manifest AND the attempt identity differ, so a resume cannot mix them.
+  expect(teamA.hash).not.toBe(direct.hash);
+  expect(teamA.hash).not.toBe(teamB.hash);
+  expect(attemptIdentityHash(plan, teamA)).not.toBe(attemptIdentityHash(plan, teamB));
+  expect(attemptIdentityHash(plan, teamA)).not.toBe(attemptIdentityHash(plan, direct));
+});
