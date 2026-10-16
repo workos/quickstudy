@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/workos/quickstudy/compare/v0.10.0...v0.11.0) (2026-10-16)
+
+
+### Features
+
+* add reproducible workspace file staging ([#22](https://github.com/workos/quickstudy/issues/22)) ([8dd1fed](https://github.com/workos/quickstudy/commit/8dd1fedcc7df4b760b1c085b71745b4b44db509c))
+* **runtime:** resolve capacity per eval ([#38](https://github.com/workos/quickstudy/issues/38)) ([21b75b7](https://github.com/workos/quickstudy/commit/21b75b746a3adcc02a26995d5b04167072e68873))
+
 ## [0.10.0](https://github.com/workos/quickstudy/compare/v0.9.0...v0.10.0) (2026-10-16)
 
 
