@@ -21,6 +21,8 @@ import { mkdir, mkdtemp, rm, writeFile, cp, readdir, lstat, readlink, realpath }
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { sanitizeServerName, type McpUpstream } from "./mcp-proxy/server.ts";
+import { WORKSPACE_FILES_PROGRAM, type WorkspaceFilesRequest } from "./workspace-files.ts";
+import type { WorkspaceFilesIdentity } from "../runtime/workspace-files.ts";
 import { EXCLUDED_WORKSPACE_DIRS } from "../store/artifacts.ts";
 
 /** The label key every attempt container carries. */
@@ -66,14 +68,17 @@ export interface ExecResult {
  */
 async function runDocker(
   args: string[],
-  opts: { timeoutMs?: number; stdin?: string; env?: Record<string, string> } = {},
+  opts: { timeoutMs?: number; stdin?: string; env?: Record<string, string>; signal?: AbortSignal } = {},
 ): Promise<ExecResult> {
+  opts.signal?.throwIfAborted();
   const proc = Bun.spawn(["docker", ...args], {
     stdin: opts.stdin === undefined ? "ignore" : Buffer.from(opts.stdin),
     stdout: "pipe",
     stderr: "pipe",
     ...(opts.env !== undefined ? { env: { ...process.env, ...opts.env } } : {}),
   });
+  const abort = () => proc.kill("SIGKILL");
+  opts.signal?.addEventListener("abort", abort, { once: true });
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   {
@@ -88,13 +93,14 @@ async function runDocker(
     proc.exited,
   ]);
   if (timer !== undefined) clearTimeout(timer);
+  opts.signal?.removeEventListener("abort", abort);
   return { exitCode, stdout, stderr, timedOut };
 }
 
 /** Run `docker <args>` and throw a DockerError on non-zero exit. */
 async function mustDocker(
   args: string[],
-  opts: { timeoutMs?: number; stdin?: string; env?: Record<string, string> } = {},
+  opts: { timeoutMs?: number; stdin?: string; env?: Record<string, string>; signal?: AbortSignal } = {},
 ): Promise<ExecResult> {
   const result = await runDocker(args, opts);
   if (result.exitCode !== 0) throw new DockerError(args, result.exitCode, result.stderr);
@@ -193,7 +199,9 @@ export interface AttemptContainer {
   /** Run a command in /workspace inside the container. Never throws for non-zero exits. */
   execInWorkspace(cmd: string[], opts?: { timeoutMs?: number }): Promise<ExecResult>;
   /** Write a file inside the container (parent directories created). */
-  writeFile(path: string, content: string): Promise<void>;
+  writeFile(path: string, content: string, opts?: { signal?: AbortSignal }): Promise<void>;
+  /** Bounded create-only overlay transport; input rides stdin, never argv. */
+  workspaceFiles(request: WorkspaceFilesRequest, signal: AbortSignal): Promise<WorkspaceFilesIdentity>;
   /** Copy /workspace to a host directory, excluding node_modules/vendor/.venv. */
   exportWorkspace(toDir: string): Promise<void>;
   /** `docker rm -f` — kill and remove. Idempotent. */
@@ -282,10 +290,22 @@ export async function createAttemptContainer(opts: CreateAttemptContainerOptions
       }
       return result;
     },
-    writeFile: async (path, content) => {
+    workspaceFiles: async (request, signal) => {
+      try {
+        const result = await runDocker(["exec", "-i", "-w", CONTAINER_WORKSPACE, id, "/usr/local/bin/node", "-e", WORKSPACE_FILES_PROGRAM, CONTAINER_WORKSPACE], {
+          stdin: JSON.stringify(request), signal,
+        });
+        if (signal.aborted || result.timedOut || result.exitCode !== 0) throw new Error("staging failed");
+        return JSON.parse(result.stdout) as WorkspaceFilesIdentity;
+      } catch {
+        // No raw stdout/stderr, command, or payload may enter diagnostics.
+        throw new Error("workspaceFiles: filesystem operation failed or was cancelled/timed out");
+      }
+    },
+    writeFile: async (path, content, writeOpts = {}) => {
       // `$1` positional keeps the target path out of shell interpolation.
       await mustDocker(["exec", "-i", id, "sh", "-c", 'mkdir -p "$(dirname "$1")" && cat > "$1"', "sh", path], {
-        stdin: content,
+        stdin: content, signal: writeOpts.signal,
       });
     },
     exportWorkspace: async (toDir) => {

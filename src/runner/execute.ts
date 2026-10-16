@@ -21,6 +21,8 @@
  * and never allowed to mask the attempt's result.
  */
 
+import { stageWorkspaceFiles } from "./workspace-files.ts";
+import { defineWorkspaceFiles, validateWorkspaceFilesRuntime, workspaceFilesIdentity, type WorkspaceFiles } from "../runtime/workspace-files.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -103,6 +105,8 @@ export interface ExecuteRunV3Options {
   config?: Partial<RunConfig>;
   /** Host adapters by name. Defaults to the built-in echo adapter. */
   hostAdapters?: Record<string, AgentAdapter>;
+  /** Internal offline-test seam; not part of the public consumer API. */
+  createContainer?: typeof createAttemptContainer;
   /**
    * Container agent adapter factories by name, constructed per experiment
    * from its `agent` spec. Defaults to the built-in claude/codex adapters.
@@ -315,6 +319,13 @@ export function collectOfferedSurfaces(options: {
 }
 
 export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSummaryV3> {
+  // Snapshot only the payload: runtime methods must keep their original receiver,
+  // including prototype methods and private fields. Capture before the first await.
+  const workspaceFilesByExperiment = new Map(options.experiments.map(({ experiment }) => {
+    validateWorkspaceFilesRuntime(experiment.runtime);
+    const files = experiment.runtime.workspaceFiles;
+    return [experiment.id, files === undefined ? undefined : defineWorkspaceFiles(files)] as const;
+  }));
   const { store, artifacts, plan } = options;
   const log = options.log ?? ((line: string) => console.log(line));
   const attemptTimeoutMs = options.attemptTimeoutMs ?? options.budgets?.agentMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS;
@@ -469,7 +480,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       const endpoints = Object.fromEntries(Object.entries(overrides).filter(([name]) => !isSecretEnvName(name)));
       return Object.keys(endpoints).length > 0 ? [[id, endpoints] as const] : [];
     }));
-    const pairs = resolvePairEnvironments({ ...options, images, imageTags: imageTagsByPair,
+    const pairs = resolvePairEnvironments({ ...options, workspaceFilesByExperiment, images, imageTags: imageTagsByPair,
       adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, [
         ...(adapter.egressHosts ?? []),
         ...(options.egressProxy ? endpointHosts(overridesByExperiment.get(id) ?? {}) : []),
@@ -478,7 +489,16 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       budgets: { ...options.budgets, agentMs: options.attemptTimeoutMs ?? options.budgets?.agentMs ?? attemptTimeoutMs },
       mcpHashes: Object.fromEntries([...declaredByExperiment].map(([id, servers]) => [id, hashString(canonicalJson(servers))])),
     });
-    manifest = buildRunManifest({ evals: options.evals, experiments: options.experiments, images, cliVersions, pairs, scorerIdentities });
+    manifest = buildRunManifest({ evals: options.evals, experiments: options.experiments, workspaceFilesByExperiment, images, cliVersions, pairs, scorerIdentities });
+  }
+  // Injected/stale manifests must not authorize a different payload (or silently
+  // omit one). Historical no-overlay manifests retain their original shape.
+  for (const entry of plan) {
+    const files = workspaceFilesByExperiment.get(entry.experimentId);
+    const intended = files ? workspaceFilesIdentity(files) : undefined;
+    if (canonicalJson(intended ?? null) !== canonicalJson(manifest.pairs?.[pairKey(entry.evalId, entry.experimentId)]?.workspaceFiles ?? null)) {
+      throw new Error("workspaceFiles: manifest payload identity mismatch");
+    }
   }
   const recorded = options.resumeRunId ? store.getRun(options.resumeRunId) : null;
   if (options.resumeRunId && !recorded) throw new Error(`cannot resume unknown run ${options.resumeRunId}`);
@@ -583,7 +603,7 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
                 loadedEval,
                 experiment,
                 entry,
-                { runId, attemptId, attemptTimeoutMs, persisted, environment: manifest.pairs?.[pairKey(entry.evalId, entry.experimentId)] },
+                { runId, attemptId, attemptTimeoutMs, persisted, environment: manifest.pairs?.[pairKey(entry.evalId, entry.experimentId)], workspaceFiles: workspaceFilesByExperiment.get(entry.experimentId) },
                 treatments,
                 containerAgents.get(experiment.id),
               );
@@ -653,6 +673,7 @@ interface AttemptArgs {
   attemptTimeoutMs: number;
   persisted: NewAttempt;
   environment?: PairEnvironment;
+  workspaceFiles?: WorkspaceFiles;
 }
 
 async function runHostAttemptV3(
@@ -749,6 +770,7 @@ async function runContainerAttemptV3(
   const { artifacts } = options;
   const { runId, attemptId, persisted } = args;
   const runtime = experiment.runtime;
+  const workspaceFiles = args.workspaceFiles;
   const environment = args.environment;
   let egress: { networkName: string; sidecar: EgressSidecar } | undefined;
   let mcpIp: string | undefined;
@@ -859,7 +881,7 @@ async function runContainerAttemptV3(
 
       const paths = await inStage("environment", () => artifacts.prepareAttempt(runId, attemptId));
       const fixtureDir = sourceDir;
-      const container = await inStage("environment", () => createAttemptContainer({
+      const container = await inStage("environment", () => (options.createContainer ?? createAttemptContainer)({
         image,
         env,
         resultsDir: paths.attemptDir,
@@ -890,6 +912,7 @@ async function runContainerAttemptV3(
               return (await mustExec(container, ["git", "rev-parse", "HEAD"])).stdout.trim();
             });
           } else {
+            if (workspaceFiles) throw new StageFailure("environment", new Error("workspaceFiles: git baseline is required"));
             (options.log ?? console.log)(
               `attempt ${attemptId}: git is unavailable in image "${image}" — diff.patch will be empty ` +
                 `(the agent-runtime image ships git; only bare test images lack it)`,
@@ -912,8 +935,13 @@ async function runContainerAttemptV3(
           };
           // Treatment config files (e.g. the MCP treatment's vendor config).
           await inStage("environment", async () => {
-            for (const [path, content] of Object.entries(agentAdapter.setupFiles(promptCtx))) {
-              await container.writeFile(path, content);
+            const setup = agentAdapter.setupFiles(promptCtx);
+            if (workspaceFiles) {
+              const evidence = await stageWorkspaceFiles(container, workspaceFiles, environment!.workspaceFiles!, setup, options.signal);
+              await artifacts.writeWorkspaceFilesEvidence(runId, attemptId, evidence);
+              if (options.signal?.aborted) throw new Error("workspaceFiles: staging cancelled");
+            } else {
+              for (const [path, content] of Object.entries(setup)) await container.writeFile(path, content);
             }
           });
           command = agentAdapter.command(promptCtx);
@@ -921,6 +949,7 @@ async function runContainerAttemptV3(
           command = runtime.command as string[];
         }
 
+        if (workspaceFiles && options.signal?.aborted) throw new StageFailure("environment", new Error("workspaceFiles: staging cancelled"));
         persisted.agentStartedAt = Date.now();
         let agentResult: Awaited<ReturnType<typeof container.execInWorkspace>>;
         try {
@@ -1043,7 +1072,10 @@ async function runContainerAttemptV3(
       try { await egress.sidecar.teardown(); } catch { containerTeardownFailure = "egress sidecar teardown failed"; }
       try { await removeRunNetwork(egress.networkName); } catch { containerTeardownFailure = "egress network teardown failed"; }
     }
-    if (sourceDir) await rm(sourceDir, { recursive: true, force: true });
+    if (sourceDir) {
+      try { await rm(sourceDir, { recursive: true, force: true }); }
+      catch { containerTeardownFailure = [containerTeardownFailure, "workspace source cleanup failed"].filter(Boolean).join("; "); }
+    }
   }
 
   // Explicit teardown accounting: the attempt keeps its status and result;

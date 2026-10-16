@@ -23,6 +23,7 @@ import {
 import { sanitizeServerName, startMcpProxy, type McpUpstream } from "../src/isolation/mcp-proxy/server.ts";
 import { discoverEvals } from "../src/evals/discovery.ts";
 import type { LoadedExperiment } from "../src/experiments/types.ts";
+import { buildRunManifest } from "../src/manifest.ts";
 import { planRun } from "../src/plan.ts";
 import { executeRunV3 } from "../src/runner/execute.ts";
 import { ArtifactsStore } from "../src/store/artifacts.ts";
@@ -308,8 +309,8 @@ describe("mcp wiring helpers", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Runner fail-fast (no docker needed: the credentials check throws before any
-// container work). Successor to the deleted pack-loader/orchestrator guard:
+// Runner fail-fast (inject a locally built manifest to bypass image discovery
+// for offline isolation; the credentials check throws before container work). Successor to the deleted pack-loader/orchestrator guard:
 // the shape validation of auth blocks now lives with the runtime authors
 // (TypeScript types), while the credentials-file preflight lives in the v3
 // runner's treatment setup.
@@ -362,6 +363,7 @@ describe("mcp auth: v3 runner fail-fast", () => {
         executeRunV3({
           evals,
           experiments,
+          manifest: buildRunManifest({ evals, experiments }),
           plan: planRun(evals, experiments.map((entry) => entry.experiment), 1),
           store,
           artifacts,

@@ -17,6 +17,9 @@ export type {
   LoadedEval,
 } from "./evals/types.ts";
 export { EVAL_SUITES } from "./evals/types.ts";
+export { defineWorkspaceFiles, WORKSPACE_FILES_LIMITS } from "./runtime/workspace-files.ts";
+export type { WorkspaceFile, WorkspaceFiles, WorkspaceFilesIdentity } from "./runtime/workspace-files.ts";
+export type { WorkspaceFilesEvidence } from "./isolation/workspace-files.ts";
 export { defineExperiment } from "./experiments/types.ts";
 export type { AgentSpec, Experiment, LoadedExperiment, Runtime, RuntimeCapacity } from "./experiments/types.ts";
 export type {

@@ -53,6 +53,17 @@ agent files remain; outside/absolute symlinks are removed. Reconstruct dependenc
 and build outputs from recorded manifests, source, transcript and diff. Git history
 is excluded; the agent diff uses the recorded baseline commit before export.
 
+## Attempt-local workspace files
+
+`runtime.workspaceFiles` is a bounded, versioned declaration for non-secret
+files and absence assertions in a fresh container workspace. It preserves the
+normal adapter, login, configuration, telemetry and lifecycle; it is **not** a
+`runtime.command` hook. Both comparison arms must explicitly exempt
+`"workspaceFiles"` through `treatmentPolicyFields` if availability is their
+treatment. Host/scripted overlays are rejected. See the [full API, ordering,
+limits, identity and evidence contract](workspace-files.md) and
+[local consumer handoff](workspace-files-handoff.md).
+
 ## Identity v4
 
 v4 fingerprints the defining module and recursively resolved literal local
@@ -78,7 +89,7 @@ Every pair records the exact resolved image ID, egress policy, web policy, PATH
 treatment, MCP configuration digest and lifecycle budgets. Execution uses those
 resolved values, including the image ID instead of its mutable tag. Experiment
 comparison checks per-eval images and budgets. A runtime may explicitly declare
-`treatmentPolicyFields` for egress/webPolicy/pathTreatment/mcp/promptPreamble; all group members
+`treatmentPolicyFields` for egress/webPolicy/pathTreatment/mcp/promptPreamble/workspaceFiles; all group members
 must declare the same exemptions. Images and budgets cannot be exempted.
 
 v3 manifests and historical reports remain readable with their original semantics.

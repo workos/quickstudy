@@ -239,6 +239,12 @@ That is the entire authoring loop: edit the prompt or scorer, `run`,
 `report`. Iterating on a real agent's single attempt from a source checkout:
 `bun scripts/dev-attempt.ts --eval <id> --experiment <id>`.
 
+For a container agent experiment that offers skills or documents, use
+[`runtime.workspaceFiles`](workspace-files.md), not edits to the shared `local/`
+fixture or a wrapper `runtime.command`. The declaration binds bytes to identity
+and preserves the adapter. A no-files control can require the reserved tree to
+be absent. This feature is not supported by the host Echo smoke above.
+
 ## Composing shared check helpers
 
 A benchmark repository grows shared check helpers next to its evals — a

@@ -22,6 +22,7 @@
 
 import { cp, mkdir, writeFile, lstat, realpath, readlink } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import type { WorkspaceFilesEvidence } from "../isolation/workspace-files.ts";
 import type { TranscriptEvent } from "../adapters/types.ts";
 
 /** Dependency directories never copied into an exported workspace. */
@@ -71,6 +72,12 @@ export class ArtifactsStore {
     const paths = this.paths(runId, attemptId);
     await mkdir(paths.attemptDir, { recursive: true });
     return paths;
+  }
+
+  /** Placement evidence, distinct from intended identity; proves no model use. */
+  async writeWorkspaceFilesEvidence(runId: string, attemptId: string, evidence: WorkspaceFilesEvidence): Promise<void> {
+    const paths = await this.prepareAttempt(runId, attemptId);
+    await writeFile(join(paths.attemptDir, "workspace-files.json"), `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
   }
 
   async writeTranscript(runId: string, attemptId: string, events: TranscriptEvent[]): Promise<string> {
