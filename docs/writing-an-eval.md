@@ -40,7 +40,7 @@ frontmatter schema is deliberately tiny and closed:
 | Key          | Required | Meaning                                                                                                                                                     |
 | ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`         | yes      | Must equal the directory name (prevents silent aliasing).                                                                                                   |
-| `suite`      | yes      | `benchmark` or `regression` (the headline suites the leaderboard counts), `smoke` (evals every arm solves; run, never counted), or `other`.                     |
+| `suite`      | yes      | `benchmark` or `regression` (the headline suites the leaderboard counts), `smoke` (evals every arm solves; run, never counted), `discovery` (vendor-neutral tasks with a categorical outcome; recorded, never counted), or `other`. |
 | `product`    | no       | Free-form product label, used for reporting.                                                                                                                |
 | `framework`  | no       | The app stack the task targets (`nextjs`, `rails`, `django`, …); container runtimes and `--framework` filters read it.                                      |
 | `frameworks` | no       | List of framework tokens; expands the directory into one eval per framework (id `<dirname>-<framework>`). See [Framework variants](#framework-variants-frameworks). |
