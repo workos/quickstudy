@@ -471,20 +471,19 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
       if (scorer.identity) scorerIdentities[loaded.metadata.id] = scorer.identity;
     }
     // Each agent's endpoint overrides set on the host: the non-secret base
-    // URLs join the pair environment (identity), their hosts join the egress
-    // allowlist — but only under the proxy, where the allowlist is live and an
-    // IP-literal gateway is refused loudly by design; without it the list is
-    // inert and an IP-literal override must not stop the run.
+    // URLs join the pair environment (identity); their hosts reach the egress
+    // allowlist only for pairs the proxy fronts (pair resolution decides: the
+    // run flag on and the runtime not opted out), where the list is live and
+    // an IP-literal gateway is refused loudly by design. Elsewhere the list
+    // is inert and an IP-literal override must not stop the run.
     const overridesByExperiment = new Map([...containerAgents].map(([id, adapter]) => [id, collectOptionalHostEnv([adapter])] as const));
     const adapterEndpoints = Object.fromEntries([...overridesByExperiment].flatMap(([id, overrides]) => {
       const endpoints = Object.fromEntries(Object.entries(overrides).filter(([name]) => !isSecretEnvName(name)));
       return Object.keys(endpoints).length > 0 ? [[id, endpoints] as const] : [];
     }));
     const pairs = resolvePairEnvironments({ ...options, workspaceFilesByExperiment, images, imageTags: imageTagsByPair,
-      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, [
-        ...(adapter.egressHosts ?? []),
-        ...(options.egressProxy ? endpointHosts(overridesByExperiment.get(id) ?? {}) : []),
-      ]])),
+      adapterHosts: Object.fromEntries([...containerAgents].map(([id, adapter]) => [id, [...(adapter.egressHosts ?? [])]])),
+      adapterEndpointHosts: Object.fromEntries([...overridesByExperiment].map(([id, overrides]) => [id, endpointHosts(overrides)])),
       adapterEndpoints,
       budgets: { ...options.budgets, agentMs: options.attemptTimeoutMs ?? options.budgets?.agentMs ?? attemptTimeoutMs },
       mcpHashes: Object.fromEntries([...declaredByExperiment].map(([id, servers]) => [id, hashString(canonicalJson(servers))])),

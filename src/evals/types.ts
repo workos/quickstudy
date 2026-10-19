@@ -8,10 +8,12 @@
 /**
  * Closed set of eval suites. `benchmark` and `regression` are the headline
  * suites: the leaderboard aggregates count both. `smoke` holds evals every
- * arm solves — run to catch breakage, never moving the headline. `other` is
- * anything else outside the headline.
+ * arm solves — run to catch breakage, never moving the headline. `discovery`
+ * holds vendor-neutral tasks whose outcome is categorical (which product was
+ * chosen) rather than pass/fail; recorded per attempt, never headline.
+ * `other` is anything else outside the headline.
  */
-export const EVAL_SUITES = ["benchmark", "regression", "smoke", "other"] as const;
+export const EVAL_SUITES = ["benchmark", "regression", "smoke", "other", "discovery"] as const;
 export type EvalSuite = (typeof EVAL_SUITES)[number];
 
 /** The suites whose attempts count toward the leaderboard aggregates. */

@@ -3,8 +3,8 @@
  * the same attempts and (banded) pairs as the rest of the report.
  *
  * Every number is restricted to headline-suite attempts (HEADLINE_SUITES:
- * benchmark and regression), so smoke and other suites never move the
- * headline row. Telemetry follows the report's rule: sums and means cover
+ * benchmark and regression), so the smoke, discovery and other suites never
+ * move the headline row. Telemetry follows the report's rule: sums and means cover
  * only attempts that reported a value, and are null (never 0) when none did.
  */
 import { isHeadlineSuite } from "../evals/types.ts";

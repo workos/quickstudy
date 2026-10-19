@@ -58,7 +58,10 @@ There is no registry and no special dialect: the scorer is ordinary code, and
 every eval is self-contained. The `suite` field tiers evals: **benchmark**
 and **regression** are the headline suites the leaderboard counts; **smoke**
 holds evals every arm solves, run to catch breakage but never moving the
-headline; **other** is anything else outside it. A framework-expanded eval can
+headline; **discovery** holds vendor-neutral tasks whose outcome is
+categorical (which product the agent chose) rather than pass/fail — each
+attempt records its outcome and is never graded into the headline; **other**
+is anything else outside it. A framework-expanded eval can
 retier one variant with `suites:` (a saturated port goes to smoke while the
 rest stay benchmark). [Writing an eval](./writing-an-eval.md) is the
 authoring reference.
@@ -243,8 +246,8 @@ the matrix banner and the text report's `suspect:` lines display.
 Each entry in `report.json`'s `experiments[]` carries an `aggregate`: one
 leaderboard row per experiment, rendered as a table above the matrix and in
 the text report. Every number in it except SDK recall counts **headline-suite
-attempts only** (benchmark and regression), so smoke and other evals never
-move the ranking. That is why the row's `cost_usd` can be lower than the
+attempts only** (benchmark and regression), so smoke, discovery and other
+evals never move the ranking. That is why the row's `cost_usd` can be lower than the
 run-wide `telemetry.cost_usd`. Its columns and their denominators:
 
 - **Gate**: whether the all-eval pass rate is at or above the report's
@@ -345,7 +348,7 @@ exactly what a negative control should do.
 | **pair**            | One eval × experiment combination — the report's row unit (a *cell* in the UI).              |
 | **run**             | One `quickstudy run`, all pairs and trials, under one run id.                                |
 | **manifest**        | The immutable content-addressed identity record written before attempts start.               |
-| **suite**           | Eval tier: `benchmark` and `regression` (headline), `smoke` (saturated, outside it), `other`. |
+| **suite**           | Eval tier: `benchmark` and `regression` (headline), `smoke` (saturated, outside it), `discovery` (categorical, vendor-neutral, outside it), `other`. |
 
 Next: [Getting started](./getting-started.md) ·
 [Writing an eval](./writing-an-eval.md)

@@ -55,6 +55,15 @@ export interface Runtime extends RuntimeCapabilities {
    * declare the same fields. Source/config identity still changes per attempt.
    */
   treatmentPolicyFields?: Array<"egress" | "webPolicy" | "pathTreatment" | "mcp" | "promptPreamble" | "workspaceFiles">;
+  /**
+   * Whether this experiment's attempts go through the run's egress proxy.
+   * "open" skips the proxy sidecar and network for these attempts even when
+   * the run was started with --egress-proxy, so an arm that must reach the
+   * open internet can share a run with proxied arms. The choice is recorded
+   * in each pair environment (identity); exempt it in a comparison group with
+   * treatmentPolicyFields: ["egress"]. Container runtimes only.
+   */
+  egress?: "proxied" | "open";
   /** Attempt-local non-secret files, staged without replacing the normal adapter. */
   workspaceFiles?: WorkspaceFiles;
   /** Container image tag (container runtimes; alternative to `containerImage`). */
@@ -126,6 +135,11 @@ export function defineExperiment(experiment: Experiment): Experiment {
   }
   if (experiment.comparisonGroup !== undefined && experiment.comparisonGroup.trim() === "") {
     throw new Error(`defineExperiment: experiment "${experiment.id}" comparisonGroup must not be empty`);
+  }
+  if (kind === "host" && experiment.runtime.egress === "open") {
+    throw new Error(
+      `defineExperiment: experiment "${experiment.id}" runtime.egress "open" is only meaningful on container runtimes`,
+    );
   }
   validateWorkspaceFilesRuntime(experiment.runtime);
   return deepFreeze(experiment);

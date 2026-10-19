@@ -110,7 +110,7 @@ describe("eval discovery", () => {
   test("suite outside the closed set is rejected", () => {
     const root = makeRoot();
     writeEval(root, "bad-suite", { frontmatter: "---\nid: bad-suite\nsuite: production\n---\n" });
-    expect(() => discoverEvals(root)).toThrow(/"suite" must be one of: benchmark, regression, smoke, other/);
+    expect(() => discoverEvals(root)).toThrow(/"suite" must be one of: benchmark, regression, smoke, other, discovery/);
   });
 
   test("an empty task body is rejected", () => {
@@ -279,13 +279,27 @@ describe("eval discovery", () => {
     writeEval(unknown, "multi", {
       frontmatter: `---\nid: multi\nsuite: benchmark\nframeworks:\n  - alpha\nsuites:\n  alpha: headline\n---\n`,
     });
-    expect(() => discoverEvals(unknown)).toThrow(/"suites" entry for "alpha" must be one of: benchmark, regression, smoke, other/);
+    expect(() => discoverEvals(unknown)).toThrow(/"suites" entry for "alpha" must be one of: benchmark, regression, smoke, other, discovery/);
   });
 
   test("smoke is a suite of its own", () => {
     const root = makeRoot();
     writeEval(root, "saturated", { frontmatter: `---\nid: saturated\nsuite: smoke\n---\n` });
     expect(discoverEvals(root)[0]!.metadata.suite).toBe("smoke");
+  });
+
+  test("the discovery suite validates on its own and through a suites: retier", () => {
+    const root = makeRoot();
+    writeEval(root, "which-vendor", { frontmatter: `---\nid: which-vendor\nsuite: discovery\n---\n` });
+    expect(discoverEvals(root)[0]!.metadata.suite).toBe("discovery");
+    const expanded = makeRoot();
+    writeEval(expanded, "multi", {
+      frontmatter: `---\nid: multi\nsuite: discovery\nframeworks:\n  - alpha\n  - beta\nsuites:\n  beta: benchmark\n---\n`,
+    });
+    expect(discoverEvals(expanded).map((e) => [e.metadata.id, e.metadata.suite])).toEqual([
+      ["multi-alpha", "discovery"],
+      ["multi-beta", "benchmark"],
+    ]);
   });
 
   test("importEvalScorer validates the default export is a function", async () => {

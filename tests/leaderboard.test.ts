@@ -151,6 +151,28 @@ describe("aggregate", () => {
     expect(x.pass_rate_all).toBe(0.5);
   });
 
+  test("discovery-suite attempts never count toward the aggregate", () => {
+    // A passing discovery pair moves nothing: not attempts, not the pass rate,
+    // not the discriminating subset.
+    const base = aggregateOf([pass("split", "x"), fail("split", "x"), fail("split", "y")], "x");
+    const withDiscovery = aggregateOf(
+      [
+        pass("split", "x"), fail("split", "x"), fail("split", "y"),
+        pass("which-vendor", "x", { suite: "discovery" }), pass("which-vendor", "x", { suite: "discovery" }),
+      ],
+      "x",
+    );
+    expect(withDiscovery).toEqual(base);
+    expect(withDiscovery.attempts).toBe(2);
+    expect(withDiscovery.pass_rate_all).toBe(0.5);
+    // A discovery-only run yields the empty headline aggregate (null, never NaN).
+    const only = aggregateOf([pass("which-vendor", "x", { suite: "discovery" })], "x");
+    expect(only.attempts).toBe(0);
+    expect(only.pass_rate_all).toBeNull();
+    expect(only.pass_rate_discriminating).toBeNull();
+    expect(only.cost_per_pass_usd).toBeNull();
+  });
+
   test("a solved-by-all eval is excluded from the discriminating subset", () => {
     const attempts = [
       pass("solved", "x"), pass("solved", "x"), pass("solved", "y"),

@@ -29,14 +29,26 @@ import { useAsync } from "../hooks.ts";
 import { links, navigate } from "../router.ts";
 
 const ALL = "all";
-const SUITES = ["benchmark", "regression", "smoke", "other"] as const;
+/** Every suite the view can show, in tab order; a suite missing here is invisible even when the report carries it. */
+export const SUITES = ["benchmark", "regression", "smoke", "other", "discovery"] as const;
 
 /** What a non-benchmark suite badge says on hover. */
-const SUITE_TITLES: Record<string, string> = {
+export const SUITE_TITLES: Record<string, string> = {
   regression: "Narrow checks on known failure modes; a headline suite alongside benchmark.",
   smoke: "Evals every arm solves; run to catch breakage, never in the headline scores.",
   other: "Outside the headline scores.",
+  discovery: "Vendor-neutral tasks; outcomes are recorded per vendor, never graded into the headline scores.",
 };
+
+/** The suites the run has attempts in, in tab order — the toggle renders one tab each (none when only one). */
+export function availableSuites(attempts: readonly Pick<DataAttempt, "suite">[]): string[] {
+  return SUITES.filter((candidate) => attempts.some((attempt) => attempt.suite === candidate));
+}
+
+/** The suite to show: the selection when the run has it, else the first available (benchmark for an empty run). */
+export function resolveSuite(available: readonly string[], selected: string): string {
+  return available.includes(selected) ? selected : (available[0] ?? "benchmark");
+}
 
 interface MatrixProps {
   meta: DataMeta;
@@ -341,11 +353,8 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
   // Regression evals never blend into the benchmark grid — the toggle only
   // renders when the run has more than one suite.
   const [selectedSuite, setSuite] = useState<string>("benchmark");
-  const availableSuites = run.status === "ready"
-    ? SUITES.filter((candidate) => run.value.attempts.some((attempt) => attempt.suite === candidate))
-    : [];
-  const suite = availableSuites.includes(selectedSuite as typeof SUITES[number])
-    ? selectedSuite : (availableSuites[0] ?? "benchmark");
+  const suites = run.status === "ready" ? availableSuites(run.value.attempts) : [];
+  const suite = resolveSuite(suites, selectedSuite);
   const [filters, setFilters] = useState<Filters>({ product: ALL, framework: ALL, topic: ALL });
 
   useEffect(() => {
@@ -379,7 +388,6 @@ export function Matrix({ meta, runId, cell }: MatrixProps): ReactNode {
 
   const value = run.value;
   const summary = value.run;
-  const suites = SUITES.filter((candidate) => value.attempts.some((attempt) => attempt.suite === candidate));
   const products = [...new Set(value.attempts.map((attempt) => metadataOf(value, attempt.eval_id).product).filter((p): p is string => p !== undefined))].sort();
   const frameworkValues = [...new Set(value.attempts.map((attempt) => metadataOf(value, attempt.eval_id).framework).filter((f): f is string => f !== undefined))].sort();
   const topics = [...new Set(value.attempts.flatMap((attempt) => metadataOf(value, attempt.eval_id).topics ?? []))].sort();
