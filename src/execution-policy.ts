@@ -53,6 +53,13 @@ export function resolvePairEnvironments(options: {
   images?: Record<string, RuntimeImageIdentity>;
   egressProxy?: boolean;
   adapterHosts?: Record<string, readonly string[]>;
+  /**
+   * Per experiment: the hosts of the agent's endpoint overrides. They join
+   * the allowlist only for pairs the proxy fronts, where the list is live and
+   * an IP-literal gateway is refused loudly by design; an open or unproxied
+   * pair never carries them, so such a gateway cannot stop the run.
+   */
+  adapterEndpointHosts?: Record<string, readonly string[]>;
   /** Per experiment: the agent's non-secret endpoint overrides (see PairEnvironment.endpoints). */
   adapterEndpoints?: Record<string, Record<string, string>>;
   budgets?: Partial<LifecycleBudgets>;
@@ -73,18 +80,23 @@ export function resolvePairEnvironments(options: {
         options.imageTags?.[pairKey(loaded.metadata.id, experiment.id)] ??
         runtime.image ??
         runtime.containerImage?.(loaded.metadata);
+      // With the flag, every container is proxied unless its runtime opts
+      // out with egress: "open". No runtime hosts means only the adapter's
+      // provider endpoints are permitted. An open pair still records the
+      // runtime and adapter hosts (inert) so identity holds if the run flag
+      // flips, but endpoint-override hosts join only a live allowlist: the
+      // proxy refuses IP literals, and an IP-literal gateway on an arm the
+      // proxy never fronts must not stop the run.
+      const proxied = runtime.kind === "container" && (options.egressProxy ?? false) && runtime.egress !== "open";
       pairs[pairKey(loaded.metadata.id, experiment.id)] = {
         ...(files ? { workspaceFiles: workspaceFilesIdentity(files) } : {}),
         image: tag ? (options.images?.[tag] ?? { tag, id: "unresolved", repoDigests: [] }) : null,
-        // With the flag, every container is proxied unless its runtime opts
-        // out with egress: "open". No runtime hosts means only the adapter's
-        // provider endpoints are permitted; an open pair still records its
-        // allowlist (inert) so identity holds if the run flag flips.
         egress: {
-          proxy: runtime.kind === "container" && (options.egressProxy ?? false) && runtime.egress !== "open",
+          proxy: proxied,
           allowlist: composeAllowlistFromHosts([
             ...(runtime.egressHosts?.(loaded.metadata) ?? []),
             ...(options.adapterHosts?.[experiment.id] ?? []),
+            ...(proxied ? (options.adapterEndpointHosts?.[experiment.id] ?? []) : []),
           ]),
         },
         webPolicy: runtime.webPolicy?.() ?? "native-web-blocked",

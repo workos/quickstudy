@@ -289,6 +289,27 @@ describe("per-experiment egress opt-out (runtime.egress)", () => {
     expect(Object.values(pairs).map((pair) => pair.egress.proxy)).toEqual([false, false, false]);
   });
 
+  test("endpoint-override hosts join only proxied pairs: an IP-literal gateway on an open arm never stops the run", () => {
+    const evals = helloLocal();
+    const experiments = [arm("open", "open"), arm("proxied", "proxied")];
+    const adapterEndpointHosts = { open: ["10.0.0.5"], proxied: ["gateway.example"] };
+    const pairs = resolvePairEnvironments({ evals, experiments, egressProxy: true, adapterEndpointHosts });
+    const open = pairs[pairKey("hello-local", "open")]!.egress;
+    const proxied = pairs[pairKey("hello-local", "proxied")]!.egress;
+    expect(open.proxy).toBe(false);
+    expect(open.allowlist).not.toContain("10.0.0.5");
+    expect(proxied.proxy).toBe(true);
+    expect(proxied.allowlist).toContain("gateway.example");
+    // An open pair's allowlist is the same with or without the run flag; a proxied pair's only carries the gateway when live.
+    const unproxied = resolvePairEnvironments({ evals, experiments, egressProxy: false, adapterEndpointHosts });
+    expect(unproxied[pairKey("hello-local", "open")]!.egress.allowlist).toEqual(open.allowlist);
+    expect(unproxied[pairKey("hello-local", "proxied")]!.egress.allowlist).not.toContain("gateway.example");
+    // A proxied arm behind an IP-literal gateway is still refused loudly: the proxy cannot front it.
+    expect(() =>
+      resolvePairEnvironments({ evals, experiments, egressProxy: true, adapterEndpointHosts: { proxied: ["10.0.0.5"] } }),
+    ).toThrow(/IP literals are refused by the proxy/);
+  });
+
   test("members differing only in egress compare allowed when both exempt it, withheld when one (or neither) does", () => {
     const evals = helloLocal();
     const compare = (experiments: LoadedExperiment[]) => {
