@@ -107,9 +107,17 @@ Unsupported streams remain unavailable/null; zero means an applicable stream was
 observed with no matching event. Offered surfaces and observed cross-arm use remain
 separate in reports and diagnosis.
 
-`--egress-proxy` applies to every container. The allowlist is the pair's runtime
+`--egress-proxy` applies to every container unless its experiment opts out with
+`runtime.egress: "open"`, which skips the proxy for that experiment's attempts
+inside a proxied run (no internal network, no sidecar, no proxy environment), so
+an arm that must reach the open internet can share a run with proxied arms. The
+choice is recorded in each pair environment, so it is identity; exempt it in a
+comparison group with `treatmentPolicyFields: ["egress"]`. An open pair still
+records its (inert) allowlist, writes no denials log and reports egress as not
+instrumented. Container runtimes only: `defineExperiment` rejects `"open"` on a
+host runtime. The allowlist is the pair's runtime
 hosts plus that adapter's provider endpoints; absent runtime hosts means provider
-endpoints only. Each attempt has its own internal network and egress proxy. A
+endpoints only. Each proxied attempt has its own internal network and egress proxy. A
 shared MCP auth proxy has its own infrastructure traffic, which is not attributed
 to agent attempts. Egress denial artifacts contain sanitized host identifiers and
 attempt IDs. An empty log means zero observed denials; an absent log means unavailable

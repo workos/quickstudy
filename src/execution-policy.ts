@@ -76,10 +76,12 @@ export function resolvePairEnvironments(options: {
       pairs[pairKey(loaded.metadata.id, experiment.id)] = {
         ...(files ? { workspaceFiles: workspaceFilesIdentity(files) } : {}),
         image: tag ? (options.images?.[tag] ?? { tag, id: "unresolved", repoDigests: [] }) : null,
-        // With the flag, every container is proxied. No runtime hosts means
-        // only the adapter's provider endpoints are permitted.
+        // With the flag, every container is proxied unless its runtime opts
+        // out with egress: "open". No runtime hosts means only the adapter's
+        // provider endpoints are permitted; an open pair still records its
+        // allowlist (inert) so identity holds if the run flag flips.
         egress: {
-          proxy: runtime.kind === "container" && (options.egressProxy ?? false),
+          proxy: runtime.kind === "container" && (options.egressProxy ?? false) && runtime.egress !== "open",
           allowlist: composeAllowlistFromHosts([
             ...(runtime.egressHosts?.(loaded.metadata) ?? []),
             ...(options.adapterHosts?.[experiment.id] ?? []),

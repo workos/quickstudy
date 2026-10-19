@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverEvals } from "../src/evals/discovery.ts";
+import { pairKey, resolvePairEnvironments } from "../src/execution-policy.ts";
 import { discoverExperiments } from "../src/experiments/discovery.ts";
 import { compareGroups } from "../src/experiments/groups.ts";
 import { defineExperiment, type Experiment, type LoadedExperiment } from "../src/experiments/types.ts";
@@ -94,6 +95,18 @@ describe("defineExperiment", () => {
     expect(() =>
       defineExperiment({ id: "x", agent: { adapter: "echo" }, runtime: { kind: "host" }, comparisonGroup: " " }),
     ).toThrow(/comparisonGroup/);
+  });
+
+  test('runtime.egress "open" is refused on a host runtime (never proxied) and accepted on a container', () => {
+    expect(() =>
+      defineExperiment({ id: "open-host", agent: { adapter: "echo" }, runtime: { kind: "host", egress: "open" } }),
+    ).toThrow(/runtime\.egress "open" is only meaningful on container runtimes/);
+    const open = defineExperiment({
+      id: "open-box",
+      agent: { adapter: "x" },
+      runtime: { kind: "container", image: "img:1", egress: "open" },
+    });
+    expect(open.runtime.egress).toBe("open");
   });
 });
 
@@ -222,5 +235,77 @@ describe("comparison groups (withhold-and-diff)", () => {
     expect(attempts.map((attempt) => attempt.experimentId).sort()).toEqual(["w-a", "w-b"]);
     expect(attempts.every((attempt) => attempt.result?.passed)).toBe(true);
     store.close();
+  });
+});
+
+describe("per-experiment egress opt-out (runtime.egress)", () => {
+  const FIXTURE_EVALS = join(import.meta.dir, "__fixtures__", "evals");
+  const agent = { adapter: "claude", provider: "anthropic", model: "model-a", reasoning: "high" };
+  const helloLocal = () => discoverEvals(FIXTURE_EVALS).filter((loaded) => loaded.metadata.id === "hello-local");
+
+  /** A container arm that differs from its siblings only in how it reaches the network. */
+  function arm(id: string, egress: "proxied" | "open" | undefined, fields: Array<"egress"> = []): LoadedExperiment {
+    return loadedExperiment({
+      id,
+      comparisonGroup: "e",
+      treatment: egress === "open" ? "open-web" : "proxied-web",
+      agent,
+      runtime: {
+        kind: "container",
+        image: "img:1",
+        command: ["true"],
+        egressHosts: () => ["docs.example"],
+        ...(egress !== undefined ? { egress } : {}),
+        ...(fields.length > 0 ? { treatmentPolicyFields: fields } : {}),
+      },
+    });
+  }
+
+  test("under --egress-proxy an open runtime resolves proxy: false while its siblings resolve true; every pair records the allowlist", () => {
+    const evals = helloLocal();
+    const pairs = resolvePairEnvironments({
+      evals,
+      experiments: [arm("open", "open"), arm("proxied", "proxied"), arm("unset", undefined)],
+      egressProxy: true,
+    });
+    const open = pairs[pairKey("hello-local", "open")]!.egress;
+    const proxied = pairs[pairKey("hello-local", "proxied")]!.egress;
+    const unset = pairs[pairKey("hello-local", "unset")]!.egress;
+    expect(open.proxy).toBe(false);
+    expect(proxied.proxy).toBe(true);
+    expect(unset.proxy).toBe(true);
+    // The open pair's allowlist is inert but still recorded, so identity holds if the run flag flips.
+    expect(open.allowlist.length).toBeGreaterThan(0);
+    expect(open.allowlist).toEqual(proxied.allowlist);
+  });
+
+  test("without the run flag no pair is proxied, whatever the runtime declares", () => {
+    const evals = helloLocal();
+    const pairs = resolvePairEnvironments({
+      evals,
+      experiments: [arm("open", "open"), arm("proxied", "proxied"), arm("unset", undefined)],
+      egressProxy: false,
+    });
+    expect(Object.values(pairs).map((pair) => pair.egress.proxy)).toEqual([false, false, false]);
+  });
+
+  test("members differing only in egress compare allowed when both exempt it, withheld when one (or neither) does", () => {
+    const evals = helloLocal();
+    const compare = (experiments: LoadedExperiment[]) => {
+      const pairs = resolvePairEnvironments({ evals, experiments, egressProxy: true });
+      const manifest = buildRunManifest({ evals, experiments, pairs });
+      return compareGroups(experiments.map((entry) => entry.experiment), manifest)[0]!;
+    };
+    const both = compare([arm("open", "open", ["egress"]), arm("proxied", "proxied", ["egress"])]);
+    expect(both.comparison).toBe("allowed");
+    expect(both.details).toEqual([]);
+
+    const one = compare([arm("open", "open", ["egress"]), arm("proxied", "proxied")]);
+    expect(one.comparison).toBe("withheld");
+    expect(one.details.join("\n")).toContain("egress");
+
+    const neither = compare([arm("open", "open"), arm("proxied", "proxied")]);
+    expect(neither.comparison).toBe("withheld");
+    expect(neither.details.join("\n")).toContain("egress");
   });
 });
