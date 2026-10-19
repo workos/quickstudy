@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/workos/quickstudy/compare/v0.11.0...v0.12.0) (2026-10-19)
+
+
+### Features
+
+* discovery suite and per-experiment egress opt-out ([#41](https://github.com/workos/quickstudy/issues/41)) ([007c5ad](https://github.com/workos/quickstudy/commit/007c5ad095e3fa74a9249e82d634c516e788de5e))
+
 ## [0.11.0](https://github.com/workos/quickstudy/compare/v0.10.0...v0.11.0) (2026-10-16)
 
 
