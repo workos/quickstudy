@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/workos/quickstudy/compare/v0.12.0...v0.12.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* pin agent runtime to patched Node 22.23.4 ([#43](https://github.com/workos/quickstudy/issues/43)) ([e992796](https://github.com/workos/quickstudy/commit/e992796ed8b3c563eb4f68d6a4cbe18c8ab04224))
+
 ## [0.12.0](https://github.com/workos/quickstudy/compare/v0.11.0...v0.12.0) (2026-10-19)
 
 
