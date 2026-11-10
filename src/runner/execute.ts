@@ -172,6 +172,16 @@ async function inStage<T>(kind: ErrorKind, work: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * What makes one key probe distinct from another: the adapter and the host
+ * variables it reads. Same adapter, same variables, same values — one probe
+ * covers every experiment that shares them; a different `agent.endpoint`
+ * names different variables and gets its own.
+ */
+export function keyProbeIdentity(adapter: Pick<ContainerAgentAdapter, "name" | "requiredHostEnv" | "optionalHostEnv">): string {
+  return [adapter.name, [...adapter.requiredHostEnv].join(","), [...(adapter.optionalHostEnv ?? [])].join(",")].join("|");
+}
+
 function defaultHostAdapters(): Record<string, AgentAdapter> {
   const echo = new EchoAdapter();
   const oracle = new OracleAdapter();
@@ -180,8 +190,20 @@ function defaultHostAdapters(): Record<string, AgentAdapter> {
 
 function defaultContainerAdapters(): Record<string, (agent: AgentSpec) => ContainerAgentAdapter> {
   return {
-    claude: (agent) => new ClaudeCodeAdapter("claude", { model: agent.model, reasoning: agent.reasoning }),
-    codex: (agent) => new CodexAdapter("codex", { model: agent.model, reasoning: agent.reasoning }),
+    claude: (agent) =>
+      new ClaudeCodeAdapter("claude", {
+        model: agent.model,
+        reasoning: agent.reasoning,
+        provider: agent.provider,
+        endpoint: agent.endpoint,
+      }),
+    codex: (agent) =>
+      new CodexAdapter("codex", {
+        model: agent.model,
+        reasoning: agent.reasoning,
+        provider: agent.provider,
+        endpoint: agent.endpoint,
+      }),
     oracle: () => new OracleContainerAdapter(),
   };
 }
@@ -405,19 +427,24 @@ export async function executeRunV3(options: ExecuteRunV3Options): Promise<RunSum
 
   // Live key preflight: a key that is present but rejected by the provider
   // would burn a container per attempt just to 401 inside it. Probe each
-  // unique agent's endpoint once — before any docker, sidecar, or run-row
-  // work — and say plainly whether the run starts. Adapters without a probe
-  // (tests, custom adapters) skip it.
-  const probesByAdapter = new Map<string, ProviderKeyProbe>();
+  // unique endpoint once — before any docker, sidecar, or run-row work —
+  // and say plainly whether the run starts. "Unique" is the adapter plus
+  // the host variables it reads (keyProbeIdentity): two codex arms routed
+  // by different `agent.endpoint` variables are two probes, while arms
+  // sharing the vendor defaults stay one. Adapters without a probe (tests,
+  // custom adapters) skip it.
+  const probesByEndpoint = new Map<string, ProviderKeyProbe>();
   for (const adapter of containerAgents.values()) {
-    if (adapter.keyProbe === undefined || probesByAdapter.has(adapter.name)) continue;
-    probesByAdapter.set(adapter.name, {
+    if (adapter.keyProbe === undefined) continue;
+    const identity = keyProbeIdentity(adapter);
+    if (probesByEndpoint.has(identity)) continue;
+    probesByEndpoint.set(identity, {
       name: adapter.name,
       envVars: adapter.requiredHostEnv,
       ...adapter.keyProbe({ ...collectProviderKeys([adapter]), ...collectOptionalHostEnv([adapter]) }),
     });
   }
-  await validateProviderKeys([...probesByAdapter.values()], { log });
+  await validateProviderKeys([...probesByEndpoint.values()], { log });
   log(`run starting: ${plan.length} attempt(s)`);
 
   // Resolve image digests and agent CLI versions BEFORE building the manifest:

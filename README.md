@@ -149,6 +149,50 @@ export OPENAI_CUSTOM_HEADERS='cf-aig-metadata: {"app":"my-evals"}'
 Leave every override unset and both agents run vendor-direct against
 api.anthropic.com and api.openai.com — nothing is rendered, nothing changes.
 
+#### Per-experiment routing (`agent.endpoint`)
+
+The variables above are per adapter: every codex arm in a run reads the
+same `OPENAI_BASE_URL`. To route ONE experiment elsewhere — a second
+gateway, or a gateway's unified OpenAI-compatible API serving a third-party
+model — the experiment names the host variables that carry its key, base
+URL and headers, and the host sets them next to the vendor ones:
+
+```ts
+export default defineExperiment({
+  id: "acme-gateway-mcp",
+  comparisonGroup: "acme-gateway",
+  treatment: "mcp",
+  agent: {
+    adapter: "codex",
+    provider: "acme",                 // recorded as-is in the manifest and report
+    model: "acme/coder-9",            // whatever the endpoint expects in `model`
+    reasoning: "high",
+    endpoint: {
+      apiKeyEnv: "GATEWAY_API_TOKEN",       // secret-named: redacted like a key
+      baseUrlEnv: "GATEWAY_BASE_URL",       // not secret-named: identity + egress
+      headersEnv: "GATEWAY_HEADERS",        // secret-named; `Name: Value` lines
+      wireApi: "chat",                      // codex only: chat completions
+    },
+  },
+  runtime: ...,
+});
+```
+
+Unset fields keep the vendor defaults. The names must be POSIX env var
+names; `defineExperiment` refuses a key or headers variable that is not
+secret-named, a base URL variable that is, and `wireApi` on anything but
+codex. The forwarded values travel exactly as before: the key as a provider
+key, the base URL into the pair environment and the egress allowlist, the
+headers redacted from artifacts. Codex renders them into its custom model
+provider (`env_key`, `base_url`, `http_headers`, `wire_api`); Claude Code
+only reads the vendor names, so the adapter re-exports custom ones under
+them inside the container before exec — a custom key as both
+`ANTHROPIC_API_KEY` (`x-api-key`) and `ANTHROPIC_AUTH_TOKEN`
+(`Authorization: Bearer`), since a provider-native Anthropic route reads
+the former and a gateway's unified API the latter. The preflight key probe
+follows the experiment's variables, so a bad gateway token still fails
+before any container starts.
+
 ## How it works
 
 Every attempt is one point in a 2-D plan:
