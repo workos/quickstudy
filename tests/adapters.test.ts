@@ -327,7 +327,8 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
     const command = adapter.command(ctx);
     expect(command.slice(0, 2)).toEqual(["sh", "-c"]);
     const shim = command[2] as string;
-    expect(shim).toContain('export ANTHROPIC_API_KEY="$GATEWAY_API_TOKEN"');
+    // The custom key goes out as both x-api-key and a bearer: gateways differ on which they read.
+    expect(shim).toContain('export ANTHROPIC_API_KEY="$GATEWAY_API_TOKEN"; export ANTHROPIC_AUTH_TOKEN="$GATEWAY_API_TOKEN"');
     expect(shim).toContain('[ -n "${GATEWAY_BASE_URL:-}" ] && export ANTHROPIC_BASE_URL="$GATEWAY_BASE_URL"');
     expect(shim).toContain('[ -n "${GATEWAY_HEADERS:-}" ] && export ANTHROPIC_CUSTOM_HEADERS="$GATEWAY_HEADERS"');
     expect(shim.endsWith('exec "$@"')).toBeTrue();
@@ -337,7 +338,7 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
     // Only the names that differ are re-exported.
     const keyOnly = new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "GATEWAY_API_TOKEN" } });
     const keyShim = keyOnly.command(ctxFor("none"))[2] as string;
-    expect(keyShim).toBe('export ANTHROPIC_API_KEY="$GATEWAY_API_TOKEN"; exec "$@"');
+    expect(keyShim).toBe('export ANTHROPIC_API_KEY="$GATEWAY_API_TOKEN"; export ANTHROPIC_AUTH_TOKEN="$GATEWAY_API_TOKEN"; exec "$@"');
   });
 
   test("both adapters refuse an endpoint the harness cannot route safely", () => {

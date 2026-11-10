@@ -186,9 +186,12 @@ key, the base URL into the pair environment and the egress allowlist, the
 headers redacted from artifacts. Codex renders them into its custom model
 provider (`env_key`, `base_url`, `http_headers`, `wire_api`); Claude Code
 only reads the vendor names, so the adapter re-exports custom ones under
-them inside the container before exec. The preflight key probe follows the
-experiment's variables, so a bad gateway token still fails before any
-container starts.
+them inside the container before exec — a custom key as both
+`ANTHROPIC_API_KEY` (`x-api-key`) and `ANTHROPIC_AUTH_TOKEN`
+(`Authorization: Bearer`), since a provider-native Anthropic route reads
+the former and a gateway's unified API the latter. The preflight key probe
+follows the experiment's variables, so a bad gateway token still fails
+before any container starts.
 
 ## How it works
 

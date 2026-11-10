@@ -121,11 +121,20 @@ export class ClaudeCodeAdapter implements ContainerAgentAdapter {
    * differs from the vendor's — empty when nothing differs, so the default
    * invocation stays the bare `claude` argv. Optional variables are only
    * re-exported when set: an empty ANTHROPIC_BASE_URL would be a base URL.
+   *
+   * A custom key variable is presented both ways Claude Code can send a
+   * credential — `x-api-key` (ANTHROPIC_API_KEY) and `Authorization:
+   * Bearer` (ANTHROPIC_AUTH_TOKEN) — because gateways differ on which one
+   * they read: a provider-native Anthropic route takes the key header, a
+   * unified API takes the bearer. The vendor's own route only ever sees
+   * the vendor variable, so this changes nothing for it.
    */
   private endpointExports(): string[] {
     const lines: string[] = [];
     const { apiKeyEnv, baseUrlEnv, headersEnv } = this.endpoint;
-    if (apiKeyEnv !== CLAUDE_DEFAULT_ENDPOINT.apiKeyEnv) lines.push(`export ANTHROPIC_API_KEY="$${apiKeyEnv}"`);
+    if (apiKeyEnv !== CLAUDE_DEFAULT_ENDPOINT.apiKeyEnv) {
+      lines.push(`export ANTHROPIC_API_KEY="$${apiKeyEnv}"`, `export ANTHROPIC_AUTH_TOKEN="$${apiKeyEnv}"`);
+    }
     if (baseUrlEnv !== CLAUDE_DEFAULT_ENDPOINT.baseUrlEnv) {
       lines.push(`[ -n "\${${baseUrlEnv}:-}" ] && export ANTHROPIC_BASE_URL="$${baseUrlEnv}"`);
     }
