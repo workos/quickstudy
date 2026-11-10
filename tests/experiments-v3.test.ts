@@ -97,6 +97,39 @@ describe("defineExperiment", () => {
     ).toThrow(/comparisonGroup/);
   });
 
+  test("agent.endpoint names host variables by role: secret-named key and headers, plain base URL, wireApi for codex only", () => {
+    const make = (adapter: string, endpoint: Record<string, unknown>) =>
+      defineExperiment({
+        id: "x",
+        agent: { adapter, model: "m", reasoning: "r", endpoint },
+        runtime: { kind: "container", image: "img:1" },
+      });
+    const ok = make("codex", {
+      apiKeyEnv: "GATEWAY_API_TOKEN",
+      baseUrlEnv: "GATEWAY_BASE_URL",
+      headersEnv: "GATEWAY_HEADERS",
+      wireApi: "chat",
+    });
+    expect(ok.agent.endpoint).toEqual({
+      apiKeyEnv: "GATEWAY_API_TOKEN",
+      baseUrlEnv: "GATEWAY_BASE_URL",
+      headersEnv: "GATEWAY_HEADERS",
+      wireApi: "chat",
+    });
+    expect(Object.isFrozen(ok.agent.endpoint)).toBeTrue();
+    // Partial specs keep the vendor defaults for the rest.
+    expect(make("claude", { baseUrlEnv: "GATEWAY_BASE_URL" }).agent.endpoint).toEqual({ baseUrlEnv: "GATEWAY_BASE_URL" });
+
+    expect(() => make("codex", { apiKeyEnv: "gateway-token" })).toThrow(/apiKeyEnv must be an env var name/);
+    expect(() => make("codex", { apiKeyEnv: "GATEWAY_AUTH" })).toThrow(/apiKeyEnv GATEWAY_AUTH must be secret-named/);
+    expect(() => make("codex", { headersEnv: "GATEWAY_EXTRA" })).toThrow(/headersEnv GATEWAY_EXTRA must be secret-named/);
+    expect(() => make("codex", { baseUrlEnv: "GATEWAY_TOKEN_URL" })).toThrow(/baseUrlEnv GATEWAY_TOKEN_URL must not be secret-named/);
+    expect(() => make("codex", { apiKeyEnv: "SAME_TOKEN", headersEnv: "SAME_TOKEN" })).toThrow(/both name SAME_TOKEN/);
+    expect(() => make("codex", { wireApi: "grpc" })).toThrow(/wireApi must be one of responses, chat/);
+    expect(() => make("claude", { wireApi: "chat" })).toThrow(/wireApi applies to the codex adapter only/);
+    expect(() => make("codex", { apiKeyEnv: 'X"; rm -rf /; echo "' })).toThrow(/must be an env var name/);
+  });
+
   test('runtime.egress "open" is refused on a host runtime (never proxied) and accepted on a container', () => {
     expect(() =>
       defineExperiment({ id: "open-host", agent: { adapter: "echo" }, runtime: { kind: "host", egress: "open" } }),

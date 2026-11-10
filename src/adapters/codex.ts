@@ -25,6 +25,8 @@
  * talks to api.openai.com — vendor-direct stays the default.
  */
 
+import { type ResolvedEndpoint, type WireApi, resolveEndpoint } from "../experiments/endpoint.ts";
+import type { AgentEndpointSpec } from "../experiments/types.ts";
 import type { McpServerConfig } from "../isolation/mcp.ts";
 import { endpointUrl, parseHeaderLines } from "../secrets.ts";
 import { parseCodexStream } from "./parse.ts";
@@ -40,13 +42,31 @@ export const CODEX_GATEWAY_PROVIDER = "quickstudy-gateway";
 const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1";
 
 /**
- * A custom model provider pointing at `baseUrl` (the Responses API, which
- * codex requires), carrying `headers` on every request, selected as the
- * default. Top-level keys must precede any table, so this block always
- * renders first in the file. JSON string escapes are valid TOML basic-string
- * escapes, which keeps header values such as JSON metadata intact.
+ * The vendor's env names and wire: what every codex experiment gets unless
+ * its `agent.endpoint` names something else (experiments/endpoint.ts).
  */
-function renderCodexProviderToml(baseUrl: string, headers: Readonly<Record<string, string>>): string {
+export const CODEX_DEFAULT_ENDPOINT: ResolvedEndpoint = {
+  apiKeyEnv: "OPENAI_API_KEY",
+  baseUrlEnv: "OPENAI_BASE_URL",
+  headersEnv: "OPENAI_CUSTOM_HEADERS",
+  wireApi: "responses",
+};
+
+/**
+ * A custom model provider pointing at `baseUrl`, speaking `wireApi` (the
+ * Responses API codex prefers, or chat completions for endpoints that only
+ * offer that), reading its key from `envKey`, carrying `headers` on every
+ * request, selected as the default. Top-level keys must precede any table,
+ * so this block always renders first in the file. JSON string escapes are
+ * valid TOML basic-string escapes, which keeps header values such as JSON
+ * metadata intact.
+ */
+function renderCodexProviderToml(
+  baseUrl: string,
+  headers: Readonly<Record<string, string>>,
+  envKey: string,
+  wireApi: WireApi,
+): string {
   const entries = Object.entries(headers);
   return [
     `model_provider = ${JSON.stringify(CODEX_GATEWAY_PROVIDER)}`,
@@ -54,8 +74,8 @@ function renderCodexProviderToml(baseUrl: string, headers: Readonly<Record<strin
     `[model_providers.${CODEX_GATEWAY_PROVIDER}]`,
     'name = "OpenAI (quickstudy endpoint overrides)"',
     `base_url = ${JSON.stringify(baseUrl)}`,
-    'env_key = "OPENAI_API_KEY"',
-    'wire_api = "responses"',
+    `env_key = ${JSON.stringify(envKey)}`,
+    `wire_api = ${JSON.stringify(wireApi)}`,
     ...(entries.length > 0
       ? [`http_headers = { ${entries.map(([name, value]) => `${JSON.stringify(name)} = ${JSON.stringify(value)}`).join(", ")} }`]
       : []),
@@ -81,17 +101,25 @@ export class CodexAdapter implements ContainerAgentAdapter {
   readonly name: string;
   readonly identity;
   readonly versionCommand = ["codex", "--version"] as const;
-  readonly requiredHostEnv = ["OPENAI_API_KEY"] as const;
   /**
-   * Endpoint overrides, forwarded only when set: OPENAI_BASE_URL (vendor
-   * default https://api.openai.com/v1) — e.g. Cloudflare AI Gateway's
-   * `/openai` endpoint, where the gateway token doubles as OPENAI_API_KEY —
-   * and OPENAI_CUSTOM_HEADERS (`Name: Value` lines) for whatever else the
+   * The env names this experiment's traffic is routed by: the vendor's
+   * (OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_CUSTOM_HEADERS) unless
+   * `agent.endpoint` named others — the way two codex arms in one run reach
+   * two gateways, or one gateway's unified API serving a third-party model.
+   */
+  readonly endpoint: ResolvedEndpoint;
+  /** The key variable: required on the host, forwarded into the container. */
+  readonly requiredHostEnv: readonly string[];
+  /**
+   * Endpoint overrides, forwarded only when set: the base URL variable
+   * (vendor default https://api.openai.com/v1) — e.g. Cloudflare AI Gateway's
+   * `/openai` endpoint, where the gateway token doubles as the API key —
+   * and the headers variable (`Name: Value` lines) for whatever else the
    * endpoint wants on each request, such as `cf-aig-metadata`. Both are
    * rendered into config.toml by setupFiles (see the module comment); the
    * key probe follows them.
    */
-  readonly optionalHostEnv = ["OPENAI_BASE_URL", "OPENAI_CUSTOM_HEADERS"] as const;
+  readonly optionalHostEnv: readonly string[];
   /**
    * Egress-proxy allowlist (harness-default layer). Codex is reqwest-based;
    * reqwest honors HTTP_PROXY/HTTPS_PROXY env by default (system proxies) —
@@ -103,10 +131,16 @@ export class CodexAdapter implements ContainerAgentAdapter {
    */
   readonly egressHosts = ["api.openai.com", "auth.openai.com", "chatgpt.com", "*.chatgpt.com"] as const;
 
-  constructor(name = "codex", config: { model?: string; reasoning?: string } = {}) {
+  constructor(
+    name = "codex",
+    config: { model?: string; reasoning?: string; provider?: string; endpoint?: AgentEndpointSpec } = {},
+  ) {
     this.name = name;
+    this.endpoint = resolveEndpoint(name, CODEX_DEFAULT_ENDPOINT, config.endpoint);
+    this.requiredHostEnv = [this.endpoint.apiKeyEnv];
+    this.optionalHostEnv = [this.endpoint.baseUrlEnv, this.endpoint.headersEnv];
     this.identity = {
-      provider: "openai",
+      provider: config.provider ?? "openai",
       model: config.model ?? "UNPINNED",
       reasoning: config.reasoning ?? "UNPINNED",
       cliVersion: "unknown",
@@ -122,18 +156,30 @@ export class CodexAdapter implements ContainerAgentAdapter {
 
   keyProbe(env: Record<string, string>): { url: string; headers: Record<string, string> } {
     return {
-      url: endpointUrl(env["OPENAI_BASE_URL"], OPENAI_DEFAULT_BASE_URL, "models"),
-      headers: { ...parseHeaderLines(env["OPENAI_CUSTOM_HEADERS"]), Authorization: `Bearer ${env["OPENAI_API_KEY"] ?? ""}` },
+      url: endpointUrl(env[this.endpoint.baseUrlEnv], OPENAI_DEFAULT_BASE_URL, "models"),
+      headers: {
+        ...parseHeaderLines(env[this.endpoint.headersEnv]),
+        Authorization: `Bearer ${env[this.endpoint.apiKeyEnv] ?? ""}`,
+      },
     };
   }
 
   setupFiles(ctx: ContainerAttemptContext): Record<string, string> {
     const sections: string[] = [];
-    const baseUrl = ctx.overrides?.["OPENAI_BASE_URL"];
-    const headers = parseHeaderLines(ctx.overrides?.["OPENAI_CUSTOM_HEADERS"]);
-    // Either override needs the custom provider; headers alone keep the vendor endpoint.
-    if (baseUrl !== undefined || Object.keys(headers).length > 0) {
-      sections.push(renderCodexProviderToml(baseUrl ?? OPENAI_DEFAULT_BASE_URL, headers));
+    const baseUrl = ctx.overrides?.[this.endpoint.baseUrlEnv];
+    const headers = parseHeaderLines(ctx.overrides?.[this.endpoint.headersEnv]);
+    // Either override needs the custom provider (headers alone keep the
+    // vendor endpoint); so does a non-vendor key variable or wire, which the
+    // built-in provider cannot express.
+    const custom =
+      baseUrl !== undefined ||
+      Object.keys(headers).length > 0 ||
+      this.endpoint.apiKeyEnv !== CODEX_DEFAULT_ENDPOINT.apiKeyEnv ||
+      this.endpoint.wireApi !== CODEX_DEFAULT_ENDPOINT.wireApi;
+    if (custom) {
+      sections.push(
+        renderCodexProviderToml(baseUrl ?? OPENAI_DEFAULT_BASE_URL, headers, this.endpoint.apiKeyEnv, this.endpoint.wireApi),
+      );
     }
     if (ctx.mcpServers !== undefined) sections.push(renderCodexMcpToml(ctx.mcpServers));
     if (sections.length === 0) return {};
@@ -145,9 +191,11 @@ export class CodexAdapter implements ContainerAgentAdapter {
       "sh",
       "-c",
       // codex 0.144+ ignores the OPENAI_API_KEY env var; mint auth.json from
-      // it in-container. Login chatter is silenced so stdout stays pure JSONL
-      // for parseStream; the key reaches login via stdin, never argv.
-      'printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null 2>&1 && exec "$@"',
+      // the key variable in-container. Login chatter is silenced so stdout
+      // stays pure JSONL for parseStream; the key reaches login via stdin,
+      // never argv. The variable NAME is interpolated — resolveEndpoint
+      // admits only POSIX env names, so nothing else can reach the shell.
+      `printenv ${this.endpoint.apiKeyEnv} | codex login --with-api-key >/dev/null 2>&1 && exec "$@"`,
       "sh",
       "codex",
       "exec",

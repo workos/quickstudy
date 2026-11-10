@@ -180,8 +180,20 @@ function defaultHostAdapters(): Record<string, AgentAdapter> {
 
 function defaultContainerAdapters(): Record<string, (agent: AgentSpec) => ContainerAgentAdapter> {
   return {
-    claude: (agent) => new ClaudeCodeAdapter("claude", { model: agent.model, reasoning: agent.reasoning }),
-    codex: (agent) => new CodexAdapter("codex", { model: agent.model, reasoning: agent.reasoning }),
+    claude: (agent) =>
+      new ClaudeCodeAdapter("claude", {
+        model: agent.model,
+        reasoning: agent.reasoning,
+        provider: agent.provider,
+        endpoint: agent.endpoint,
+      }),
+    codex: (agent) =>
+      new CodexAdapter("codex", {
+        model: agent.model,
+        reasoning: agent.reasoning,
+        provider: agent.provider,
+        endpoint: agent.endpoint,
+      }),
     oracle: () => new OracleContainerAdapter(),
   };
 }

@@ -8,6 +8,7 @@
 
 import type { EvalMetadata } from "../evals/types.ts";
 import { validateWorkspaceFilesRuntime, type WorkspaceFiles } from "../runtime/workspace-files.ts";
+import { validateAgentEndpoint } from "./endpoint.ts";
 import type { SurfaceUsageConfig } from "../surface-usage.ts";
 import type { RuntimeCapabilities } from "../runtime/types.ts";
 
@@ -15,6 +16,36 @@ import type { RuntimeCapabilities } from "../runtime/types.ts";
 export interface RuntimeCapacity {
   key: string;
   limit: number;
+}
+
+/**
+ * Where an agent's LLM traffic goes, named by HOST ENV VARS rather than
+ * values: the experiment says which variables carry its API key, base URL
+ * and extra headers, and the host supplies them at run time. Every field is
+ * optional; unset ones keep the adapter's vendor defaults (`OPENAI_API_KEY`,
+ * `OPENAI_BASE_URL`, … for codex; `ANTHROPIC_*` for claude).
+ *
+ * This is what lets two experiments of one adapter reach different
+ * endpoints in the same run — one vendor-direct, one through a gateway's
+ * unified API serving a third-party model — without the adapter growing a
+ * vendor table. The values stay secrets or identity exactly as before: the
+ * key variable must be secret-named (`isSecretEnvName`), the base-URL
+ * variable must not be (its value joins the pair environment and the
+ * egress allowlist), and the headers variable is redacted like a key.
+ */
+export interface AgentEndpointSpec {
+  /** Host env var holding the API key the CLI authenticates with. Secret-named. */
+  apiKeyEnv?: string;
+  /** Host env var holding the base URL override. Non-secret name; forwarded only when set. */
+  baseUrlEnv?: string;
+  /** Host env var holding `Name: Value` header lines. Secret-named; forwarded only when set. */
+  headersEnv?: string;
+  /**
+   * codex only: the custom provider's wire protocol. `responses` (default)
+   * is codex's native Responses API; `chat` is OpenAI chat completions, the
+   * shape most OpenAI-compatible gateways and third-party models accept.
+   */
+  wireApi?: "responses" | "chat";
 }
 
 /** Which agent executes the attempt, plus the identity fields recorded in the manifest. */
@@ -25,6 +56,8 @@ export interface AgentSpec {
   model?: string;
   reasoning?: string;
   cliVersion?: string;
+  /** Endpoint routing by host env var name; see AgentEndpointSpec. Hashed into identity like every other field. */
+  endpoint?: AgentEndpointSpec;
 }
 
 /**
@@ -142,5 +175,10 @@ export function defineExperiment(experiment: Experiment): Experiment {
     );
   }
   validateWorkspaceFilesRuntime(experiment.runtime);
+  try {
+    validateAgentEndpoint(experiment.agent.endpoint, experiment.agent.adapter);
+  } catch (err) {
+    throw new Error(`defineExperiment: experiment "${experiment.id}" ${err instanceof Error ? err.message : String(err)}`);
+  }
   return deepFreeze(experiment);
 }

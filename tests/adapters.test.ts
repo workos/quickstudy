@@ -253,3 +253,96 @@ describe("endpoint overrides (LLM gateway routing)", () => {
     expect(adapter.setupFiles({ ...ctxFor("none"), overrides: { ANTHROPIC_BASE_URL: base } })).toEqual({});
   });
 });
+
+describe("per-experiment endpoint routing (agent.endpoint)", () => {
+  const endpoint = {
+    apiKeyEnv: "GATEWAY_API_TOKEN",
+    baseUrlEnv: "GATEWAY_BASE_URL",
+    headersEnv: "GATEWAY_HEADERS",
+  } as const;
+  const base = "https://gateway.example/v1/acct/ai/v1";
+
+  test("codex: the experiment's variables replace the vendor's for the host, the probe and the login shim", () => {
+    const adapter = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "high", provider: "acme", endpoint: { ...endpoint, wireApi: "chat" } });
+    expect(adapter.endpoint).toEqual({ ...endpoint, wireApi: "chat" });
+    expect(adapter.requiredHostEnv).toEqual(["GATEWAY_API_TOKEN"]);
+    expect(adapter.optionalHostEnv).toEqual(["GATEWAY_BASE_URL", "GATEWAY_HEADERS"]);
+    expect(adapter.identity.provider).toBe("acme");
+
+    // The probe reads the experiment's variables; the vendor's are ignored.
+    const probe = adapter.keyProbe({
+      OPENAI_API_KEY: "vendor",
+      OPENAI_BASE_URL: "https://vendor.example",
+      GATEWAY_API_TOKEN: "gw",
+      GATEWAY_BASE_URL: base,
+      GATEWAY_HEADERS: "cf-aig-gateway-id: evals",
+    });
+    expect(probe.url).toBe(`${base}/models`);
+    expect(probe.headers).toEqual({ "cf-aig-gateway-id": "evals", Authorization: "Bearer gw" });
+
+    // The shim pipes the experiment's key variable into login — by name, never value.
+    const command = adapter.command(ctxFor("none"));
+    expect(command[2]).toContain("printenv GATEWAY_API_TOKEN | codex login --with-api-key");
+    expect(command[2]).not.toContain("OPENAI_API_KEY");
+  });
+
+  test("codex: the custom provider renders the experiment's key variable and wire, from the overrides it named", () => {
+    const adapter = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "high", endpoint: { ...endpoint, wireApi: "chat" } });
+    const files = adapter.setupFiles({
+      ...ctxFor("none"),
+      overrides: { GATEWAY_BASE_URL: base, GATEWAY_HEADERS: "cf-aig-gateway-id: evals", OPENAI_BASE_URL: "https://ignored.example" },
+    });
+    const toml = files[CODEX_CONFIG_PATH] as string;
+    expect(toml).toContain(`base_url = ${JSON.stringify(base)}`);
+    expect(toml).toContain('env_key = "GATEWAY_API_TOKEN"');
+    expect(toml).toContain('wire_api = "chat"');
+    expect(toml).toContain('http_headers = { "cf-aig-gateway-id" = "evals" }');
+    expect(toml).not.toContain("ignored.example");
+
+    // A custom key variable or wire alone still needs the provider: the built-in one cannot express either.
+    const keyOnly = new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "GATEWAY_API_TOKEN" } });
+    const keyToml = keyOnly.setupFiles(ctxFor("none"))[CODEX_CONFIG_PATH] as string;
+    expect(keyToml).toContain('env_key = "GATEWAY_API_TOKEN"');
+    expect(keyToml).toContain('base_url = "https://api.openai.com/v1"');
+    expect(keyToml).toContain('wire_api = "responses"');
+    const chatOnly = new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { wireApi: "chat" } });
+    expect(chatOnly.setupFiles(ctxFor("none"))[CODEX_CONFIG_PATH]).toContain('wire_api = "chat"');
+
+    // Vendor defaults with nothing set render nothing, exactly as before.
+    expect(new CodexAdapter("codex", { model: "m", reasoning: "r" }).setupFiles(ctxFor("none"))).toEqual({});
+  });
+
+  test("claude: custom variables are re-exported under the vendor names by a shim; the default argv is untouched", () => {
+    const plain = new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r" });
+    expect(plain.command(ctxFor("none"))[0]).toBe("claude");
+
+    const adapter = new ClaudeCodeAdapter("claude", { model: "acme/coder-9", reasoning: "high", provider: "acme", endpoint });
+    expect(adapter.requiredHostEnv).toEqual(["GATEWAY_API_TOKEN"]);
+    expect(adapter.optionalHostEnv).toEqual(["GATEWAY_BASE_URL", "GATEWAY_HEADERS"]);
+    expect(adapter.identity.provider).toBe("acme");
+    expect(adapter.keyProbe({ GATEWAY_API_TOKEN: "gw", GATEWAY_BASE_URL: base }).url).toBe(`${base}/v1/models`);
+    expect(adapter.keyProbe({ GATEWAY_API_TOKEN: "gw" }).headers["x-api-key"]).toBe("gw");
+
+    const ctx = ctxFor("mcp");
+    const command = adapter.command(ctx);
+    expect(command.slice(0, 2)).toEqual(["sh", "-c"]);
+    const shim = command[2] as string;
+    expect(shim).toContain('export ANTHROPIC_API_KEY="$GATEWAY_API_TOKEN"');
+    expect(shim).toContain('[ -n "${GATEWAY_BASE_URL:-}" ] && export ANTHROPIC_BASE_URL="$GATEWAY_BASE_URL"');
+    expect(shim).toContain('[ -n "${GATEWAY_HEADERS:-}" ] && export ANTHROPIC_CUSTOM_HEADERS="$GATEWAY_HEADERS"');
+    expect(shim.endsWith('exec "$@"')).toBeTrue();
+    // The argv after the shim is the plain invocation, prompt byte-identical.
+    expect(command.slice(3)).toEqual(["sh", ...plain.command(ctx).map((arg) => (arg === "m" ? "acme/coder-9" : arg === "r" ? "high" : arg))]);
+
+    // Only the names that differ are re-exported.
+    const keyOnly = new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "GATEWAY_API_TOKEN" } });
+    const keyShim = keyOnly.command(ctxFor("none"))[2] as string;
+    expect(keyShim).toBe('export ANTHROPIC_API_KEY="$GATEWAY_API_TOKEN"; exec "$@"');
+  });
+
+  test("both adapters refuse an endpoint the harness cannot route safely", () => {
+    expect(() => new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "lower" } })).toThrow(/env var name/);
+    expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { wireApi: "chat" } })).toThrow(/codex adapter only/);
+    expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { baseUrlEnv: "GATEWAY_SECRET_URL" } })).toThrow(/must not be secret-named/);
+  });
+});
