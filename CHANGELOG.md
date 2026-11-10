@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/workos/quickstudy/compare/v0.12.1...v0.13.0) (2026-11-10)
+
+
+### Features
+
+* **adapters:** per-experiment endpoint routing ([#45](https://github.com/workos/quickstudy/issues/45)) ([59a3a8e](https://github.com/workos/quickstudy/commit/59a3a8e3d2dcbf04a7d1e04ed40b5ab667d228e0))
+
 ## [0.12.1](https://github.com/workos/quickstudy/compare/v0.12.0...v0.12.1) (2026-10-22)
 
 
