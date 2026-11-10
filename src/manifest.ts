@@ -19,7 +19,8 @@ import { sourceIdentity } from "./source-identity.ts";
 import { pairKey, resolvePairEnvironments, type PairEnvironment } from "./execution-policy.ts";
 import { canonicalJson } from "./identity-diff.ts";
 import type { EvalMetadata, LoadedEval } from "./evals/types.ts";
-import type { LoadedExperiment } from "./experiments/types.ts";
+import { endpointIdentity } from "./experiments/endpoint.ts";
+import type { AgentEndpointSpec, LoadedExperiment } from "./experiments/types.ts";
 import type { AttemptPlan } from "./plan.ts";
 
 export const MANIFEST_VERSION = "v4";
@@ -65,6 +66,17 @@ export interface EvalIdentity {
   solution: string | null;
 }
 
+/**
+ * The agent's `endpoint` component, spread into the recorded agent fields:
+ * `{ endpoint }` when the experiment declares one, nothing otherwise, so an
+ * experiment without one keeps the exact identity it had before the field
+ * existed. Shared with the comparison-group view so both read one shape.
+ */
+export function agentEndpointComponent(spec: AgentEndpointSpec | undefined): { endpoint?: Record<string, string> } {
+  const endpoint = endpointIdentity(spec);
+  return endpoint === undefined ? {} : { endpoint };
+}
+
 /** Per-experiment identity components — phase 2's comparison-group diff reads these. */
 export interface ExperimentIdentityComponents {
   /** Hash of the experiment's defining module source. */
@@ -76,6 +88,8 @@ export interface ExperimentIdentityComponents {
     model: string;
     reasoning: string;
     cliVersion: string;
+    /** The declared `agent.endpoint` (experiments/endpoint.ts endpointIdentity); absent when none. */
+    endpoint?: Record<string, string>;
   };
   /** Hash of the canonicalized runtime configuration. */
   runtime: string;
@@ -192,6 +206,7 @@ export function buildRunManifest(options: BuildRunManifestOptions): RunManifest 
         model: experiment.agent.model ?? "unspecified",
         reasoning: experiment.agent.reasoning ?? "unspecified",
         cliVersion: options.cliVersions?.[experiment.id] ?? experiment.agent.cliVersion ?? "unspecified",
+        ...agentEndpointComponent(experiment.agent.endpoint),
       },
       runtime: contentHash({
         kind: experiment.runtime.kind,

@@ -81,13 +81,58 @@ export function validateAgentEndpoint(spec: AgentEndpointSpec | undefined, adapt
   }
 }
 
-/** Validate `spec` for `adapter` and fill the unset fields from `defaults`. */
+const NAME_FIELDS = ["apiKeyEnv", "baseUrlEnv", "headersEnv"] as const;
+
+/**
+ * Validate `spec` for `adapter` and fill the unset fields from `defaults`.
+ * A declared name may not be one of the adapter's vendor variables for a
+ * different role: `apiKeyEnv: "ANTHROPIC_CUSTOM_HEADERS"` would make the
+ * shim read the header bundle as the key and then overwrite it, and the
+ * three resolved names must stay distinct for the same reason.
+ */
 export function resolveEndpoint(adapter: string, defaults: ResolvedEndpoint, spec: AgentEndpointSpec = {}): ResolvedEndpoint {
   validateAgentEndpoint(spec, adapter);
-  return {
+  for (const field of NAME_FIELDS) {
+    const value = spec[field];
+    if (value === undefined) continue;
+    for (const role of NAME_FIELDS) {
+      if (role !== field && value === defaults[role]) {
+        throw new InvalidAgentEndpointError(
+          `${field} ${value} is the ${adapter} adapter's ${role} variable; a name cannot serve two roles`,
+        );
+      }
+    }
+  }
+  const resolved: ResolvedEndpoint = {
     apiKeyEnv: spec.apiKeyEnv ?? defaults.apiKeyEnv,
     baseUrlEnv: spec.baseUrlEnv ?? defaults.baseUrlEnv,
     headersEnv: spec.headersEnv ?? defaults.headersEnv,
     wireApi: spec.wireApi ?? defaults.wireApi,
   };
+  const seen = new Map<string, string>();
+  for (const field of NAME_FIELDS) {
+    const clash = seen.get(resolved[field]);
+    if (clash !== undefined) {
+      throw new InvalidAgentEndpointError(`${field} and ${clash} both resolve to ${resolved[field]}`);
+    }
+    seen.set(resolved[field], field);
+  }
+  return resolved;
+}
+
+/**
+ * The endpoint as identity: the declared fields, verbatim, in a fixed key
+ * order — what the run manifest records and comparison groups diff. Two
+ * arms that differ only here are two configurations, never one treatment.
+ * `undefined` when nothing is declared, so an experiment without an
+ * endpoint keeps the identity it had before the field existed.
+ */
+export function endpointIdentity(spec: AgentEndpointSpec | undefined): Record<string, string> | undefined {
+  if (spec === undefined) return undefined;
+  const identity: Record<string, string> = {};
+  for (const field of [...NAME_FIELDS, "wireApi"] as const) {
+    const value = spec[field];
+    if (value !== undefined) identity[field] = value;
+  }
+  return Object.keys(identity).length === 0 ? undefined : identity;
 }

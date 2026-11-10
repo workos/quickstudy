@@ -24,7 +24,7 @@
 
 import { pairKey } from "../execution-policy.ts";
 import { diffIdentity, type IdentityMismatch } from "../identity-diff.ts";
-import type { RunManifest } from "../manifest.ts";
+import { agentEndpointComponent, type RunManifest } from "../manifest.ts";
 import type { Experiment } from "./types.ts";
 
 export interface ComparisonGroup {
@@ -62,6 +62,7 @@ function comparableView(experiment: Experiment, manifest: RunManifest): Record<s
       model: experiment.agent.model ?? "unspecified",
       reasoning: experiment.agent.reasoning ?? "unspecified",
       cliVersion: experiment.agent.cliVersion ?? "unspecified",
+      ...agentEndpointComponent(experiment.agent.endpoint),
     },
     image: components?.image ?? null,
     runtime: {

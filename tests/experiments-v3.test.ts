@@ -167,6 +167,38 @@ describe("comparison groups (withhold-and-diff)", () => {
     expect(groups[0]?.details).toEqual([]);
   });
 
+  test("a different agent.endpoint within a group is withheld: the manifest records it and the diff names the field", () => {
+    const endpoint = { apiKeyEnv: "GATEWAY_API_TOKEN", baseUrlEnv: "GATEWAY_BASE_URL", wireApi: "chat" as const };
+    const a = loadedExperiment({
+      id: "g-a",
+      comparisonGroup: "g",
+      treatment: "docs",
+      agent: { ...agent, endpoint },
+      runtime: { kind: "container", image: "img:1", command: ["true"], config: { docs: {} } },
+    });
+    const b = loadedExperiment({
+      id: "g-b",
+      comparisonGroup: "g",
+      treatment: "mcp",
+      agent: { ...agent, endpoint: { ...endpoint, wireApi: "responses" } },
+      runtime: { kind: "container", image: "img:1", command: ["true"], config: { mcp: {} } },
+    });
+    const manifest = manifestFor([a, b]);
+    // Recorded verbatim, in a fixed key order; an experiment without one records nothing new.
+    expect(manifest.experiments["g-a"]?.components.agent.endpoint).toEqual(endpoint);
+    expect(manifest.experiments["g-b"]?.components.agent.endpoint).toEqual({ ...endpoint, wireApi: "responses" });
+    const plain = loadedExperiment({ id: "g-c", agent, runtime: { kind: "container", image: "img:1", command: ["true"] } });
+    expect(manifestFor([plain]).experiments["g-c"]?.components.agent).not.toHaveProperty("endpoint");
+
+    const [group] = compareGroups([a.experiment, b.experiment], manifest);
+    expect(group?.comparison).toBe("withheld");
+    expect(group?.mismatches.map((mismatch) => mismatch.path)).toEqual(["identity.agent.endpoint.wireApi"]);
+
+    // Same endpoint on both arms compares like any other agreed component.
+    const same = loadedExperiment({ ...b.experiment, agent: { ...agent, endpoint } });
+    expect(compareGroups([a.experiment, same.experiment], manifestFor([a, same]))[0]?.comparison).toBe("allowed");
+  });
+
   test("a mismatched model within a group is withheld and the diff names the component", () => {
     const a = loadedExperiment({
       id: "g-a",

@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ClaudeCodeAdapter, CLAUDE_MCP_CONFIG_PATH } from "../src/adapters/claude.ts";
-import { CodexAdapter, CODEX_CONFIG_PATH, CODEX_GATEWAY_PROVIDER } from "../src/adapters/codex.ts";
+import { CodexAdapter, CODEX_CONFIG_PATH, CODEX_DEFAULT_ENDPOINT, CODEX_GATEWAY_PROVIDER } from "../src/adapters/codex.ts";
 import { parseClaudeStream, parseCodexStream, parseJsonlLines } from "../src/adapters/parse.ts";
 import type { ContainerAttemptContext } from "../src/adapters/types.ts";
+import { keyProbeIdentity } from "../src/runner/execute.ts";
 
 const STREAMS_DIR = join(import.meta.dir, "__fixtures__", "streams");
 
@@ -345,5 +346,35 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
     expect(() => new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "lower" } })).toThrow(/env var name/);
     expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { wireApi: "chat" } })).toThrow(/codex adapter only/);
     expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { baseUrlEnv: "GATEWAY_SECRET_URL" } })).toThrow(/must not be secret-named/);
+  });
+
+  test("a vendor variable cannot be borrowed for another role: the shim would read it, then overwrite it", () => {
+    // Swapped roles pass the name-shape checks (both secret-named) but would clobber each other.
+    expect(
+      () => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "ANTHROPIC_CUSTOM_HEADERS", headersEnv: "ANTHROPIC_API_KEY" } }),
+    ).toThrow(/apiKeyEnv ANTHROPIC_CUSTOM_HEADERS is the claude adapter's headersEnv variable/);
+    // One borrowed name with the other role left at its default collides on resolution.
+    expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "ANTHROPIC_CUSTOM_HEADERS" } })).toThrow(
+      /is the claude adapter's headersEnv variable/,
+    );
+    expect(() => new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { headersEnv: "OPENAI_API_KEY" } })).toThrow(
+      /headersEnv OPENAI_API_KEY is the codex adapter's apiKeyEnv variable/,
+    );
+    // The vendor name for its OWN role is simply the default, spelled out.
+    const explicit = new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "OPENAI_API_KEY" } });
+    expect(explicit.endpoint).toEqual(CODEX_DEFAULT_ENDPOINT);
+  });
+
+  test("key probes are deduplicated per endpoint, not per adapter", () => {
+    const vendor = new CodexAdapter("codex", { model: "m", reasoning: "r" });
+    const vendorAgain = new CodexAdapter("codex", { model: "m2", reasoning: "r" });
+    const gateway = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "r", endpoint });
+    const gatewayChat = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "r", endpoint: { ...endpoint, wireApi: "chat" } });
+    // Same variables ⇒ one probe; the wire does not change what the probe reads.
+    expect(keyProbeIdentity(vendor)).toBe(keyProbeIdentity(vendorAgain));
+    expect(keyProbeIdentity(gateway)).toBe(keyProbeIdentity(gatewayChat));
+    // Different variables ⇒ a probe each, so a rejected gateway token still stops the run.
+    expect(keyProbeIdentity(vendor)).not.toBe(keyProbeIdentity(gateway));
+    expect(keyProbeIdentity(new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r" }))).not.toBe(keyProbeIdentity(vendor));
   });
 });
