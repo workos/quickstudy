@@ -54,9 +54,8 @@ export const CODEX_DEFAULT_ENDPOINT: ResolvedEndpoint = {
 
 /**
  * A custom model provider pointing at `baseUrl`, speaking `wireApi` (the
- * Responses API codex prefers, or chat completions for endpoints that only
- * offer that), reading its key from `envKey`, carrying `headers` on every
- * request, selected as the default. Top-level keys must precede any table,
+ * Responses API — the only wire codex still accepts), reading its key from
+ * `envKey`, carrying `headers` on every request, selected as the default. Top-level keys must precede any table,
  * so this block always renders first in the file. JSON string escapes are
  * valid TOML basic-string escapes, which keeps header values such as JSON
  * metadata intact.
@@ -191,11 +190,15 @@ export class CodexAdapter implements ContainerAgentAdapter {
       "sh",
       "-c",
       // codex 0.144+ ignores the OPENAI_API_KEY env var; mint auth.json from
-      // the key variable in-container. Login chatter is silenced so stdout
-      // stays pure JSONL for parseStream; the key reaches login via stdin,
-      // never argv. The variable NAME is interpolated — resolveEndpoint
-      // admits only POSIX env names, so nothing else can reach the shell.
-      `printenv ${this.endpoint.apiKeyEnv} | codex login --with-api-key >/dev/null 2>&1 && exec "$@"`,
+      // the key variable in-container. Login's stdout is silenced so the
+      // attempt's stdout stays pure JSONL for parseStream; its stderr is
+      // kept, because login parses config.toml and a refused config (a
+      // wire codex dropped, a bad TOML value) would otherwise fail the
+      // attempt in milliseconds with an empty stderr. The key reaches login
+      // via stdin, never argv. The variable NAME is interpolated —
+      // resolveEndpoint admits only POSIX env names, so nothing else can
+      // reach the shell.
+      `printenv ${this.endpoint.apiKeyEnv} | codex login --with-api-key >/dev/null && exec "$@"`,
       "sh",
       "codex",
       "exec",

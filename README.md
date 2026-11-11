@@ -171,7 +171,7 @@ export default defineExperiment({
       apiKeyEnv: "GATEWAY_API_TOKEN",       // secret-named: redacted like a key
       baseUrlEnv: "GATEWAY_BASE_URL",       // not secret-named: identity + egress
       headersEnv: "GATEWAY_HEADERS",        // secret-named; `Name: Value` lines
-      wireApi: "chat",                      // codex only: chat completions
+      wireApi: "responses",                 // codex only; the only wire codex still accepts
     },
   },
   runtime: ...,
