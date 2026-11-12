@@ -143,6 +143,10 @@ describe("codex adapter", () => {
     expect(command.slice(0, 2)).toEqual(["sh", "-c"]);
     expect(command[2]).toContain("codex login --with-api-key");
     expect(command[2]).not.toContain("$OPENAI_API_KEY");
+    // Login's stdout is silenced (the attempt's stdout is JSONL); its stderr is not, so a
+    // refused config.toml is visible in the attempt's error instead of an empty stderr.
+    expect(command[2]).toContain("--with-api-key >/dev/null &&");
+    expect(command[2]).not.toContain("2>&1");
     expect(command.slice(4, 7)).toEqual(["codex", "exec", "--json"]);
     expect(command).toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(command[command.length - 1]).toBe(ctx.prompt);
@@ -264,8 +268,8 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
   const base = "https://gateway.example/v1/acct/ai/v1";
 
   test("codex: the experiment's variables replace the vendor's for the host, the probe and the login shim", () => {
-    const adapter = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "high", provider: "acme", endpoint: { ...endpoint, wireApi: "chat" } });
-    expect(adapter.endpoint).toEqual({ ...endpoint, wireApi: "chat" });
+    const adapter = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "high", provider: "acme", endpoint: { ...endpoint, wireApi: "responses" } });
+    expect(adapter.endpoint).toEqual({ ...endpoint, wireApi: "responses" });
     expect(adapter.requiredHostEnv).toEqual(["GATEWAY_API_TOKEN"]);
     expect(adapter.optionalHostEnv).toEqual(["GATEWAY_BASE_URL", "GATEWAY_HEADERS"]);
     expect(adapter.identity.provider).toBe("acme");
@@ -288,7 +292,7 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
   });
 
   test("codex: the custom provider renders the experiment's key variable and wire, from the overrides it named", () => {
-    const adapter = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "high", endpoint: { ...endpoint, wireApi: "chat" } });
+    const adapter = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "high", endpoint: { ...endpoint, wireApi: "responses" } });
     const files = adapter.setupFiles({
       ...ctxFor("none"),
       overrides: { GATEWAY_BASE_URL: base, GATEWAY_HEADERS: "cf-aig-gateway-id: evals", OPENAI_BASE_URL: "https://ignored.example" },
@@ -296,18 +300,20 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
     const toml = files[CODEX_CONFIG_PATH] as string;
     expect(toml).toContain(`base_url = ${JSON.stringify(base)}`);
     expect(toml).toContain('env_key = "GATEWAY_API_TOKEN"');
-    expect(toml).toContain('wire_api = "chat"');
+    expect(toml).toContain('wire_api = "responses"');
     expect(toml).toContain('http_headers = { "cf-aig-gateway-id" = "evals" }');
     expect(toml).not.toContain("ignored.example");
 
-    // A custom key variable or wire alone still needs the provider: the built-in one cannot express either.
+    // A custom key variable alone still needs the provider: the built-in one cannot express it.
     const keyOnly = new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "GATEWAY_API_TOKEN" } });
     const keyToml = keyOnly.setupFiles(ctxFor("none"))[CODEX_CONFIG_PATH] as string;
     expect(keyToml).toContain('env_key = "GATEWAY_API_TOKEN"');
     expect(keyToml).toContain('base_url = "https://api.openai.com/v1"');
     expect(keyToml).toContain('wire_api = "responses"');
-    const chatOnly = new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { wireApi: "chat" } });
-    expect(chatOnly.setupFiles(ctxFor("none"))[CODEX_CONFIG_PATH]).toContain('wire_api = "chat"');
+    // The wire codex dropped is refused up front, with the reason, instead of failing every attempt at login.
+    expect(() => new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { wireApi: "chat" as never } })).toThrow(
+      /wireApi must be "responses".*codex no longer accepts "chat"/,
+    );
 
     // Vendor defaults with nothing set render nothing, exactly as before.
     expect(new CodexAdapter("codex", { model: "m", reasoning: "r" }).setupFiles(ctxFor("none"))).toEqual({});
@@ -344,7 +350,7 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
 
   test("both adapters refuse an endpoint the harness cannot route safely", () => {
     expect(() => new CodexAdapter("codex", { model: "m", reasoning: "r", endpoint: { apiKeyEnv: "lower" } })).toThrow(/env var name/);
-    expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { wireApi: "chat" } })).toThrow(/codex adapter only/);
+    expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { wireApi: "responses" } })).toThrow(/codex adapter only/);
     expect(() => new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r", endpoint: { baseUrlEnv: "GATEWAY_SECRET_URL" } })).toThrow(/must not be secret-named/);
   });
 
@@ -369,10 +375,10 @@ describe("per-experiment endpoint routing (agent.endpoint)", () => {
     const vendor = new CodexAdapter("codex", { model: "m", reasoning: "r" });
     const vendorAgain = new CodexAdapter("codex", { model: "m2", reasoning: "r" });
     const gateway = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "r", endpoint });
-    const gatewayChat = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "r", endpoint: { ...endpoint, wireApi: "chat" } });
-    // Same variables ⇒ one probe; the wire does not change what the probe reads.
+    const gatewayExplicit = new CodexAdapter("codex", { model: "acme/coder-9", reasoning: "r", endpoint: { ...endpoint, wireApi: "responses" } });
+    // Same variables ⇒ one probe; the model and an explicit wire do not change what the probe reads.
     expect(keyProbeIdentity(vendor)).toBe(keyProbeIdentity(vendorAgain));
-    expect(keyProbeIdentity(gateway)).toBe(keyProbeIdentity(gatewayChat));
+    expect(keyProbeIdentity(gateway)).toBe(keyProbeIdentity(gatewayExplicit));
     // Different variables ⇒ a probe each, so a rejected gateway token still stops the run.
     expect(keyProbeIdentity(vendor)).not.toBe(keyProbeIdentity(gateway));
     expect(keyProbeIdentity(new ClaudeCodeAdapter("claude", { model: "m", reasoning: "r" }))).not.toBe(keyProbeIdentity(vendor));

@@ -12,7 +12,13 @@ import type { AgentEndpointSpec } from "./types.ts";
 /** POSIX env var names the shell shims interpolate verbatim; nothing else is accepted. */
 const ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
 
-export const WIRE_APIS = ["responses", "chat"] as const;
+/**
+ * The wire protocols codex's custom provider can speak. Codex dropped
+ * `chat` ("`wire_api = \"chat\"` is no longer supported", openai/codex
+ * discussion 7782) and refuses the config at startup, so only `responses`
+ * remains; the field stays so an experiment can state it explicitly.
+ */
+export const WIRE_APIS = ["responses"] as const;
 export type WireApi = (typeof WIRE_APIS)[number];
 
 /** An adapter's endpoint with every field decided. */
@@ -73,7 +79,10 @@ export function validateAgentEndpoint(spec: AgentEndpointSpec | undefined, adapt
   }
   if (spec.wireApi !== undefined) {
     if (!(WIRE_APIS as readonly string[]).includes(spec.wireApi)) {
-      throw new InvalidAgentEndpointError(`wireApi must be one of ${WIRE_APIS.join(", ")} (got ${JSON.stringify(spec.wireApi)})`);
+      throw new InvalidAgentEndpointError(
+        `wireApi must be ${WIRE_APIS.map((wire) => JSON.stringify(wire)).join(" or ")} (got ${JSON.stringify(spec.wireApi)}); ` +
+          `codex no longer accepts "chat" (openai/codex#7782)`,
+      );
     }
     if (adapter !== "codex") {
       throw new InvalidAgentEndpointError(`wireApi applies to the codex adapter only (this experiment uses "${adapter}")`);

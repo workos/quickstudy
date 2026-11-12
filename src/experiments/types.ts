@@ -41,11 +41,12 @@ export interface AgentEndpointSpec {
   /** Host env var holding `Name: Value` header lines. Secret-named; forwarded only when set. */
   headersEnv?: string;
   /**
-   * codex only: the custom provider's wire protocol. `responses` (default)
-   * is codex's native Responses API; `chat` is OpenAI chat completions, the
-   * shape most OpenAI-compatible gateways and third-party models accept.
+   * codex only: the custom provider's wire protocol. Only `responses`
+   * (codex's native Responses API, and the default) exists — codex refuses
+   * `chat` at startup since openai/codex#7782 — so the field only ever
+   * states the default explicitly.
    */
-  wireApi?: "responses" | "chat";
+  wireApi?: "responses";
 }
 
 /** Which agent executes the attempt, plus the identity fields recorded in the manifest. */

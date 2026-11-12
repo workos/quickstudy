@@ -108,13 +108,13 @@ describe("defineExperiment", () => {
       apiKeyEnv: "GATEWAY_API_TOKEN",
       baseUrlEnv: "GATEWAY_BASE_URL",
       headersEnv: "GATEWAY_HEADERS",
-      wireApi: "chat",
+      wireApi: "responses",
     });
     expect(ok.agent.endpoint).toEqual({
       apiKeyEnv: "GATEWAY_API_TOKEN",
       baseUrlEnv: "GATEWAY_BASE_URL",
       headersEnv: "GATEWAY_HEADERS",
-      wireApi: "chat",
+      wireApi: "responses",
     });
     expect(Object.isFrozen(ok.agent.endpoint)).toBeTrue();
     // Partial specs keep the vendor defaults for the rest.
@@ -125,8 +125,10 @@ describe("defineExperiment", () => {
     expect(() => make("codex", { headersEnv: "GATEWAY_EXTRA" })).toThrow(/headersEnv GATEWAY_EXTRA must be secret-named/);
     expect(() => make("codex", { baseUrlEnv: "GATEWAY_TOKEN_URL" })).toThrow(/baseUrlEnv GATEWAY_TOKEN_URL must not be secret-named/);
     expect(() => make("codex", { apiKeyEnv: "SAME_TOKEN", headersEnv: "SAME_TOKEN" })).toThrow(/both name SAME_TOKEN/);
-    expect(() => make("codex", { wireApi: "grpc" })).toThrow(/wireApi must be one of responses, chat/);
-    expect(() => make("claude", { wireApi: "chat" })).toThrow(/wireApi applies to the codex adapter only/);
+    expect(() => make("codex", { wireApi: "grpc" })).toThrow(/wireApi must be "responses"/);
+    // The wire codex dropped is refused with the reason, not silently rendered.
+    expect(() => make("codex", { wireApi: "chat" })).toThrow(/codex no longer accepts "chat"/);
+    expect(() => make("claude", { wireApi: "responses" })).toThrow(/wireApi applies to the codex adapter only/);
     expect(() => make("codex", { apiKeyEnv: 'X"; rm -rf /; echo "' })).toThrow(/must be an env var name/);
   });
 
@@ -168,7 +170,7 @@ describe("comparison groups (withhold-and-diff)", () => {
   });
 
   test("a different agent.endpoint within a group is withheld: the manifest records it and the diff names the field", () => {
-    const endpoint = { apiKeyEnv: "GATEWAY_API_TOKEN", baseUrlEnv: "GATEWAY_BASE_URL", wireApi: "chat" as const };
+    const endpoint = { apiKeyEnv: "GATEWAY_API_TOKEN", baseUrlEnv: "GATEWAY_BASE_URL", wireApi: "responses" as const };
     const a = loadedExperiment({
       id: "g-a",
       comparisonGroup: "g",
@@ -180,19 +182,19 @@ describe("comparison groups (withhold-and-diff)", () => {
       id: "g-b",
       comparisonGroup: "g",
       treatment: "mcp",
-      agent: { ...agent, endpoint: { ...endpoint, wireApi: "responses" } },
+      agent: { ...agent, endpoint: { ...endpoint, baseUrlEnv: "OTHER_GATEWAY_BASE_URL" } },
       runtime: { kind: "container", image: "img:1", command: ["true"], config: { mcp: {} } },
     });
     const manifest = manifestFor([a, b]);
     // Recorded verbatim, in a fixed key order; an experiment without one records nothing new.
     expect(manifest.experiments["g-a"]?.components.agent.endpoint).toEqual(endpoint);
-    expect(manifest.experiments["g-b"]?.components.agent.endpoint).toEqual({ ...endpoint, wireApi: "responses" });
+    expect(manifest.experiments["g-b"]?.components.agent.endpoint).toEqual({ ...endpoint, baseUrlEnv: "OTHER_GATEWAY_BASE_URL" });
     const plain = loadedExperiment({ id: "g-c", agent, runtime: { kind: "container", image: "img:1", command: ["true"] } });
     expect(manifestFor([plain]).experiments["g-c"]?.components.agent).not.toHaveProperty("endpoint");
 
     const [group] = compareGroups([a.experiment, b.experiment], manifest);
     expect(group?.comparison).toBe("withheld");
-    expect(group?.mismatches.map((mismatch) => mismatch.path)).toEqual(["identity.agent.endpoint.wireApi"]);
+    expect(group?.mismatches.map((mismatch) => mismatch.path)).toEqual(["identity.agent.endpoint.baseUrlEnv"]);
 
     // Same endpoint on both arms compares like any other agreed component.
     const same = loadedExperiment({ ...b.experiment, agent: { ...agent, endpoint } });
