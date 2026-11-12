@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/workos/quickstudy/compare/v0.13.0...v0.13.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **codex:** refuse the dropped chat wire; keep login's stderr ([#47](https://github.com/workos/quickstudy/issues/47)) ([0da8a5c](https://github.com/workos/quickstudy/commit/0da8a5c4a8645f4574ad4da7ed1a6075eb7c74e0))
+
 ## [0.13.0](https://github.com/workos/quickstudy/compare/v0.12.1...v0.13.0) (2026-11-10)
 
 
