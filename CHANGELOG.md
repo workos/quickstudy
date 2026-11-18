@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1](https://github.com/workos/quickstudy/compare/v0.13.0...v0.13.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **codex:** refuse the dropped chat wire; keep login's stderr ([#47](https://github.com/workos/quickstudy/issues/47)) ([0da8a5c](https://github.com/workos/quickstudy/commit/0da8a5c4a8645f4574ad4da7ed1a6075eb7c74e0))
+* Move Node to 22.23.5 for the November 2026 Node security release ([#48](https://github.com/workos/quickstudy/issues/48)) ([ce88fbe](https://github.com/workos/quickstudy/commit/ce88fbe9c0cb3fb0577cd6e01e5e9dde7c199a34))
+
 ## [0.13.0](https://github.com/workos/quickstudy/compare/v0.12.1...v0.13.0) (2026-11-10)
 
 
