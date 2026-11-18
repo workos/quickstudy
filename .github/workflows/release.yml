@@ -21,10 +21,6 @@ on:
         description: Existing v* tag whose release-please draft release to attach binaries to
         required: true
         type: string
-    secrets:
-      SOCKET_FIREWALL_TOKEN:
-        description: Forwarded to workos/setup-socket-firewall. A called workflow sees none of the caller's secrets unless passed.
-        required: true
   pull_request:
 
 permissions:
@@ -92,12 +88,6 @@ jobs:
           fi
           echo "SOURCE_REF=$source_ref" >> "$GITHUB_ENV"
           echo "SOURCE_SHA=$actual" >> "$GITHUB_ENV"
-      - name: Setup Socket Firewall
-        id: sfw
-        uses: workos/setup-socket-firewall@ca93dd8aa351f54f4729fe3377a9be23c631c25d
-        with:
-          token: ${{ secrets.SOCKET_FIREWALL_TOKEN }}
-          configure-bun: true
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
@@ -144,17 +134,6 @@ jobs:
         env:
           BUN_COMPILE_EXECUTABLE_PATH: ${{ steps.compile-runtime.outputs.path }}
         run: bun scripts/build-binary.ts --target "${{ matrix.target }}" --outfile "dist/${{ matrix.asset }}/quickstudy" --compile-executable-path "$BUN_COMPILE_EXECUTABLE_PATH"
-      - name: Add macOS getent shim for Socket Firewall teardown
-        if: ${{ always() && runner.os == 'macOS' && steps.sfw.outputs.active == 'true' }}
-        shell: bash
-        run: bash scripts/sfw-macos-getent.sh install
-      - name: Restore public package registry
-        if: ${{ always() && steps.sfw.outputs.active == 'true' }}
-        uses: workos/setup-socket-firewall/teardown@ca93dd8aa351f54f4729fe3377a9be23c631c25d
-      - name: Remove macOS getent shim
-        if: ${{ always() && runner.os == 'macOS' }}
-        shell: bash
-        run: rm -f "$RUNNER_TEMP/sfw-getent/getent"
       - name: Smoke-test the executable outside the checkout
         shell: bash
         run: |
@@ -244,10 +223,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag_name || github.sha }}
-      - uses: workos/setup-socket-firewall@ca93dd8aa351f54f4729fe3377a9be23c631c25d
-        with:
-          token: ${{ secrets.SOCKET_FIREWALL_TOKEN }}
-          configure-bun: true
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
@@ -315,25 +290,13 @@ jobs:
             echo "::error::package.json is $pkg_version but the tag is $RELEASE_TAG"
             exit 1
           fi
-      - name: Setup Socket Firewall
-        id: sfw
-        uses: workos/setup-socket-firewall@ca93dd8aa351f54f4729fe3377a9be23c631c25d
-        with:
-          token: ${{ secrets.SOCKET_FIREWALL_TOKEN }}
-          configure-bun: true
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
       # prepack (bun run ui:build) needs the dev dependencies installed.
       - run: bun install --frozen-lockfile
-      # Socket Firewall null-routes registry.npmjs.org; teardown restores the
-      # public route (fail-closed) before anything below talks to npm.
-      - name: Restore public package registry
-        if: ${{ always() && steps.sfw.outputs.active == 'true' }}
-        uses: workos/setup-socket-firewall/teardown@ca93dd8aa351f54f4729fe3377a9be23c631c25d
       # Trusted publishing needs npm >= 11.5.1; Node 24 ships it. registry-url
-      # writes a fresh user npmrc pinned to registry.npmjs.org — after teardown,
-      # so no Socket Firewall npm config can outlive it.
+      # writes a fresh user npmrc pinned to registry.npmjs.org.
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
